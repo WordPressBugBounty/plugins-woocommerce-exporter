@@ -7,6 +7,19 @@ if( is_admin() ) {
 		function woo_ce_get_export_type_user_count() {
 
 			$count = 0;
+
+			// Override for WordPress MultiSite
+			if( apply_filters( 'woo_ce_export_dataset_multisite', true ) && woo_ce_is_network_admin() ) {
+				$sites = get_sites();
+				foreach( $sites as $site ) {
+					switch_to_blog( $site->blog_id );
+					if( $users = count_users() )
+						$count += ( isset( $users['total_users'] ) ? $users['total_users'] : 0 );
+					restore_current_blog();
+				}
+				return $count;
+			}
+
 			// Check if the existing Transient exists
 			$cached = get_transient( WOO_CE_PREFIX . '_user_count' );
 			if( $cached == false ) {
@@ -21,12 +34,224 @@ if( is_admin() ) {
 		}
 	}
 
+	function woo_ce_user_scheduled_export_save( $post_ID = 0 ) {
+
+		update_post_meta( $post_ID, '_filter_user_orderby', ( isset( $_POST['user_filter_orderby'] ) ? sanitize_text_field( $_POST['user_filter_orderby'] ) : false ) );
+		update_post_meta( $post_ID, '_filter_user_role', ( isset( $_POST['user_filter_role'] ) ? array_map( 'sanitize_text_field', (array)$_POST['user_filter_role'] ) : false ) );
+
+		// User Registered Date
+		$auto_user_date = sanitize_text_field( $_POST['user_filter_dates'] );
+		$auto_user_dates_from = false;
+		$auto_user_dates_to = false;
+		$auto_user_date_variable = false;
+		$auto_user_date_variable_length = false;
+		if( $auto_user_date == 'variable' ) {
+			$auto_user_date_variable = sanitize_text_field( $_POST['user_filter_dates_variable'] );
+			$auto_user_date_variable_length = sanitize_text_field( $_POST['user_filter_dates_variable_length'] );
+		} else if( $auto_user_date == 'manual' ) {
+			$auto_user_dates_from = sanitize_text_field( $_POST['user_filter_dates_from'] );
+			$auto_user_dates_to = sanitize_text_field( $_POST['user_filter_dates_to'] );
+		}
+		update_post_meta( $post_ID, '_filter_user_date', $auto_user_date );
+		update_post_meta( $post_ID, '_filter_user_dates_from', $auto_user_dates_from );
+		update_post_meta( $post_ID, '_filter_user_dates_to', $auto_user_dates_to );
+		update_post_meta( $post_ID, '_filter_user_date_variable', $auto_user_date_variable );
+		update_post_meta( $post_ID, '_filter_user_date_variable_length', $auto_user_date_variable_length );
+
+		// Date Last Updated
+		$auto_user_modified_date = sanitize_text_field( $_POST['user_modified_dates_filter'] );
+		$auto_user_modified_dates_from = false;
+		$auto_user_modified_dates_to = false;
+		$auto_user_modified_date_variable = false;
+		$auto_user_modified_date_variable_length = false;
+		if( $auto_user_modified_date == 'variable' ) {
+			$auto_user_modified_date_variable = sanitize_text_field( $_POST['user_modified_dates_filter_variable'] );
+			$auto_user_modified_date_variable_length = sanitize_text_field( $_POST['user_modified_dates_filter_variable_length'] );
+		} else if( $auto_user_modified_date == 'manual' ) {
+			$auto_user_modified_dates_from = sanitize_text_field( $_POST['user_modified_dates_from'] );
+			$auto_user_modified_dates_to = sanitize_text_field( $_POST['user_modified_dates_to'] );
+		}
+		update_post_meta( $post_ID, '_filter_user_modified_date', $auto_user_modified_date );
+		update_post_meta( $post_ID, '_filter_user_modified_dates_from', $auto_user_modified_dates_from );
+		update_post_meta( $post_ID, '_filter_user_modified_dates_to', $auto_user_modified_dates_to );
+		update_post_meta( $post_ID, '_filter_user_modified_date_variable', $auto_user_modified_date_variable );
+		update_post_meta( $post_ID, '_filter_user_modified_date_variable_length', $auto_user_modified_date_variable_length );
+
+	}
+	add_action( 'woo_ce_extend_scheduled_export_save', 'woo_ce_user_scheduled_export_save' );
+
+	function woo_ce_user_dataset_args( $args, $export_type = '', $form_data = array() ) {
+
+		if ( empty( $form_data ) ) {
+			$form_data = $_POST;
+		}
+
+		// Check if we're dealing with the User Export Type
+		if( $export_type <> 'user' )
+			return $args;
+
+		// Merge in the form data for this dataset
+		$defaults = array(
+			'user_user_roles' => ( isset( $form_data['user_filter_user_role'] ) ? woo_ce_format_user_role_filters( array_map( 'sanitize_text_field', (array)$form_data['user_filter_user_role'] ) ) : false ),
+			'user_dates_filter' => ( isset( $form_data['user_dates_filter'] ) ? sanitize_text_field( $form_data['user_dates_filter'] ) : false ),
+			'user_dates_from' => ( isset( $form_data['user_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( $form_data['user_dates_from'] ) ) : '' ),
+			'user_dates_to' => ( isset( $form_data['user_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( $form_data['user_dates_to'] ) ) : '' ),
+			'user_dates_filter_variable' => ( isset( $form_data['user_dates_filter_variable'] ) ? absint( $form_data['user_dates_filter_variable'] ) : false ),
+			'user_dates_filter_variable_length' => ( isset( $form_data['user_dates_filter_variable_length'] ) ? sanitize_text_field( $form_data['user_dates_filter_variable_length'] ) : false ),
+			// Date Last Updated
+			'user_modified_dates_filter' => ( isset( $form_data['user_modified_dates_filter'] ) ? sanitize_text_field( $form_data['user_modified_dates_filter'] ) : false ),
+			'user_modified_dates_from' => ( isset( $form_data['user_modified_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( $form_data['user_modified_dates_from'] ) ) : '' ),
+			'user_modified_dates_to' => ( isset( $form_data['user_modified_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( $form_data['user_modified_dates_to'] ) ) : '' ),
+			'user_modified_dates_filter_variable' => ( isset( $form_data['user_modified_dates_filter_variable'] ) ? absint( $form_data['user_modified_dates_filter_variable'] ) : false ),
+			'user_modified_dates_filter_variable_length' => ( isset( $form_data['user_modified_dates_filter_variable_length'] ) ? sanitize_text_field( $form_data['user_modified_dates_filter_variable_length'] ) : false ),
+			'user_orderby' => ( isset( $form_data['user_orderby'] ) ? sanitize_text_field( $form_data['user_orderby'] ) : false ),
+			'user_order' => ( isset( $form_data['user_order'] ) ? sanitize_text_field( $form_data['user_order'] ) : false )
+		);
+		$args = wp_parse_args( $args, $defaults );
+
+		// Save dataset export specific options
+		// User Role
+		// Date
+		if( $args['user_orderby'] <> woo_ce_get_option( 'user_orderby' ) )
+			woo_ce_update_option( 'user_orderby', $args['user_orderby'] );
+		if( $args['user_order'] <> woo_ce_get_option( 'user_order' ) )
+			woo_ce_update_option( 'user_order', $args['user_order'] );
+
+		// User Registered Date
+		if( $args['user_dates_filter'] <> woo_ce_get_option( 'user_dates_filter' ) )
+			woo_ce_update_option( 'user_dates_filter', $args['user_dates_filter'] );
+		if( $args['user_dates_from'] <> woo_ce_get_option( 'user_dates_from' ) )
+			woo_ce_update_option( 'user_dates_from', woo_ce_format_order_date( $args['user_dates_from'], 'save' ) );
+		if( $args['user_dates_to'] <> woo_ce_get_option( 'user_dates_to' ) )
+			woo_ce_update_option( 'user_dates_to', woo_ce_format_order_date( $args['user_dates_to'], 'save' ) );
+		if( $args['user_dates_filter_variable'] <> woo_ce_get_option( 'user_dates_filter_variable' ) )
+			woo_ce_update_option( 'user_dates_filter_variable', $args['user_dates_filter_variable'] );
+		if( $args['user_dates_filter_variable_length'] <> woo_ce_get_option( 'user_dates_filter_variable_length' ) )
+			woo_ce_update_option( 'user_dates_filter_variable_length', $args['user_dates_filter_variable_length'] );
+
+		// Date Last Updated
+		if( $args['user_modified_dates_filter'] <> woo_ce_get_option( 'user_modified_dates_filter' ) )
+			woo_ce_update_option( 'user_modified_dates_filter', $args['user_modified_dates_filter'] );
+		if( $args['user_modified_dates_from'] <> woo_ce_get_option( 'user_modified_dates_from' ) )
+			woo_ce_update_option( 'user_modified_dates_from', woo_ce_format_order_date( $args['user_modified_dates_from'], 'save' ) );
+		if( $args['user_modified_dates_to'] <> woo_ce_get_option( 'user_modified_dates_to' ) )
+			woo_ce_update_option( 'user_modified_dates_to', woo_ce_format_order_date( $args['user_modified_dates_to'], 'save' ) );
+		if( $args['user_modified_dates_filter_variable'] <> woo_ce_get_option( 'user_modified_dates_filter_variable' ) )
+			woo_ce_update_option( 'user_modified_dates_filter_variable', $args['user_modified_dates_filter_variable'] );
+		if( $args['user_modified_dates_filter_variable_length'] <> woo_ce_get_option( 'user_modified_dates_filter_variable_length' ) )
+			woo_ce_update_option( 'user_modified_dates_filter_variable_length', $args['user_modified_dates_filter_variable_length'] );
+
+		return $args;
+
+	}
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_user_dataset_args', 10, 2 );
+
 	/* End of: WordPress Administration */
 
 }
 
+function woo_ce_cron_user_dataset_args( $args, $post_id, $export_type = '', $is_scheduled = 0 ) {
+
+	// Check if we're dealing with the User Export Type
+	if( $export_type <> 'user' )
+		return $args;
+
+	// User Registered Date
+	$user_filter_date = false;
+	$user_filter_dates_from = false;
+	$user_filter_dates_to = false;
+	$user_filter_date_variable = false;
+	$user_filter_date_variable_length = false;
+
+	// Date Last Updated
+	$user_modified_dates_filter = false;
+	$user_filter_modified_date_variable = false;
+	$user_filter_modified_date_variable_length = false;
+	$user_filter_modified_dates_from = false;
+	$user_filter_modified_dates_to = false;
+
+	$user_orderby = false;
+	$user_filter_role = false;
+
+	if( $is_scheduled ) {
+		$scheduled_export = $post_id;
+
+		$user_orderby = get_post_meta( $scheduled_export, '_filter_user_orderby', true );
+
+		// Date registered
+		$user_filter_date = get_post_meta( $scheduled_export, '_filter_user_date', true );
+		if( $user_filter_date ) {
+			$export->args['user_dates_filter'] = $user_filter_date;
+			switch( $user_filter_date ) {
+
+				case 'manual':
+					$user_filter_dates_from = get_post_meta( $scheduled_export, '_filter_user_dates_from', true );
+					$user_filter_dates_to = get_post_meta( $scheduled_export, '_filter_user_dates_to', true );
+					break;
+
+				case 'variable':
+					$user_filter_date_variable = get_post_meta( $scheduled_export, '_filter_user_date_variable', true );
+					$user_filter_date_variable_length = get_post_meta( $scheduled_export, '_filter_user_date_variable_length', true );
+					break;
+
+			}
+		}
+
+		// Date Last Updated
+		$user_modified_dates_filter = get_post_meta( $scheduled_export, '_filter_user_modified_date', true );
+		if( $user_modified_dates_filter ) {
+			switch( $user_modified_dates_filter ) {
+
+				case 'manual':
+					$user_filter_modified_dates_from = get_post_meta( $scheduled_export, '_filter_user_modified_dates_from', true );
+					$user_filter_modified_dates_to = get_post_meta( $scheduled_export, '_filter_user_modified_dates_to', true );
+					break;
+
+				case 'variable':
+					$user_filter_modified_date_variable = get_post_meta( $scheduled_export, '_filter_user_modified_date_variable', true );
+					$user_filter_modified_date_variable_length = get_post_meta( $scheduled_export, '_filter_user_modified_date_variable_length', true );
+					break;
+
+			}
+		}
+
+		// User Role
+		$user_filter_role = get_post_meta( $scheduled_export, '_filter_user_role', true );
+		$user_filter_role = ( !empty( $user_filter_role ) ? array_map( 'sanitize_text_field', (array)$user_filter_role ) : false );
+	} else {
+		// User Role
+		if( isset( $_GET['user_user_role'] ) ) {
+			$user_filter_role = sanitize_text_field( $_GET['user_user_role'] );
+			$user_filter_role = explode( ',', $user_filter_role );
+		}
+	}
+
+	// Merge in the form data for this dataset
+	$overrides = array(
+		'user_orderby' => ( !empty( $user_orderby ) ? $user_orderby : false ),
+		'user_user_roles' => $user_filter_role,
+		'user_dates_filter' => ( !empty( $user_filter_date ) ? $user_filter_date : false ),
+		'user_dates_from' => ( !empty( $user_filter_dates_from ) ? $user_filter_dates_from : false ),
+		'user_dates_to' => ( !empty( $user_filter_dates_to ) ? $user_filter_dates_to : false ),
+		'user_dates_filter_variable' => ( !empty( $user_filter_date_variable ) ? absint( $user_filter_date_variable ) : false ),
+		'user_dates_filter_variable_length' => ( !empty( $user_filter_date_variable_length ) ? sanitize_text_field( $user_filter_date_variable_length ) : false ),
+		// Date Last Updated
+		'user_modified_dates_filter' => $user_modified_dates_filter,
+		'user_modified_dates_filter_variable' => ( !empty( $user_filter_modified_date_variable ) ? absint( $user_filter_modified_date_variable ) : false ),
+		'user_modified_dates_filter_variable_length' => ( !empty( $user_filter_modified_date_variable_length ) ? sanitize_text_field( $user_filter_modified_date_variable_length ) : false ),
+		'user_modified_dates_from' => ( !empty( $user_filter_modified_dates_from ) ? $user_filter_modified_dates_from : false ),
+		'user_modified_dates_to' => ( !empty( $user_filter_modified_dates_to ) ? $user_filter_modified_dates_to : false ),
+	);
+
+	$args = wp_parse_args( $overrides, $args );
+
+	return $args;
+
+}
+add_filter( 'woo_ce_extend_cron_dataset_args', 'woo_ce_cron_user_dataset_args', 10, 4 );
+
 // Returns a list of User export columns
-function woo_ce_get_user_fields( $format = 'full' ) {
+function woo_ce_get_user_fields( $format = 'full', $post_ID = 0 ) {
 
 	$export_type = 'user';
 
@@ -114,16 +339,32 @@ function woo_ce_get_user_fields( $format = 'full' ) {
 	// Remove our content filters here to play nice with other Plugins
 	remove_filter( 'sanitize_key', 'woo_ce_filter_sanitize_key' );
 
-	$remember = woo_ce_get_option( $export_type . '_fields', array() );
+	// Check if we're dealing with an Export Template
+	$sorting = false;
+	if( !empty( $post_ID ) ) {
+		$remember = get_post_meta( $post_ID, sprintf( '_%s_fields', $export_type ), true );
+		$hidden = get_post_meta( $post_ID, sprintf( '_%s_hidden', $export_type ), false );
+		$sorting = get_post_meta( $post_ID, sprintf( '_%s_sorting', $export_type ), true );
+	} else {
+		$remember = woo_ce_get_option( $export_type . '_fields', array() );
+		$hidden = woo_ce_get_option( $export_type . '_hidden', array() );
+	}
 	if( !empty( $remember ) ) {
 		$remember = maybe_unserialize( $remember );
+		$hidden = maybe_unserialize( $hidden );
 		$size = count( $fields );
 		for( $i = 0; $i < $size; $i++ ) {
 			$fields[$i]['disabled'] = ( isset( $fields[$i]['disabled'] ) ? $fields[$i]['disabled'] : 0 );
+			$fields[$i]['hidden'] = ( isset( $fields[$i]['hidden'] ) ? $fields[$i]['hidden'] : 0 );
 			$fields[$i]['default'] = 1;
-			// If not found turn off default
-			if( !array_key_exists( $fields[$i]['name'], $remember ) )
-				$fields[$i]['default'] = 0;
+			if( isset( $fields[$i]['name'] ) ) {
+				// If not found turn off default
+				if( !array_key_exists( $fields[$i]['name'], $remember ) )
+					$fields[$i]['default'] = 0;
+				// Remove the field from exports if found
+				if( array_key_exists( $fields[$i]['name'], $hidden ) )
+					$fields[$i]['hidden'] = 1;
+			}
 		}
 	}
 
@@ -141,9 +382,15 @@ function woo_ce_get_user_fields( $format = 'full' ) {
 
 		case 'full':
 		default:
-			$sorting = woo_ce_get_option( $export_type . '_sorting', array() );
+			// Load the default sorting
+			if( empty( $sorting ) )
+				$sorting = woo_ce_get_option( sprintf( '%s_sorting', $export_type ), array() );
 			$size = count( $fields );
 			for( $i = 0; $i < $size; $i++ ) {
+				if( !isset( $fields[$i]['name'] ) ) {
+					unset( $fields[$i] );
+					continue;
+				}
 				$fields[$i]['reset'] = $i;
 				$fields[$i]['order'] = ( isset( $sorting[$fields[$i]['name']] ) ? $sorting[$fields[$i]['name']] : $i );
 			}
@@ -160,7 +407,34 @@ function woo_ce_get_user_fields( $format = 'full' ) {
 // Check if we should override field labels from the Field Editor
 function woo_ce_override_user_field_labels( $fields = array() ) {
 
-	$labels = woo_ce_get_option( 'user_labels', array() );
+	global $export;
+
+	$export_type = 'user';
+
+	$labels = false;
+
+	// Check if this is a Quick Export or CRON export
+	if( isset( $export->export_template ) ) {
+		$export_template = $export->export_template;
+		if( !empty( $export_template ) )
+			$labels = get_post_meta( $export_template, sprintf( '_%s_labels', $export_type ), true );
+	}
+
+	// Check if this is a Scheduled Export
+	$scheduled_export = absint( get_transient( WOO_CE_PREFIX . '_scheduled_export_id' ) );
+	if( $scheduled_export ) {
+		$export_fields = get_post_meta( $scheduled_export, '_export_fields', true );
+		if( $export_fields == 'template' ) {
+			$export_template = get_post_meta( $scheduled_export, '_export_template', true );
+			if( !empty( $export_template ) )
+				$labels = get_post_meta( $export_template, sprintf( '_%s_labels', $export_type ), true );
+		}
+	}
+
+	// Default to Quick Export labels
+	if( empty( $labels ) )
+		$labels = woo_ce_get_option( sprintf( '%s_labels', $export_type ), array() );
+
 	if( !empty( $labels ) ) {
 		foreach( $fields as $key => $field ) {
 			if( isset( $labels[$field['name']] ) )
@@ -175,9 +449,13 @@ add_filter( 'woo_ce_user_fields', 'woo_ce_override_user_field_labels', 11 );
 // Returns the export column header label based on an export column slug
 function woo_ce_get_user_field( $name = null, $format = 'name' ) {
 
+	global $export;
+
 	$output = '';
 	if( $name ) {
 		$fields = woo_ce_get_user_fields();
+		if( WOO_CE_LOGGING )
+			woo_ce_error_log( sprintf( 'Debug: %s', 'woo_ce_get_user_field() > woo_ce_get_user_fields(): ' . ( time() - $export->start_time ) ) );
 		$size = count( $fields );
 		for( $i = 0; $i < $size; $i++ ) {
 			if( $fields[$i]['name'] == $name ) {
@@ -185,6 +463,9 @@ function woo_ce_get_user_field( $name = null, $format = 'name' ) {
 
 					case 'name':
 						$output = $fields[$i]['label'];
+
+						// Allow Plugin/Theme authors to easily override export field labels
+						$output = apply_filters( 'woo_ce_get_user_field_label', $output );
 						break;
 
 					case 'full':
@@ -201,22 +482,191 @@ function woo_ce_get_user_field( $name = null, $format = 'name' ) {
 }
 
 // Returns a list of User IDs
-function woo_ce_get_users( $args = array() ) {
+function woo_ce_get_users( $export_args = array(), $export = array() ) {
 
-	global $export;
+	if ( empty( $export ) ) {
+		global $export;
+	}
+
+	global $wpdb;
 
 	$limit_volume = 0;
 	$offset = 0;
 	$orderby = 'login';
 	$order = 'ASC';
+	$user_roles = false;
 
-	if( $args ) {
-		$limit_volume = ( isset( $args['limit_volume'] ) ? $args['limit_volume'] : 0 );
+	if( $export_args ) {
+		$user_roles = ( isset( $export_args['user_user_roles'] ) ? $export_args['user_user_roles'] : 0 );
+		$limit_volume = ( isset( $export_args['limit_volume'] ) ? $export_args['limit_volume'] : 0 );
 		if( $limit_volume == -1 )
 			$limit_volume = 0;
-		$offset = ( isset( $args['offset'] ) ? $args['offset'] : 0 );
-		$orderby = ( isset( $args['user_orderby'] ) ? $args['user_orderby'] : 'login' );
-		$order = ( isset( $args['user_order'] ) ? $args['user_order'] : 'ASC' );
+		$offset = ( isset( $export_args['offset'] ) ? $export_args['offset'] : 0 );
+		$orderby = ( isset( $export_args['user_orderby'] ) ? $export_args['user_orderby'] : 'login' );
+		$order = ( isset( $export_args['user_order'] ) ? $export_args['user_order'] : 'ASC' );
+		$user_dates_filter = ( isset( $export_args['user_dates_filter'] ) ? $export_args['user_dates_filter'] : false );
+		switch( $user_dates_filter ) {
+
+			case 'tomorrow':
+				$user_dates_from = woo_ce_get_order_date_filter( 'tomorrow', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'tomorrow', 'to' );
+				break;
+
+			case 'today':
+				$user_dates_from = woo_ce_get_order_date_filter( 'today', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'today', 'to' );
+				break;
+
+			case 'yesterday':
+				$user_dates_from = woo_ce_get_order_date_filter( 'yesterday', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'yesterday', 'to' );
+				break;
+
+			case 'current_week':
+				$user_dates_from = woo_ce_get_order_date_filter( 'current_week', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'current_week', 'to' );
+				break;
+
+			case 'last_week':
+				$user_dates_from = woo_ce_get_order_date_filter( 'last_week', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'last_week', 'to' );
+				break;
+
+			case 'current_month':
+				$user_dates_from = woo_ce_get_order_date_filter( 'current_month', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'current_month', 'to' );
+				break;
+
+			case 'last_month':
+				$user_dates_from = woo_ce_get_order_date_filter( 'last_month', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'last_month', 'to' );
+				break;
+
+			case 'current_year':
+				$user_dates_from = woo_ce_get_order_date_filter( 'current_year', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'current_year', 'to' );
+				break;
+
+			case 'last_year':
+				$user_dates_from = woo_ce_get_order_date_filter( 'last_year', 'from' );
+				$user_dates_to = woo_ce_get_order_date_filter( 'last_year', 'to' );
+				break;
+			
+			case 'manual':
+				$user_dates_from = woo_ce_format_order_date( $export_args['user_dates_from'] );
+				$user_dates_to = woo_ce_format_order_date( $export_args['user_dates_to'] );
+				$date_format = 'd/m/Y';
+				// WP_User_Query only accepts YY-m-D so we must format dates to that
+				if( $date_format <> 'Y/m/d' ) {
+					$date_format = woo_ce_format_order_date( $date_format );
+					if( function_exists( 'date_create_from_format' ) && function_exists( 'date_format' ) ) {
+						if( $user_dates_from = date_create_from_format( $date_format, $user_dates_from ) )
+							$user_dates_from = date_format( $user_dates_from, 'Y-m-d 00:00:00' );
+						if( $user_dates_to = date_create_from_format( $date_format, $user_dates_to ) )
+							$user_dates_to = date_format( $user_dates_to, 'Y-m-d 23:59:59' );
+					}
+				}
+				break;
+
+			case 'variable':
+				$user_filter_date_variable = $export_args['user_dates_filter_variable'];
+				$user_filter_date_variable_length = $export_args['user_dates_filter_variable_length'];
+				if( $user_filter_date_variable !== false && $user_filter_date_variable_length !== false ) {
+					$timestamp = strtotime( sprintf( '-%d %s', $user_filter_date_variable, $user_filter_date_variable_length ), current_time( 'timestamp', 0 ) );
+					$user_dates_from = date( 'd-m-Y', $timestamp );
+					$user_dates_to = woo_ce_get_order_date_filter( 'today', 'to' );
+					unset( $user_filter_date_variable, $user_filter_date_variable_length, $timestamp );
+				}
+				break;
+
+			default:
+				$user_dates_from = false;
+				$user_dates_to = false;
+				break;
+
+		}
+
+		// Date Last Updated
+		$user_modified_dates_filter = ( isset( $export_args['user_modified_dates_filter'] ) ? $export_args['user_modified_dates_filter'] : false );
+		switch( $user_modified_dates_filter ) {
+
+			case 'tomorrow':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'tomorrow', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'tomorrow', 'to' );
+				break;
+
+			case 'today':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'today', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'today', 'to' );
+				break;
+
+			case 'yesterday':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'yesterday', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'yesterday', 'to' );
+				break;
+
+			case 'current_week':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'current_week', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'current_week', 'to' );
+				break;
+
+			case 'last_week':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'last_week', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'last_week', 'to' );
+				break;
+
+			case 'current_month':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'current_month', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'current_month', 'to' );
+				break;
+
+			case 'last_month':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'last_month', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'last_month', 'to' );
+				break;
+
+			case 'current_year':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'current_year', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'current_year', 'to' );
+				break;
+
+			case 'last_year':
+				$user_modified_dates_from = woo_ce_get_order_date_filter( 'last_year', 'from' );
+				$user_modified_dates_to = woo_ce_get_order_date_filter( 'last_year', 'to' );
+				break;
+
+			case 'manual':
+				$user_modified_dates_from = woo_ce_format_order_date( $export_args['user_modified_dates_from'] );
+				$user_modified_dates_to = woo_ce_format_order_date( $export_args['user_modified_dates_to'] );
+				$date_format = 'd/m/Y';
+				// WP_User_Query only accepts YY-m-D so we must format dates to that
+				if( $date_format <> 'Y/m/d' ) {
+					$date_format = woo_ce_format_order_date( $date_format );
+					if( function_exists( 'date_create_from_format' ) && function_exists( 'date_format' ) ) {
+						if( $user_modified_dates_from = date_create_from_format( $date_format, $user_modified_dates_from ) )
+							$user_modified_dates_from = date_format( $user_modified_dates_from, 'Y-m-d 00:00:00' );
+						if( $user_modified_dates_to = date_create_from_format( $date_format, $user_modified_dates_to ) )
+							$user_modified_dates_to = date_format( $user_modified_dates_to, 'Y-m-d 23:59:59' );
+					}
+				}
+				break;
+
+				case 'variable':
+					$user_filter_modified_date_variable = $export_args['user_modified_dates_filter_variable'];
+					$user_filter_modified_date_variable_length = $export_args['user_modified_dates_filter_variable_length'];
+					if( $user_filter_modified_date_variable !== false && $user_filter_modified_date_variable_length !== false ) {
+						$timestamp = strtotime( sprintf( '-%d %s', $user_filter_modified_date_variable, $user_filter_modified_date_variable_length ), current_time( 'timestamp', 0 ) );
+						$user_modified_dates_from = date( 'd-m-Y', $timestamp );
+						$user_modified_dates_to = woo_ce_get_order_date_filter( 'today', 'to' );
+						unset( $user_filter_modified_date_variable, $user_filter_modified_date_variable_length, $timestamp );
+					}
+					break;
+	
+				default:
+					$user_modified_dates_from = false;
+					$user_modified_dates_to = false;
+					break;
+		}
 	}
 	$args = array(
 		'offset' => $offset,
@@ -225,11 +675,59 @@ function woo_ce_get_users( $args = array() ) {
 		'offset' => $offset,
 		'fields' => 'ids'
 	);
+
+	// Filter Order dates
+	if( !empty( $user_dates_from ) && !empty( $user_dates_to ) ) {
+		$args['date_query'] = array(
+			array(
+				'before' => $user_dates_to,
+				'after' => $user_dates_from,
+				'inclusive' => true
+			)
+		);
+	}
+
+	// Filter Date Last Updated
+	if( !empty( $user_modified_dates_from ) && !empty( $user_modified_dates_to ) ) {
+		$args['meta_query'][] = array(
+			'relation' => 'AND',
+			array(
+				'key' => 'last_update',
+				'value' => strtotime( $user_modified_dates_to ),
+				'compare' => '<=',
+			),
+			array(
+				'key' => 'last_update',
+				'value' => strtotime( $user_modified_dates_from ),
+				'compare' => '>',
+			),
+		);
+	}
+
+	// Allow other developers to bake in their own filters
+	$args = apply_filters( 'woo_ce_get_users_args', $args, $export_args );
+
 	if( $user_ids = new WP_User_Query( $args ) ) {
 		$users = array();
-		$export->total_rows = $user_ids->total_users;
-		foreach( $user_ids->results as $user_id )
-			$users[] = $user_id;
+		foreach( $user_ids->results as $user_id ) {
+
+			$user = new WP_User( $user_id );
+
+			if( !empty( $user_roles ) ) {
+				if( count( array_intersect( $user_roles, $user->roles ) ) == 0 ) {
+					unset( $user, $user_id );
+					continue;
+				}
+			}
+
+			if( isset( $user_id ) )
+				$users[] = $user_id;
+
+		}
+		// Only populate the $export Global if it is an export
+		if( isset( $export ) )
+			$export->total_rows = count( $users );
+
 		return $users;
 	}
 
@@ -240,6 +738,8 @@ function woo_ce_get_user_data( $user_id = 0, $args = array() ) {
 	$defaults = array();
 	$args = wp_parse_args( $args, $defaults );
 
+	$date_format = woo_ce_get_option( 'date_format', 'd/m/Y' );
+
 	// Get User details
 	$user_data = get_userdata( $user_id );
 
@@ -248,14 +748,26 @@ function woo_ce_get_user_data( $user_id = 0, $args = array() ) {
 		$user->ID = $user_data->ID;
 		$user->user_id = $user_data->ID;
 		$user->user_name = $user_data->user_login;
+		if( apply_filters( 'woo_ce_enable_user_password', false ) ) {
+			// We must use WP_User to fetch the Password
+			$wp_user_data = new WP_User( $user_id );
+			if( $wp_user_data !== false )
+				$user->password = $wp_user_data->data->user_pass;
+			unset( $wp_user_data );
+		}
 		$user->user_role = ( isset( $user_data->roles[0] ) ? $user_data->roles[0] : false );
 		$user->first_name = $user_data->first_name;
 		$user->last_name = $user_data->last_name;
 		$user->full_name = sprintf( apply_filters( 'woo_ce_get_user_data_full_name', '%s %s' ), $user->first_name, $user->last_name );
 		$user->nick_name = $user_data->user_nicename;
 		$user->email = $user_data->user_email;
+		if( class_exists( 'WC_Customer' ) ) {
+			$user->orders = ( function_exists( 'wc_get_customer_order_count' ) ? wc_get_customer_order_count( $user->ID ) : 0 );
+			$user->money_spent = ( function_exists( 'wc_get_customer_total_spent' ) ? woo_ce_format_price( wc_get_customer_total_spent( $user->ID ) ) : 0 );
+		}
 		$user->url = $user_data->user_url;
-		$user->date_registered = $user_data->user_registered;
+		$user->date_registered = woo_ce_format_date( $user_data->user_registered );
+		$user->last_update = date( $date_format, (int) get_user_meta( $user_data->ID, 'last_update', true ) );
 		$user->description = $user_data->description;
 		$user->aim = $user_data->aim;
 		$user->yim = $user_data->yim;
@@ -267,43 +779,103 @@ function woo_ce_get_user_data( $user_id = 0, $args = array() ) {
 	
 }
 
-function woo_ce_export_dataset_override_user( $output = null, $export_type = null ) {
+if( !function_exists( 'woo_ce_export_dataset_override_user' ) ) {
+	function woo_ce_export_dataset_override_user( $output = null, $export_type = null ) {
+
+		global $export;
+
+		if( $users = woo_ce_get_users( $export->args ) ) {
+			$export->total_rows = count( $users );
+			// XML, RSS and JSON export
+			if( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {
+				if( !empty( $export->fields ) ) {
+					foreach( $users as $user ) {
+						if( in_array( $export->export_format, array( 'xml', 'json' ) ) )
+							$child = $output->addChild( apply_filters( 'woo_ce_export_xml_user_node', sanitize_key( $export_type ) ) );
+						else if( $export->export_format == 'rss' )
+							$child = $output->addChild( 'item' );
+						if(
+							$export->export_format <> 'json' && 
+							apply_filters( 'woo_ce_export_xml_user_id_attribute', true )
+						) {
+							$child->addAttribute( 'id', ( isset( $user->user_id ) ? $user->user_id : '' ) );
+						}
+						$user = woo_ce_get_user_data( $user, $export->args, array_keys( $export->fields ) );
+						foreach( array_keys( $export->fields ) as $key => $field ) {
+							if( isset( $user->$field ) ) {
+								if( !is_array( $field ) ) {
+									if( woo_ce_is_xml_cdata( $user->$field ) )
+										$child->addChild( sanitize_key( $export->columns[$key] ) )->addCData( esc_html( woo_ce_sanitize_xml_string( $user->$field ) ) );
+									else
+										$child->addChild( sanitize_key( $export->columns[$key] ), esc_html( woo_ce_sanitize_xml_string( $user->$field ) ) );
+								}
+							}
+						}
+					}
+				}
+			} else {
+				// PHPExcel export
+				foreach( $users as $key => $user )
+					$users[$key] = woo_ce_get_user_data( $user, $export->args, array_keys( $export->fields ) );
+				$output = $users;
+			}
+			unset( $users, $user );
+		}
+		return $output;
+
+	}
+}
+
+function woo_ce_export_dataset_multisite_override_user( $output = null, $export_type = null ) {
 
 	global $export;
 
-	if( $users = woo_ce_get_users( $export->args ) ) {
-		$separator = $export->delimiter;
-		$size = $export->total_columns;
-		$export->total_rows = count( $users );
-		// Generate the export headers
-		if( in_array( $export->export_format, array( 'csv' ) ) ) {
-			for( $i = 0; $i < $size; $i++ ) {
-				if( $i == ( $size - 1 ) )
-					$output .= woo_ce_escape_csv_value( $export->columns[$i], $export->delimiter, $export->escape_formatting ) . "\n";
-				else
-					$output .= woo_ce_escape_csv_value( $export->columns[$i], $export->delimiter, $export->escape_formatting ) . $separator;
-			}
-		}
-		if( !empty( $export->fields ) ) {
-			foreach( $users as $user ) {
-
-				$user = woo_ce_get_user_data( $user, $export->args );
-
-				foreach( $export->fields as $key => $field ) {
-					if( isset( $user->$key ) ) {
-						if( in_array( $export->export_format, array( 'csv' ) ) )
-							$output .= woo_ce_escape_csv_value( $user->$key, $export->delimiter, $export->escape_formatting );
+	$sites = get_sites();
+	if( !empty( $sites ) ) {
+		foreach( $sites as $site ) {
+			switch_to_blog( $site->blog_id );
+			if( $users = woo_ce_get_users( $export->args ) ) {
+				$export->total_rows = count( $users );
+				// XML, RSS and JSON export
+				if( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {
+					if( !empty( $export->fields ) ) {
+						foreach( $users as $user ) {
+							if( in_array( $export->export_format, array( 'xml', 'json' ) ) )
+								$child = $output->addChild( apply_filters( 'woo_ce_export_xml_user_node', sanitize_key( $export_type ) ) );
+							else if( $export->export_format == 'rss' )
+								$child = $output->addChild( 'item' );
+							if(
+								$export->export_format <> 'json' && 
+								apply_filters( 'woo_ce_export_xml_user_id_attribute', true )
+							) {
+								$child->addAttribute( 'id', ( isset( $user->user_id ) ? $user->user_id : '' ) );
+							}
+							$user = woo_ce_get_user_data( $user, $export->args, array_keys( $export->fields ) );
+							foreach( array_keys( $export->fields ) as $key => $field ) {
+								if( isset( $user->$field ) ) {
+									if( !is_array( $field ) ) {
+										if( woo_ce_is_xml_cdata( $user->$field ) )
+											$child->addChild( apply_filters( 'woo_ce_export_xml_user_label', sanitize_key( $export->columns[$key] ), $export->columns[$key] ) )->addCData( esc_html( woo_ce_sanitize_xml_string( $user->$field ) ) );
+										else
+											$child->addChild( apply_filters( 'woo_ce_export_xml_user_label', sanitize_key( $export->columns[$key] ), $export->columns[$key] ), esc_html( woo_ce_sanitize_xml_string( $user->$field ) ) );
+									}
+								}
+							}
+						}
 					}
-					if( in_array( $export->export_format, array( 'csv' ) ) )
-						$output .= $separator;
+				} else {
+					// PHPExcel export
+					foreach( $users as $key => $user )
+						$users[$key] = woo_ce_get_user_data( $user, $export->args, array_keys( $export->fields ) );
+					if( is_null( $output ) )
+						$output = $users;
+					else
+						$output = array_merge( $output, $users );
 				}
-
-				if( in_array( $export->export_format, array( 'csv' ) ) )
-					$output = substr( $output, 0, -1 ) . "\n";
-
+				unset( $users, $user );
 			}
+			restore_current_blog();
 		}
-		unset( $users, $user );
 	}
 	return $output;
 
@@ -312,9 +884,27 @@ function woo_ce_export_dataset_override_user( $output = null, $export_type = nul
 // Returns a list of WordPress User Roles
 function woo_ce_get_user_roles() {
 
-	global $wp_roles;
+	$user_roles = false;
 
-	$user_roles = $wp_roles->roles;
+	// Check if the existing Transient exists
+	$cached = get_transient( WOO_CE_PREFIX . '_user_roles' );
+	if( $cached == false ) {
+
+		global $wp_roles;
+
+		$user_roles = $wp_roles->roles;
+		if( !empty( $user_roles ) ) {
+			if( $users = count_users() ) {
+				foreach( $user_roles as $key => $user_role ) {
+					$user_roles[$key]['count'] = ( isset( $users['avail_roles'][$key] ) ? $users['avail_roles'][$key] : 0 );
+				}
+				unset( $user_role, $users );
+			}
+			set_transient( WOO_CE_PREFIX . '_user_roles', $user_roles, HOUR_IN_SECONDS );
+		}
+	} else {
+		$user_roles = $cached;
+	}
 	return $user_roles;
 
 }
@@ -363,6 +953,27 @@ function woo_ce_format_user_role_label( $user_role = '' ) {
 			}
 		}
 		unset( $user_roles );
+	}
+	return $output;
+
+}
+
+// Returns date of first User registered, any status
+function woo_ce_get_user_first_date( $date_format = 'd/m/Y' ) {
+
+	$output = date( $date_format, mktime( 0, 0, 0, date( 'n' ), 1 ) );
+
+	$args = array(
+		'limit_volume' => 1,
+		'orderby' => 'registered',
+		'order' => 'ASC'
+	);
+	if( $user_ids = woo_ce_get_users( $args ) ) {
+		foreach( $user_ids as $user_id ) {
+			$user = new WP_User( $user_id );
+			if( !empty( $user ) )
+				$output = date( $date_format, strtotime( $user->data->user_registered ) );
+		}
 	}
 	return $output;
 

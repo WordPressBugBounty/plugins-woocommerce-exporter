@@ -7,3 +7,4 @@ function woo_ce_sort_fields( $key ) {
 	};
 
 }
+?>

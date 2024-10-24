@@ -1,14 +1,14 @@
 === Store Exporter for WooCommerce – Export Products, Export Orders, Export Subscriptions, and More ===
 
 Contributors: jkohlbach, RymeraWebCo, visser.labs, smub
-Tags: woocommerce export, woocommerce product export, woocommerce export orders, woocommerce export subscriptions, order export, csv export, excel export, xlsx export
+Tags: woocommerce export, woocommerce product export, woocommerce export orders, woocommerce export subscriptions, csv export
 Requires at least: 2.9.2
-Tested up to: 6.3.2
+Tested up to: 6.6
 Requires PHP: 5.6
-Stable tag: 2.7.2.1
+Stable tag: 2.7.3
 License: GPLv2 or later
 
-Export WooCommerce Products, WooCommerce Orders, Customers/Users, WooCommerce Product Categories, Product Tags and other store details out of WooCommerce into Excel spreadsheets and many other formatted files (e.g. CSV, XML, Excel 2007, XLS, etc.).
+Export WooCommerce Products, WooCommerce Orders, Customers, Product Categories, Tags & other data to spreadsheets & more (CSV, XML, Excel 2007, XLS)
 
 == Description ==
 
@@ -120,7 +120,7 @@ Just a few of the features unlocked in the [Pro upgrade of Store Exporter](https
 
 ... and many more free and Premium extensions for WooCommerce and WordPress.
 
-[For more information visit our site.](https://visser.com.au/solutions/woocommerce-export/)
+[For more information visit our site.](https://visser.com.au/plugins/woocommerce-export/)
 
 Happy exporting! :)
 
@@ -164,6 +164,10 @@ https://visser.com.au/contact/report-a-vulnerability/
 6. Manage Plugin options from the Settings screen.
 
 == Changelog ==
+
+= 2.7.3 =
+* Bug Fix: Fix security issues
+* Bug Fix: Remove scheduled export notices
 
 = 2.7.2.1 =
 * Bug Fix: Cross site scripting (XSS) vulnerability

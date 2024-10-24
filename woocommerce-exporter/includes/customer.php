@@ -10,8 +10,10 @@ if( is_admin() ) {
 			// Check if the existing Transient exists
 			$cached = get_transient( WOO_CE_PREFIX . '_customer_count' );
 			if( $cached == false ) {
-				if( $users = woo_ce_get_export_type_count( 'user' ) > 1000 ) {
-					$count = sprintf( '~%s+', 1000 );
+				// Skip Customer count for large stores with 1000+ Users
+				$large_user_count = apply_filters( 'woo_ce_get_export_type_customer_count_large', 1000 );
+				if( $users = woo_ce_get_export_type_count( 'user' ) > $large_user_count ) {
+					$count = sprintf( '~%d+', $large_user_count );
 				} else {
 					$post_type = 'shop_order';
 					$args = array(
@@ -54,18 +56,45 @@ if( is_admin() ) {
 			} else {
 				$count = $cached;
 			}
-
 			return $count;
 
 		}
 	}
+
+	function woo_ce_customer_dataset_args( $args, $export_type = '', $form_data = array() ) {
+		if ( empty( $form_data ) ) {
+			$form_data = $_POST;
+		}
+
+		// Check if we're dealing with the Customer Export Type
+		if( $export_type <> 'customer' )
+			return $args;
+
+		// Merge in the form data for this dataset
+		$defaults = array(
+			'order_status' => ( isset( $form_data['customer_filter_status'] ) ? woo_ce_format_product_filters( array_map( 'sanitize_text_field', (array)$form_data['customer_filter_status'] ) ) : false ),
+			'order_user_roles' => ( isset( $form_data['customer_filter_user_role'] ) ? woo_ce_format_user_role_filters( array_map( 'sanitize_text_field', (array)$form_data['customer_filter_user_role'] ) ) : false ),
+			'order_order' => ( isset( $form_data['customer_order'] ) ? sanitize_text_field( $form_data['customer_order'] ) : false )
+		);
+		$args = wp_parse_args( $args, $defaults );
+
+		// Save dataset export specific options
+		// Status
+		// User Role
+		if( isset( $args['customer_order'] ) && $args['customer_order'] <> woo_ce_get_option( 'customer_order' ) )
+			woo_ce_update_option( 'customer_order', $args['customer_order'] );
+
+		return $args;
+
+	}
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_customer_dataset_args', 10, 2 );
 
 	/* End of: WordPress Administration */
 
 }
 
 // Returns a list of Customer export columns
-function woo_ce_get_customer_fields( $format = 'full' ) {
+function woo_ce_get_customer_fields( $format = 'full', $post_ID = 0 ) {
 
 	$export_type = 'customer';
 
@@ -214,10 +243,39 @@ function woo_ce_get_customer_fields( $format = 'full' ) {
 	add_filter( 'sanitize_key', 'woo_ce_filter_sanitize_key' );
 
 	// Allow Plugin/Theme authors to add support for additional columns
-	$fields = apply_filters( 'woo_ce_' . $export_type . '_fields', $fields, $export_type );
+	$fields = apply_filters( sprintf( WOO_CE_PREFIX . '_%s_fields', $export_type ), $fields, $export_type );
 
 	// Remove our content filters here to play nice with other Plugins
 	remove_filter( 'sanitize_key', 'woo_ce_filter_sanitize_key' );
+
+	// Check if we're dealing with an Export Template
+	$sorting = false;
+	if( !empty( $post_ID ) ) {
+		$remember = get_post_meta( $post_ID, sprintf( '_%s_fields', $export_type ), true );
+		$hidden = get_post_meta( $post_ID, sprintf( '_%s_hidden', $export_type ), false );
+		$sorting = get_post_meta( $post_ID, sprintf( '_%s_sorting', $export_type ), true );
+	} else {
+		$remember = woo_ce_get_option( $export_type . '_fields', array() );
+		$hidden = woo_ce_get_option( $export_type . '_hidden', array() );
+	}
+	if( !empty( $remember ) ) {
+		$remember = maybe_unserialize( $remember );
+		$hidden = maybe_unserialize( $hidden );
+		$size = count( $fields );
+		for( $i = 0; $i < $size; $i++ ) {
+			$fields[$i]['disabled'] = ( isset( $fields[$i]['disabled'] ) ? $fields[$i]['disabled'] : 0 );
+			$fields[$i]['hidden'] = ( isset( $fields[$i]['hidden'] ) ? $fields[$i]['hidden'] : 0 );
+			$fields[$i]['default'] = 1;
+			if( isset( $fields[$i]['name'] ) ) {
+				// If not found turn off default
+				if( !array_key_exists( $fields[$i]['name'], $remember ) )
+					$fields[$i]['default'] = 0;
+				// Remove the field from exports if found
+				if( array_key_exists( $fields[$i]['name'], $hidden ) )
+					$fields[$i]['hidden'] = 1;
+			}
+		}
+	}
 
 	switch( $format ) {
 
@@ -233,9 +291,15 @@ function woo_ce_get_customer_fields( $format = 'full' ) {
 
 		case 'full':
 		default:
-			$sorting = woo_ce_get_option( $export_type . '_sorting', array() );
+			// Load the default sorting
+			if( empty( $sorting ) )
+				$sorting = woo_ce_get_option( sprintf( '%s_sorting', $export_type ), array() );
 			$size = count( $fields );
 			for( $i = 0; $i < $size; $i++ ) {
+				if( !isset( $fields[$i]['name'] ) ) {
+					unset( $fields[$i] );
+					continue;
+				}
 				$fields[$i]['reset'] = $i;
 				$fields[$i]['order'] = ( isset( $sorting[$fields[$i]['name']] ) ? $sorting[$fields[$i]['name']] : $i );
 			}
@@ -249,17 +313,186 @@ function woo_ce_get_customer_fields( $format = 'full' ) {
 
 }
 
+// Check if we should override field labels from the Field Editor
 function woo_ce_override_customer_field_labels( $fields = array() ) {
 
-	$labels = woo_ce_get_option( 'customer_labels', array() );
+	global $export;
+
+	$export_type = 'customer';
+
+	$labels = false;
+
+	// Check if this is a Quick Export or CRON export
+	if( isset( $export->export_template ) ) {
+		$export_template = $export->export_template;
+		if( !empty( $export_template ) )
+			$labels = get_post_meta( $export_template, sprintf( '_%s_labels', $export_type ), true );
+	}
+
+	// Check if this is a Scheduled Export
+	$scheduled_export = absint( get_transient( WOO_CE_PREFIX . '_scheduled_export_id' ) );
+	if( $scheduled_export ) {
+		$export_fields = get_post_meta( $scheduled_export, '_export_fields', true );
+		if( $export_fields == 'template' ) {
+			$export_template = get_post_meta( $scheduled_export, '_export_template', true );
+			if( !empty( $export_template ) )
+				$labels = get_post_meta( $export_template, sprintf( '_%s_labels', $export_type ), true );
+		}
+	}
+
+	// Default to Quick Export labels
+	if( empty( $labels ) )
+		$labels = woo_ce_get_option( sprintf( '%s_labels', $export_type ), array() );
+
 	if( !empty( $labels ) ) {
 		foreach( $fields as $key => $field ) {
 			if( isset( $labels[$field['name']] ) )
 				$fields[$key]['label'] = $labels[$field['name']];
 		}
 	}
-
 	return $fields;
 
 }
 add_filter( 'woo_ce_customer_fields', 'woo_ce_override_customer_field_labels', 11 );
+
+// Returns the export column header label based on an export column slug
+function woo_ce_get_customer_field( $name = null, $format = 'name' ) {
+
+	$output = '';
+	if( $name ) {
+		$fields = woo_ce_get_customer_fields();
+		$size = count( $fields );
+		for( $i = 0; $i < $size; $i++ ) {
+			if( $fields[$i]['name'] == $name ) {
+				switch( $format ) {
+
+					case 'name':
+						$output = $fields[$i]['label'];
+						break;
+
+					case 'full':
+						$output = $fields[$i];
+						break;
+
+				}
+				$i = $size;
+			}
+		}
+	}
+	return $output;
+
+}
+
+if( !function_exists( 'woo_ce_export_dataset_override_customer' ) ) {
+	function woo_ce_export_dataset_override_customer( $output = null, $export_type = null ) {
+
+		global $export;
+
+		if( $customers = woo_ce_get_orders( 'customer', $export->args ) ) {
+			$export->total_rows = count( $customers );
+			// XML, RSS and JSON export
+			if( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {
+				if( !empty( $export->fields ) ) {
+					foreach( $customers as $customer ) {
+						if( in_array( $export->export_format, array( 'xml', 'json' ) ) )
+							$child = $output->addChild( apply_filters( 'woo_ce_export_xml_customer_node', sanitize_key( $export_type ) ) );
+						else if( $export->export_format == 'rss' )
+							$child = $output->addChild( 'item' );
+						foreach( array_keys( $export->fields ) as $key => $field ) {
+							if( isset( $customer->$field ) ) {
+								if( !is_array( $field ) ) {
+									if( woo_ce_is_xml_cdata( $customer->$field ) )
+										$child->addChild( apply_filters( 'woo_ce_export_xml_customer_label', sanitize_key( $export->columns[$key] ), $export->columns[$key] ) )->addCData( esc_html( woo_ce_sanitize_xml_string( $customer->$field ) ) );
+									else
+										$child->addChild( apply_filters( 'woo_ce_export_xml_customer_label', sanitize_key( $export->columns[$key] ), $export->columns[$key] ), esc_html( woo_ce_sanitize_xml_string( $customer->$field ) ) );
+								}
+							}
+						}
+					}
+				}
+			} else {
+				// PHPExcel export
+				$output = $customers;
+			}
+			unset( $customers, $customer );
+		}
+		return $output;
+
+	}
+}
+
+function woo_ce_export_dataset_multisite_override_customer( $output = null, $export_type = null ) {
+
+	global $export;
+
+	$sites = get_sites();
+	if( !empty( $sites ) ) {
+		foreach( $sites as $site ) {
+			switch_to_blog( $site->blog_id );
+			if( $customers = woo_ce_get_orders( 'customer', $export->args ) ) {
+				$export->total_rows = count( $customers );
+				// XML, RSS and JSON export
+				if( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {
+					if( !empty( $export->fields ) ) {
+						foreach( $customers as $customer ) {
+							if( in_array( $export->export_format, array( 'xml', 'json' ) ) )
+								$child = $output->addChild( apply_filters( 'woo_ce_export_xml_customer_node', sanitize_key( $export_type ) ) );
+							else if( $export->export_format == 'rss' )
+								$child = $output->addChild( 'item' );
+							foreach( array_keys( $export->fields ) as $key => $field ) {
+								if( isset( $customer->$field ) ) {
+									if( !is_array( $field ) ) {
+										if( woo_ce_is_xml_cdata( $customer->$field ) )
+											$child->addChild( apply_filters( 'woo_ce_export_xml_customer_label', sanitize_key( $export->columns[$key] ), $export->columns[$key] ) )->addCData( esc_html( woo_ce_sanitize_xml_string( $customer->$field ) ) );
+										else
+											$child->addChild( apply_filters( 'woo_ce_export_xml_customer_label', sanitize_key( $export->columns[$key] ), $export->columns[$key] ), esc_html( woo_ce_sanitize_xml_string( $customer->$field ) ) );
+									}
+								}
+							}
+						}
+					}
+				} else {
+					// PHPExcel export
+					if( is_null( $output ) )
+						$output = $customers;
+					else
+						$output = array_merge( $output, $customers );
+				}
+				unset( $customers, $customer );
+			}
+			restore_current_blog();
+		}
+	}
+	return $output;
+
+}
+
+
+function woo_ce_get_customers_list() {
+
+	$args = array(
+		'fields' => array( 'ID', 'user_email', 'display_name' ),
+		// Disabled Customer filters, will re-enable with UI options in future Plugin update
+/*
+		'orderby' => 'display_name',
+		'meta_key' => 'billing_email',
+		'meta_value' => null,
+		'search_columns'	=> array( 'ID', 'user_login', 'user_email', 'user_nicename' )
+*/
+	);
+	$customers = get_users( $args );
+	return $customers;
+
+}
+
+function woo_ce_is_duplicate_customer( $customers, $order ) {
+
+	foreach ( $customers as $key => $customer ) {
+		if( isset( $customer->billing_email ) && $customer->billing_email == $order[ 'billing_email' ] ) {
+			return $key;
+			break;
+		}
+	}
+	return 0;
+
+}

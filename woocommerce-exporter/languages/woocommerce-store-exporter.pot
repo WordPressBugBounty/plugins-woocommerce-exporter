@@ -1,0 +1,36 @@
+# Copyright (C) 2024 Visser Labs
+# This file is distributed under the GPL2.
+msgid ""
+msgstr ""
+"Project-Id-Version: Store Exporter for WooCommerce 2.7.2.1\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/woocommerce-store-exporter\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2024-10-24T00:34:02+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.11.0\n"
+"X-Domain: woocommerce-store-exporter\n"
+
+#. Plugin Name of the plugin
+#: exporter.php
+msgid "Store Exporter for WooCommerce"
+msgstr ""
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: exporter.php
+msgid "https://visser.com.au/"
+msgstr ""
+
+#. Description of the plugin
+#: exporter.php
+msgid "Export Products, Orders, Users, Categories, Tags and other store details out of WooCommerce into Excel spreadsheets and other simple formatted files (e.g. CSV, TSV, Excel formats including XLS and XLSX, XML, etc.)"
+msgstr ""
+
+#. Author of the plugin
+#: exporter.php
+msgid "Visser Labs"
+msgstr ""
