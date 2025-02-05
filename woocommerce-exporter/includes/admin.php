@@ -566,6 +566,12 @@ function woo_ce_enqueue_scripts() {
 	}
 
 	wp_enqueue_style( 'woo_vm_styles', plugins_url( '/templates/admin/woocommerce-admin_dashboard_vm-plugins.css', WOO_CE_RELPATH ) );
+
+	// Growth Tools.
+	
+	if ( (isset($_GET['tab']) && strpos( $_GET['tab'], 'tools' ) !== false)) { // phpcs:ignore
+		wp_enqueue_script( 'woo_ce_tools', plugins_url( '/js/growth-tools.js', WOO_CE_RELPATH ), array( 'jquery' ), WOO_CE_VERSION );
+	}
 }
 
 function woo_ce_admin_export_bar_menu( $admin_bar ) {
@@ -1341,7 +1347,7 @@ function woo_ce_admin_override_scheduled_export_notice() {
 <script type="text/javascript">
 window.setTimeout(
 	function(){
-		window.location.replace("' . add_query_arg( 'scheduled', null ) . '");
+		window.location.replace("' . esc_url( add_query_arg( 'scheduled', null ) ) . '");
 	}, ' . ( $refresh_timeout * 1000 ) . '
 );
 </script>';
@@ -1387,6 +1393,17 @@ function woo_cd_admin_active_tab( $tab_name = null, $tab = null ) {
         }
 	}
 	echo $output;
+}
+
+// URL for each tab on the Store Exporter screen.
+function woo_cd_admin_tab_url( $tab = '' ) {
+	return add_query_arg(
+		array(
+			'page' => 'woo_ce',
+			'tab'  => $tab,
+		),
+		'admin.php'
+	);
 }
 
 // HTML template for each tab on the Store Exporter screen

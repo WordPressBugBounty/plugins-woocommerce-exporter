@@ -1,14 +1,14 @@
 === Store Exporter for WooCommerce – Export Products, Export Orders, Export Subscriptions, and More ===
 
 Contributors: jkohlbach, RymeraWebCo, visser.labs, smub
-Tags: woocommerce export, woocommerce product export, woocommerce export orders, woocommerce export subscriptions, csv export
+Tags: woocommerce export, woocommerce product export, woocommerce export orders, woocommerce export subscriptions, order export, csv export, excel export, xlsx export
 Requires at least: 2.9.2
-Tested up to: 6.6
+Tested up to: 6.7
 Requires PHP: 5.6
-Stable tag: 2.7.3
+Stable tag: 2.7.4
 License: GPLv2 or later
 
-Export WooCommerce Products, WooCommerce Orders, Customers, Product Categories, Tags & other data to spreadsheets & more (CSV, XML, Excel 2007, XLS)
+Export WooCommerce Products, WooCommerce Orders, Customers/Users, WooCommerce Product Categories, Product Tags and other store details out of WooCommerce into Excel spreadsheets and many other formatted files (e.g. CSV, XML, Excel 2007, XLS, etc.).
 
 == Description ==
 
@@ -164,6 +164,17 @@ https://visser.com.au/contact/report-a-vulnerability/
 6. Manage Plugin options from the Settings screen.
 
 == Changelog ==
+
+= 2.7.4 =
+* Bug Fix: Order Completed Date order meta key doesn't show any value
+* Bug Fix: Sorting argument typo order to orderby
+* Bug Fix: Allow calculate tax if subtotal is not empty
+* Bug Fix: filters not working in coupon, customer, review, tag, user export types
+* Bug Fix: Add validation for limit volume in customer export query
+* Feature: Add Growth Tools menu
+* Improvement: Get rid of plugin news dashboard widgets
+* Improvement: Update WordPress and WooCommerce compatibility versions
+* Improvement: Add Completed Date to list of potential export fields for Orders
 
 = 2.7.3 =
 * Bug Fix: Fix security issues

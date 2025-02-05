@@ -111,7 +111,7 @@ class Customer extends Abstract_Class {
             $query  .= " ORDER BY o.id {$sorting}";
         }
 
-        if ( ! empty( $export_args['limit_volume'] ) ) {
+        if ( ! empty( $export_args['limit_volume'] ) && $export_args['limit_volume'] > 0 ) {
             $query .= ' LIMIT %d';
             $query  = $wpdb->prepare( $query, $export_args['limit_volume'] ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         }

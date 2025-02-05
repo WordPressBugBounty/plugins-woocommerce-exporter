@@ -103,3 +103,22 @@
     background: #d63638;
     border-color: #d63638;
 }
+
+/* Growth Tools */
+
+#woo-ce.wrap .nav-tab-wrapper > a.nav-tab[data-tab-id="tools"] {
+    font-weight: bold;
+    background-color: #d4edda;
+    border-color: #a0c5a9;
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#woo-ce.wrap .nav-tab-wrapper > a.nav-tab[data-tab-id="tools"]:before {
+    content: '\f308';
+    font-family: "Dashicons";
+    margin-right: 4px;
+    margin-bottom: -2px;
+}

@@ -216,6 +216,10 @@ class Order extends Abstract_Class {
                 'label' => __( 'Order Modified Date', 'woocommerce-exporter' ),
             ),
             array(
+                'name'  => 'completed_date',
+                'label' => __( 'Order Completed Date', 'woocommerce-exporter' ),
+            ),
+            array(
                 'name'     => 'purchase_time',
                 'label'    => __( 'Order Time', 'woocommerce-exporter' ),
                 'disabled' => 1,
@@ -1201,7 +1205,7 @@ class Order extends Abstract_Class {
         }
 
         if ( ! empty( $export_args['order_orderby'] ) ) {
-            $args['order'] = $export_args['order_orderby'];
+            $args['orderby'] = $export_args['order_orderby'];
         }
 
         if ( ! empty( $export_args['limit_volume'] ) ) {
@@ -2039,6 +2043,9 @@ class Order extends Abstract_Class {
                 case 'modified_date':
                     $data[ $key ] = Formatting::format_date( $order_data['date_modified'] );
                     break;
+                case 'completed_date':
+                    $data[ $key ] = Formatting::format_date( $order->get_date_completed() );
+                    break;
                 case 'purchase_time':
                     $data[ $key ] = Formatting::format_date( $order_data['date_created'], get_option( 'time_format' ) );
                     break;
@@ -2501,10 +2508,13 @@ class Order extends Abstract_Class {
     private function _get_order_custom_data( &$data, $fields, $order ) {
         // Custom Order fields.
         $custom_orders = get_option( WOO_CE_PREFIX . '_custom_orders', '' );
+
         if ( ! empty( $custom_orders ) ) {
             foreach ( $custom_orders as $custom_order ) {
                 if ( isset( $fields[ $custom_order ] ) && 'on' === $fields[ $custom_order ] ) {
-                    $data[ $custom_order ] = maybe_serialize( $order->get_meta( $custom_order, true ) );
+                    // Check if this is a WC_Order internal meta field.
+                    $meta_value            = $order->get_meta( $custom_order, true );
+                    $data[ $custom_order ] = maybe_serialize( $meta_value );
                 }
             }
         }
@@ -2740,7 +2750,13 @@ class Order extends Abstract_Class {
                 $data['tax_subtotal'] = $item_data['subtotal_tax'];
             }
             if ( isset( $fields['order_items_tax_percentage'] ) ) {
-                $data['tax_percentage'] = round( (float) $item_data['subtotal_tax'] / (float) $item_data['subtotal'] * 100, 2 ) . '%';
+                $tax_percentage = 0;
+                // Check if the subtotal is greater than 0.
+                if ( $item_data['subtotal'] > 0 ) {
+                    $tax_percentage = round( (float) $item_data['subtotal_tax'] / (float) $item_data['subtotal'] * 100, 2 );
+                }
+
+                $data['tax_percentage'] = $tax_percentage . '%';
             }
 
             if ( ! empty( $selected_tax_rate ) ) {

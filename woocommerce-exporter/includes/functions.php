@@ -4855,3 +4855,13 @@ function woo_ce_upsell_link( $utm = '', $text = '', $url = 'https://visser.com.a
 		$text !== '' ? $text : __( 'Store Exporter Deluxe', 'woocommerce-exporter' ),
 	);
 }
+
+/**
+ * Check if a plugin is installed.
+ *
+ * @param string $plugin_name The plugin name. Example: 'woocommerce/woocommerce.php'.
+ * @return bool True if installed, false otherwise.
+ */
+function woo_ce_is_plugin_installed( $plugin_name ) {
+	return file_exists( WP_PLUGIN_DIR . '/' . $plugin_name );
+}

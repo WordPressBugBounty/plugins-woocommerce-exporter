@@ -20,16 +20,6 @@
  * - woo_get_woo_version
  */
 
-if ( is_admin() ) {
-
-    /* Start of: WordPress Administration */
-
-    // Load Dashboard widgets
-    include_once WOO_CE_PATH . 'includes/common-dashboard_widgets.php';
-
-    /* End of: WordPress Administration */
-}
-
 if ( ! function_exists( 'woo_get_action' ) ) {
     function woo_get_action( $prefer_get = false ) {
 

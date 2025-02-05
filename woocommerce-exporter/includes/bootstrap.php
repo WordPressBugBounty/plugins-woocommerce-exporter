@@ -12,6 +12,9 @@ if ( is_admin() ) {
     // Register our install script for first time install.
     include_once WOO_CE_PATH . 'includes/install.php';
 
+    // Plugin installer class for Growth Tools page.
+    include_once WOO_CE_PATH . 'includes/Classes/plugin-installer.php';
+
     /**
      * Initial scripts and export process.
      */

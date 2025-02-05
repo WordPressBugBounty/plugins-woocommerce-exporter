@@ -1351,8 +1351,8 @@ function woo_ce_get_order_field_array( $export_fields = null, $format = 'name' )
 function woo_ce_get_orders( $export_type = 'order', $args = array(), $export = array() ) {
     // phpcs:disable WordPress.PHP.DevelopmentFunctions.error_log_print_r
     if ( empty( $export ) ) {
-		global $export;
-	}
+        global $export;
+    }
 
     $limit_volume = -1;
     $offset       = 0;
@@ -2753,6 +2753,7 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
         $order_data['cart_hash']             = $order->get_cart_hash();
         $order_data['purchase_date']         = ( function_exists( 'wc_format_datetime' ) ? wc_format_datetime( $order->get_date_created(), $date_format ) : woo_ce_format_date( $order->get_date_created() ) );
         $order_data['modified_date']         = ( function_exists( 'wc_format_datetime' ) ? wc_format_datetime( $order->get_date_modified(), $date_format ) : woo_ce_format_date( $order->get_date_modified() ) );
+        $order_data['completed_date']        = ( function_exists( 'wc_format_datetime' ) ? wc_format_datetime( $order->get_date_completed(), $date_format ) : woo_ce_format_date( $order->get_date_completed() ) );
         $order_data['purchase_time']         = ( function_exists( 'wc_format_datetime' ) ? wc_format_datetime( $order->get_date_created(), get_option( 'time_format' ) ) : mysql2gmdate( 'H:i:s', $order->get_date_created() ) );
         $order_data['ip_address']            = $order->get_customer_ip_address();
         $order_data['browser_agent']         = $order->get_customer_user_agent();
@@ -3021,7 +3022,8 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
         if ( ! empty( $custom_orders ) ) {
             foreach ( $custom_orders as $custom_order ) {
                 if ( ! empty( $custom_order ) ) {
-                    $order_data[ $custom_order ] = woo_ce_format_custom_meta( $order->get_meta( $custom_order, true, 'edit' ) );
+                    $meta_value                  = $order->get_meta( $custom_order, true, 'edit' );
+                    $order_data[ $custom_order ] = woo_ce_format_custom_meta( $meta_value );
                 }
             }
         }
@@ -4320,9 +4322,9 @@ function woo_ce_get_order_items( $order, $order_items_types = array( 'line_item'
                 $order_item_data['refund_subtotal_incl_tax'] = $order->get_total_refunded_for_item( $order_item->get_id(), $order_item->get_type() ) + $order->get_tax_refunded_for_item( $order_item->get_id(), $order_item->get_tax_class(), $order_item->get_type() );
                 $order_item_data['refund_quantity']          = $order->get_qty_refunded_for_item( $order_item->get_id(), $order_item->get_type() );
 
-				$order_item_data = apply_filters( 'woo_ce_order_item', $order_item_data, $order_item, $order_id );
+                $order_item_data = apply_filters( 'woo_ce_order_item', $order_item_data, $order_item, $order_id );
 
-				$order_item_data['type'] = woo_ce_format_order_item_type( $order_item->get_type() );
+                $order_item_data['type'] = woo_ce_format_order_item_type( $order_item->get_type() );
 
                 // get all order item meta.
                 $order_item_meta = $order_item->get_meta_data();

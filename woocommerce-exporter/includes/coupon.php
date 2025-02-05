@@ -72,7 +72,7 @@ if( is_admin() ) {
 		return $args;
 
 	}
-	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_coupon_dataset_args', 10, 2 );
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_coupon_dataset_args', 10, 3 );
 
 	/* End of: WordPress Administration */
 

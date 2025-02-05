@@ -283,7 +283,7 @@
     </ul>
 
     <h3>
-        <div class="dashicons dashicons-hammer"></div>&nbsp;<a href="<?php echo esc_url( add_query_arg( 'tab', 'tools' ) ); ?>"><?php esc_html_e( 'Tools', 'woocommerce-exporter' ); ?></a>
+        <div class="dashicons dashicons-hammer"></div>&nbsp;<a href="<?php echo esc_url( add_query_arg( 'tab', 'tools' ) ); ?>" style="font-weight: bold;"><?php esc_html_e( 'Growth Tools', 'woocommerce-exporter' ); ?></a>
     </h3>
     <p><?php esc_html_e( 'Export tools for WooCommerce.', 'woocommerce-exporter' ); ?></p>
 
