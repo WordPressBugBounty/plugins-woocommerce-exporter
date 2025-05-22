@@ -82,7 +82,7 @@ function woo_ce_extend_order_items_combined( $order_data, $order_items, $order )
 	) {
 		$meta_type = 'order_item';
 		foreach ( $order_items as $order_item ) {
-			$order_items_brand .= woo_ce_get_product_assoc_brands( $order_item->product_id ) . $export->category_separator;
+			$order_items_brand .= woo_ce_get_product_assoc_brands( $order_item['product_id'] ) . $export->category_separator;
         }
 		if ( isset( $order_items_brand ) ) {
 			$order_items_brand = substr( $order_items_brand, 0, -1 );
@@ -100,7 +100,7 @@ function woo_ce_extend_order_items_combined( $order_data, $order_items, $order )
 	) {
 		$meta_type = 'order_item';
 		foreach ( $order_items as $order_item ) {
-			$order_items_vendor = woo_ce_get_product_assoc_product_vendors( $order_item->product_id ) . $export->category_separator;
+			$order_items_vendor = woo_ce_get_product_assoc_product_vendors( $order_item['product_id'] ) . $export->category_separator;
         }
 		if ( isset( $order_items_vendor ) ) {
 			$order_items_vendor = substr( $order_items_vendor, 0, -1 );

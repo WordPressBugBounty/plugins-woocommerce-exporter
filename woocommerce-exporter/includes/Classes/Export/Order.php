@@ -462,6 +462,11 @@ class Order extends Abstract_Class {
                 'disabled' => 1,
             ),
             array(
+                'name'     => 'order_items_global_unique_id',
+                'label'    => __( 'Order Items: GTIN, UPC, EAN, or ISBN', 'woocommerce-exporter' ),
+                'disabled' => 1,
+            ),
+            array(
                 'name'  => 'order_items_name',
                 'label' => __( 'Order Items: Product Name', 'woocommerce-exporter' ),
             ),
@@ -2620,6 +2625,9 @@ class Order extends Abstract_Class {
                         break;
                     case 'order_items_sku':
                         $data['sku'] = $product_data['sku'];
+                        break;
+                    case 'order_items_global_unique_id':
+                        $data['global_unique_id'] = $product_data['global_unique_id'];
                         break;
                     case 'order_items_rrp':
                         $data['rrp'] = $product_data['regular_price'];

@@ -1430,7 +1430,7 @@ function woo_cd_tab_template( $tab = '' ) {
                 );
 				$message     = '<span style="float:right;"><a href="' . $dismiss_url . '" class="woocommerce-message-close notice-dismiss">' . __( 'Dismiss', 'woocommerce-exporter' ) . '</a></span>';
 				$message    .= '<strong>' . __( 'Welcome aboard!', 'woocommerce-exporter' ) . '</strong> ';
-				$message    .= sprintf( __( 'Jump over to the <a href="%s">Quick Export screen</a> to create your first export.', 'woocommerce-exporter' ), add_query_arg( array( 'tab' => 'export' ) ) );
+				$message    .= sprintf( __( 'Jump over to the <a href="%s">Quick Export screen</a> to create your first export.', 'woocommerce-exporter' ), esc_url( admin_url( 'admin.php?page=woo_ce&tab=export' ) ) );
 				woo_cd_admin_notice_html( $message, 'notice' );
 			}
 

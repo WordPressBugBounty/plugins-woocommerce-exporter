@@ -1,14 +1,14 @@
-=== Store Exporter for WooCommerce – Export Products, Export Orders, Export Subscriptions, and More ===
+=== Store Exporter – Export WooCommerce Products, Orders, Subscriptions, Customers ===
 
 Contributors: jkohlbach, RymeraWebCo, visser.labs, smub
-Tags: woocommerce export, woocommerce product export, woocommerce export orders, woocommerce export subscriptions, order export, csv export, excel export, xlsx export
+Tags: woocommerce export, export products, export orders, export subscriptions, csv excel export
 Requires at least: 2.9.2
-Tested up to: 6.7
+Tested up to: 6.8
 Requires PHP: 5.6
-Stable tag: 2.7.4
+Stable tag: 2.7.5
 License: GPLv2 or later
 
-Export WooCommerce Products, WooCommerce Orders, Customers/Users, WooCommerce Product Categories, Product Tags and other store details out of WooCommerce into Excel spreadsheets and many other formatted files (e.g. CSV, XML, Excel 2007, XLS, etc.).
+Export WooCommerce products, orders, customers, categories, tags, subscriptions & more into formatted files like CSV, XML, Excel 2007, XLS, XLSX.
 
 == Description ==
 
@@ -147,11 +147,11 @@ If you have any problems, questions or suggestions please create a topic here on
 
 [Store Exporter on w.org](https://wordpress.org/support/plugin/woocommerce-exporter)
 
-== Reporting security issues ==
+== Frequently asked questions ==
 
-If you are here to report any sort of security issue with this Plugin please use this Report a Plugin vulnerability form.
+= How can I report security bugs? =
 
-https://visser.com.au/contact/report-a-vulnerability/
+You can report security bugs through the Patchstack Vulnerability Disclosure Program. The Patchstack team help validate, triage and handle any security vulnerabilities. [Report a security vulnerability.](https://patchstack.com/database/vdp/c7ebe92f-31e4-484c-a3e5-49e94b69dbaf)
 
 == Screenshots ==
 
@@ -164,6 +164,11 @@ https://visser.com.au/contact/report-a-vulnerability/
 6. Manage Plugin options from the Settings screen.
 
 == Changelog ==
+
+= 2.7.5 =
+* Bug Fix: Cross Site Scripting Security Vulnerability
+* Bug Fix: PHP Warning Appears on Quick Export Screen
+* Feature: Allow exporting of WooCommerce Product GTINs/EAN etc.
 
 = 2.7.4 =
 * Bug Fix: Order Completed Date order meta key doesn't show any value

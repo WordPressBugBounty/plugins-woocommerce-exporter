@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable
 if ( is_admin() ) {
 
     /* Start of: WordPress Administration */
@@ -622,6 +623,10 @@ function woo_ce_get_product_fields( $format = 'full' ) {
 		'name' => 'sku',
 		'label' => __( 'Product SKU', 'woocommerce-exporter' )
 	);
+    $fields[] = array(
+        'name'  => 'global_unique_id',
+        'label' => __( 'GTIN, UPC, EAN, or ISBN', 'woocommerce-exporter' ),
+    );
 	$fields[] = array(
 		'name' => 'name',
 		'label' => __( 'Product Name', 'woocommerce-exporter' )
@@ -1142,6 +1147,8 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
             $product_sku         = $args['product_sku'];
             $product_sku_exclude = $args['product_sku_exclude'];
         }
+        // Add support for filtering by GTIN
+        $product_global_unique_id = ( ! empty( $args['product_global_unique_id'] ) ? $args['product_global_unique_id'] : false );
         if ( ! empty( $args['product_user_role'] ) ) {
             $product_user_role = $args['product_user_role'];
         }
@@ -2077,12 +2084,26 @@ function woo_ce_get_product_data( $product_id = 0, $args = array(), $fields = ar
         // Assign Parent ID for Variants then check if Parent exists.
         if ( $product->parent_id = $product->post_parent ) {
             $product->parent_sku = get_post_meta( $product->post_parent, '_sku', true );
+
+            // Get the variation's global_unique_id
+            $variation_global_unique_id = get_post_meta( $product_id, '_global_unique_id', true );
+            // If the variation doesn't have a GTIN, try to get it from the parent
+            if ( empty( $variation_global_unique_id ) ) {
+                $product->global_unique_id = get_post_meta( $product->post_parent, '_global_unique_id', true );
+            } else {
+                $product->global_unique_id = $variation_global_unique_id;
+            }
         } else {
             $product->parent_id = '';
         }
     }
     $product->product_id = $product_id;
     $product->sku        = get_post_meta( $product_id, '_sku', true );
+    // For regular products (not variations), set the global_unique_id
+    // For variations, we already handle this in the code above
+    if ($product->post_type !== 'product_variation') {
+        $product->global_unique_id = get_post_meta( $product_id, '_global_unique_id', true );
+    }
     add_filter( 'the_title', 'woo_ce_get_product_title', 10, 2 );
     $product->name = woo_ce_format_post_title( get_the_title( $product_id ) );
     remove_filter( 'the_title', 'woo_ce_get_product_title' );
@@ -2104,10 +2125,10 @@ function woo_ce_get_product_data( $product_id = 0, $args = array(), $fields = ar
             // Control whether the back-end or storefront price (after taxes) is displayed.
             $display      = apply_filters( 'woo_ce_product_variable_price_display', false );
             $pricing_args = array(
-                'min_price'      => $_product->get_variation_regular_price( 'min', $display ),
-                'max_price'      => $_product->get_variation_regular_price( 'max', $display ),
-                'min_sale_price' => $_product->get_variation_sale_price( 'min', $display ),
-                'max_sale_price' => $_product->get_variation_sale_price( 'max', $display ),
+                'min_price'      => ( method_exists( $_product, 'get_variation_regular_price' ) ? $_product->get_variation_regular_price( 'min', $display ) : 0 ),
+                'max_price'      => ( method_exists( $_product, 'get_variation_regular_price' ) ? $_product->get_variation_regular_price( 'max', $display ) : 0 ),
+                'min_sale_price' => ( method_exists( $_product, 'get_variation_sale_price' ) ? $_product->get_variation_sale_price( 'min', $display ) : 0 ),
+                'max_sale_price' => ( method_exists( $_product, 'get_variation_sale_price' ) ? $_product->get_variation_sale_price( 'max', $display ) : 0 ),
             );
             unset( $display );
             if ( $pricing_args['min_price'] == $pricing_args['max_price'] ) {
@@ -2213,7 +2234,7 @@ function woo_ce_get_product_data( $product_id = 0, $args = array(), $fields = ar
     if ( $product->post_type == 'product_variation' ) {
         // Override the Tag if Variation Formatting is enabled.
         if ( woo_ce_get_option( 'variation_formatting', 0 ) ) {
-            $product->tag = woo_ce_get_product_assoc_tags( $parent_id );
+            $product->tag = woo_ce_get_product_assoc_tags( $product->parent_id );
         }
     }
     $product->manage_stock      = get_post_meta( $product_id, '_manage_stock', true );
@@ -2231,7 +2252,7 @@ function woo_ce_get_product_data( $product_id = 0, $args = array(), $fields = ar
             version_compare( woo_get_woo_version(), '3.0', '>=' ) &&
             $product->manage_stock == 'no'
         ) {
-            $product_variations = ( method_exists( $_product, 'get_available_variations' ) ? $_product->get_available_variations() : $product->quantity );
+            $product_variations = ( method_exists( $_product, 'get_available_variations' ) ? $_product->get_available_variations() : array() );
             if ( ! empty( $product_variations ) ) {
                 $quantity = 0;
                 foreach ( $product_variations as $variation ) {
@@ -2573,7 +2594,7 @@ function woo_ce_get_product_title( $title = '', $post_ID = '' ) {
             $type = ( method_exists( $_product, 'is_type' ) ? $_product->is_type( 'variation' ) : false );
             if ( $type ) {
                 $list_attributes = array();
-                $attributes      = ( method_exists( $_product, 'get_variation_attributes' ) ? $_product->get_variation_attributes() : false );
+                $attributes      = ( method_exists( $_product, 'get_variation_attributes' ) ? $_product->get_variation_attributes() : array() );
                 if ( ! empty( $attributes ) ) {
                     $format = apply_filters( 'woo_ce_get_product_title_attribute_formatting', 'slug', $post_ID );
                     foreach ( $attributes as $name => $attribute ) {
@@ -3234,16 +3255,12 @@ function woo_ce_get_product_assoc_order_ids( $products = array() ) {
 	$output = false;
 	if ( apply_filters( 'woo_ce_get_product_assoc_order_ids_alternate_query', false ) ) {
         $order_ids_sql = $wpdb->prepare(
-            "SELECT `order_id` FROM `%swoocommerce_order_items` as order_items, `%swoocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key IN ( '_product_id', '_variation_id' ) AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
-            $wpdb->prefix,
-            $wpdb->prefix,
+            "SELECT `order_id` FROM `{$wpdb->prefix}woocommerce_order_items` as order_items, `{$wpdb->prefix}swoocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key IN ( '_product_id', '_variation_id' ) AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
             ...$products
         );
     } else {
         $order_ids_sql = $wpdb->prepare(
-            "SELECT `order_id` FROM `%swoocommerce_order_items` as order_items, `%swoocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key = '_product_id' AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
-            $wpdb->prefix,
-            $wpdb->prefix,
+            "SELECT `order_id` FROM `{$wpdb->prefix}swoocommerce_order_items` as order_items, `{$wpdb->prefix}swoocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key = '_product_id' AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
             ...$products
         );
     }
@@ -3733,3 +3750,10 @@ function woo_ce_unique_product_gallery_columns( $columns = array(), $fields = ar
 
     return $columns;
 }
+
+// Make GTIN, UPC, EAN, or ISBN searchable in the admin interface
+function woo_ce_product_search_by_global_unique_id( $search_fields ) {
+    $search_fields[] = '_global_unique_id';
+    return $search_fields;
+}
+add_filter( 'woocommerce_product_search_fields', 'woo_ce_product_search_by_global_unique_id' );

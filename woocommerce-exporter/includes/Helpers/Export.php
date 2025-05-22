@@ -259,7 +259,7 @@ class Export {
         if ( strlen( $str ) === 0 ) {
             return;
         }
-        if ( ! empty( $str ) && seems_utf8( trim( $str ) ) === false || preg_match( '!.!u', trim( $str ) ) === false || strpos( $str, '&nbsp;' ) !== false ) {
+        if ( ( ! empty( $str ) && seems_utf8( trim( $str ) ) === false ) || preg_match( '!.!u', trim( $str ) ) === false || strpos( $str, '&nbsp;' ) !== false ) {
             return true;
         }
     }
@@ -305,7 +305,7 @@ class Export {
      */
     public static function clean_export_label( $label ) {
         // If the first character is an underscore remove it.
-        if ( '_' === $label[0] ) {
+        if ( ! empty( $label ) && '_' === $label[0] ) {
             $label = substr( $label, 1 );
         }
         // Replace any underscores and dashes with spaces.
@@ -433,15 +433,15 @@ class Export {
     }
 
     /**
-	 * Check if there are any pending async scheduled actions due to run.
-	 *
+     * Check if there are any pending async scheduled actions due to run.
+     *
      * @since 2.7.3
      *
-	 * @return string
-	 */
-	public static function get_pending_async_actions_due() {
+     * @return string
+     */
+    public static function get_pending_async_actions_due() {
         $as_store        = ActionScheduler::store();
-		$pending_actions = $as_store->query_actions(
+        $pending_actions = $as_store->query_actions(
             array(
                 'hook'    => WSED_AS_HOOK,
                 'group'   => WSED_AS_ASYNC_GROUP,
@@ -451,8 +451,8 @@ class Export {
             )
         );
 
-		return ! empty( $pending_actions ) ? $pending_actions : false;
-	}
+        return ! empty( $pending_actions ) ? $pending_actions : false;
+    }
 
     /**
      * Get unique filename.
@@ -543,7 +543,7 @@ class Export {
      */
     public static function get_email_subject( $email_subject, $filename, $export_type ) {
         // Default subject.
-		if ( empty( $email_subject ) ) {
+        if ( empty( $email_subject ) ) {
             // translators: 1: store name, 2: export type, 3: export filename.
             $email_subject = apply_filters( 'wsed_default_email_subject', __( '[%store_name%] Export: %export_type% (%export_filename%)', 'woocommerce-exporter' ), $filename, $export_type ); // phpcs:ignore
         }
