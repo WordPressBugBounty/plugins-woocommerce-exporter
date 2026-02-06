@@ -333,43 +333,43 @@ abstract class Abstract_Exporter {
     }
 
     /**
-	 * Set the export headers.
-	 *
-	 * @since 2.7.3
+     * Set the export headers.
+     *
+     * @since 2.7.3
      * @access public
-	 */
-	public function send_headers() {
+     */
+    public function send_headers() {
         // phpcs:disable WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.Risky
         $post_mime_type = $this->get_post_mime_type( $this->export_format );
 
-		if ( function_exists( 'gc_enable' ) ) {
-			gc_enable(); // phpcs:ignore PHPCompatibility.FunctionUse.NewFunctions.gc_enableFound
-		}
-		if ( function_exists( 'apache_setenv' ) ) {
-			@apache_setenv( 'no-gzip', 1 ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_apache_setenv
-		}
-		@ini_set( 'zlib.output_compression', 'Off' ); // @codingStandardsIgnoreLine
-		@ini_set( 'output_buffering', 'Off' ); // @codingStandardsIgnoreLine
-		@ini_set( 'output_handler', '' ); // @codingStandardsIgnoreLine
-		ignore_user_abort( true );
-		wc_set_time_limit( 0 );
-		wc_nocache_headers();
-		header( sprintf( 'Content-Type: %1$s; charset=%2$s', esc_attr( $post_mime_type ), esc_attr( $this->export_encoding ) ) );
+        if ( function_exists( 'gc_enable' ) ) {
+            gc_enable(); // phpcs:ignore PHPCompatibility.FunctionUse.NewFunctions.gc_enableFound
+        }
+        if ( function_exists( 'apache_setenv' ) ) {
+            @apache_setenv( 'no-gzip', 1 ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_apache_setenv
+        }
+        @ini_set( 'zlib.output_compression', 'Off' ); // @codingStandardsIgnoreLine
+        @ini_set( 'output_buffering', 'Off' ); // @codingStandardsIgnoreLine
+        @ini_set( 'output_handler', '' ); // @codingStandardsIgnoreLine
+        ignore_user_abort( true );
+        wc_set_time_limit( 0 );
+        wc_nocache_headers();
+        header( sprintf( 'Content-Type: %1$s; charset=%2$s', esc_attr( $post_mime_type ), esc_attr( $this->export_encoding ) ) );
         header( sprintf( 'Content-Encoding: %s', esc_attr( $this->export_encoding ) ) );
-		header( sprintf( 'Content-Disposition: attachment; filename=%s', $this->filename ) );
+        header( sprintf( 'Content-Disposition: attachment; filename=%s', $this->filename ) );
         header( 'Content-Transfer-Encoding: binary' );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
+        header( 'Pragma: no-cache' );
+        header( 'Expires: 0' );
         // phpcs:enable WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.Risky
-	}
+    }
 
     /**
-	 * Finalize the export.
-	 *
-	 * @since 2.7.3
+     * Finalize the export.
+     *
+     * @since 2.7.3
      * @access public
-	 */
-	public function finalize_export() {
+     */
+    public function finalize_export() {
         // phpcs:disable WordPress.PHP.NoSilencedErrors.Discouraged
         // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen
         // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fclose
@@ -404,12 +404,12 @@ abstract class Abstract_Exporter {
     }
 
     /**
-	 * Delete the temporary file.
-	 *
-	 * @since 2.7.3
+     * Delete the temporary file.
+     *
+     * @since 2.7.3
      * @access public
-	 */
-	public function delete_temp_file() {
+     */
+    public function delete_temp_file() {
         // phpcs:disable WordPress.PHP.NoSilencedErrors.Discouraged
         if ( @file_exists( $this->file_path ) ) {
             if ( '0' === get_option( WOO_CE_PREFIX . '_delete_file', '1' ) ) {
@@ -421,12 +421,12 @@ abstract class Abstract_Exporter {
     }
 
     /**
-	 * Send the export content to browser.
-	 *
-	 * @since 2.7.3
+     * Send the export content to browser.
+     *
+     * @since 2.7.3
      * @access public
-	 */
-	public function send_content() {
+     */
+    public function send_content() {
         echo $this->file_contents; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
@@ -486,7 +486,7 @@ abstract class Abstract_Exporter {
             $attach_data = \wp_generate_attachment_metadata( $post_id, $upload['file'] );
             // Update the attachment metadata.
             \wp_update_attachment_metadata( $post_id, $attach_data );
-			\update_attached_file( $post_id, $upload['file'] );
+            \update_attached_file( $post_id, $upload['file'] );
 
             add_post_meta( $post_id, '_woo_export_type', $this->export_type );
             if ( ! empty( $upload['url'] ) ) {
@@ -731,6 +731,19 @@ abstract class Abstract_Exporter {
             }
         }
 
+        // Override labels if export template is set.
+        if ( ! empty( $export->export_template ) ) {
+            $labels = get_post_meta( $export->export_template, sprintf( '_%s_labels', $export->type ), true );
+
+            if ( $labels ) {
+                foreach ( $labels as $key => $label ) {
+                    if ( isset( $columns[ $key ] ) ) {
+                        $columns[ $key ] = $label;
+                    }
+                }
+            }
+        }
+
         return apply_filters( 'wsed_override_export_columns', $columns, $fields, $export );
     }
 
@@ -785,59 +798,59 @@ abstract class Abstract_Exporter {
     }
 
     /**
-	 * Set export format.
-	 *
+     * Set export format.
+     *
      * @since 2.7.3
      * @access public
      *
      * @param string $format The export format.
-	 */
-	public function set_export_format( $format ) {
+     */
+    public function set_export_format( $format ) {
         $this->export_format = $format;
     }
 
     /**
-	 * Set export columns.
-	 *
+     * Set export columns.
+     *
      * @since 2.7.3
      * @access public
      *
      * @param array $columns The export columns.
-	 */
-	public function set_export_columns( $columns ) {
+     */
+    public function set_export_columns( $columns ) {
         $this->export_columns = $columns;
     }
 
     /**
-	 * Set export encoding.
-	 *
+     * Set export encoding.
+     *
      * @since 2.7.3
      * @access public
      *
      * @param string $encoding The export encoding.
-	 */
-	public function set_export_encoding( $encoding ) {
+     */
+    public function set_export_encoding( $encoding ) {
         $this->export_encoding = $encoding;
     }
 
     /**
-	 * Set export type.
-	 *
+     * Set export type.
+     *
      * @since 2.7.3
      * @access public
      *
      * @param  string $type The export type.
-	 */
-	public function set_export_type( $type ) {
+     */
+    public function set_export_type( $type ) {
         $this->export_type = $type;
     }
 
     /**
-	 * Get export type.
+     * Get export type.
      *
      * @since 2.7.3
-	 */
-	public function get_export_type() {
+     */
+    public function get_export_type() {
         return $this->export_type;
     }
 
@@ -848,89 +861,89 @@ abstract class Abstract_Exporter {
      * @access public
      *
      * @param array $batch The batch to export.
-	 */
-	public function set_export_batch( $batch ) {
+     */
+    public function set_export_batch( $batch ) {
         $this->export_batch = $batch;
     }
 
     /**
-	 * Get export batch.
+     * Get export batch.
      *
      * @since 2.7.3
      * @access public
-	 */
-	public function get_export_batch() {
+     */
+    public function get_export_batch() {
         return $this->export_batch;
     }
 
     /**
-	 * Set export settings.
-	 *
+     * Set export settings.
+     *
      * @since 2.7.3
      * @access public
      *
-	 * @param  object $export_settings Export arguments.
-	 */
-	public function set_export_settings( $export_settings ) {
+     * @param  object $export_settings Export arguments.
+     */
+    public function set_export_settings( $export_settings ) {
         $this->export_settings = $export_settings;
     }
 
     /**
-	 * Get export settings.
+     * Get export settings.
      *
      * @since 2.7.3
      * @access public
-	 */
-	public function get_export_settings() {
+     */
+    public function get_export_settings() {
         return $this->export_settings;
     }
 
     /**
-	 * Set filename to export to.
-	 *
-     * @since 2.7.3
-     * @access public
-     *
-	 * @param  string $filename Filename to export to.
-	 */
-	public function set_filename( $filename ) {
-		$this->filename = $filename;
-	}
-
-	/**
-	 * Generate and return a filename.
+     * Set filename to export to.
      *
      * @since 2.7.3
      * @access public
-	 *
-	 * @return string
-	 */
-	public function get_filename() {
-		return $this->filename;
-	}
+     *
+     * @param  string $filename Filename to export to.
+     */
+    public function set_filename( $filename ) {
+        $this->filename = $filename;
+    }
 
     /**
-	 * Set form data.
+     * Generate and return a filename.
+     *
+     * @since 2.7.3
+     * @access public
+     *
+     * @return string
+     */
+    public function get_filename() {
+        return $this->filename;
+    }
+
+    /**
+     * Set form data.
      *
      * @since 2.7.3
      * @access public
      *
      * @param string $post The form data.
-	 */
-	public function set_form_data( $post ) {
+     */
+    public function set_form_data( $post ) {
         parse_str( $post, $form_data );
-		$this->form_data = $form_data;
-	}
+        $this->form_data = $form_data;
+    }
 
     /**
-	 * Set form data.
+     * Set form data.
      *
      * @since 2.7.3
      * @access public
-	 */
-	public function get_form_data() {
-		return $this->form_data;
-	}
+     */
+    public function get_form_data() {
+        return $this->form_data;
+    }
 
     /**
      * Get the delimiter.
@@ -945,20 +958,20 @@ abstract class Abstract_Exporter {
     }
 
     /**
-	 * Serve the file and remove once sent to the client.
-	 *
-	 * @since 3.1.0
-	 */
-	public function export() {
+     * Serve the file and remove once sent to the client.
+     *
+     * @since 3.1.0
+     */
+    public function export() {
         // Check if we are printing file headers.
         if ( apply_filters( 'woo_ce_export_print_to_browser', true ) ) {
             $this->send_headers();
         }
-		$this->finalize_export();
-		$this->send_content();
+        $this->finalize_export();
+        $this->send_content();
         $this->delete_temp_file();
-		die();
-	}
+        die();
+    }
 
     /**
      * Get file path.
@@ -976,28 +989,28 @@ abstract class Abstract_Exporter {
             $filename = $this->filename;
         }
 
-		if ( ! is_dir( self::EXPORT_DIR ) ) {
+        if ( ! is_dir( self::EXPORT_DIR ) ) {
             if ( ! mkdir( self::EXPORT_DIR, 0700 ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
                 throw new Exception( esc_html__( 'Could not create export directory.', 'woocommerce-exporter' ) );
             } else {
-            	$files_to_create = array(
-					'.htaccess' => 'deny from all',
-					'index.php' => '<?php // Silence is golden',
-				);
-		        foreach ( $files_to_create as $file => $file_content ) {
-		        	if ( ! file_exists( self::EXPORT_DIR . '/' . $file ) ) {
-			            $fh = @fopen( self::EXPORT_DIR . '/' . $file, 'w' );
-			            if ( is_resource( $fh ) ) {
-			                fwrite( $fh, $file_content );
-			                fclose( $fh );
-			            }
-			        }
-		        }
+                $files_to_create = array(
+                    '.htaccess' => 'deny from all',
+                    'index.php' => '<?php // Silence is golden',
+                );
+                foreach ( $files_to_create as $file => $file_content ) {
+                    if ( ! file_exists( self::EXPORT_DIR . '/' . $file ) ) {
+                        $fh = @fopen( self::EXPORT_DIR . '/' . $file, 'w' );
+                        if ( is_resource( $fh ) ) {
+                            fwrite( $fh, $file_content );
+                            fclose( $fh );
+                        }
+                    }
+                }
             }
         }
         return self::EXPORT_DIR . '/' . $filename;
         // phpcs:enable WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions
-	}
+    }
 
     /**
      * Run the class

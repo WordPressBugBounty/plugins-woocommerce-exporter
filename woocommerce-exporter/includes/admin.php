@@ -2087,14 +2087,40 @@ function woo_cd_tab_template( $tab = '' ) {
 			break;
 
 	}
+
+	// Security: Complete Secure Implementation for LFI prevention
+	// Reference: https://github.com/Rymera-Web-Co/woocommerce-store-exporter-deluxe/issues/196
 	if ( $tab ) {
-		if ( file_exists( WOO_CE_PATH . 'templates/admin/tabs-' . $tab . '.php' ) ) {
-			include_once WOO_CE_PATH . 'templates/admin/tabs-' . $tab . '.php';
+		// Whitelist of allowed tabs
+		$allowed_tabs = array(
+			'overview',
+			'export',
+			'scheduled_export',
+			'export_template',
+			'archive',
+			'settings',
+			'tools',
+			'debug',
+			'fields',
+		);
+
+		// Validate tab is in whitelist
+		if ( ! in_array( $tab, $allowed_tabs, true ) ) {
+			$tab = 'overview'; // Default to safe value
+		}
+
+		// Construct safe file path
+		$file_path = WOO_CE_PATH . 'templates/admin/tabs-' . $tab . '.php';
+
+		// Verify file exists in the intended directory
+		if ( file_exists( $file_path ) && strpos( realpath( $file_path ), realpath( WOO_CE_PATH . 'templates/admin/' ) ) === 0 ) {
+			include_once $file_path;
 		} else {
+			// Error handling
 			$message = sprintf( __( 'We couldn\'t load the export template file <code>%1$s</code> within <code>%2$s</code>, this file should be present.', 'woocommerce-exporter' ), 'tabs-' . esc_attr( $tab ) . '.php', WOO_CE_PATH . 'templates/admin/...' );
 			woo_cd_admin_notice_html( $message, 'error' );
 			ob_start();
-            ?>
+			?>
 <p><?php _e( 'You can see this error for one of a few common reasons', 'woocommerce-exporter' ); ?>:</p>
 <ul class="ul-disc">
 	<li><?php _e( 'WordPress was unable to create this file when the Plugin was installed or updated', 'woocommerce-exporter' ); ?></li>

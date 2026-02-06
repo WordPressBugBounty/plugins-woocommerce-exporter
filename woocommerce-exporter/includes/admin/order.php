@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable
 /**
  * HTML template for Filter Orders by Order Date widget on Store Exporter screen.
  *
@@ -7,13 +8,30 @@
  */
 function woo_ce_orders_filter_by_date() {
 
-    $tomorrow                    = date( 'l', strtotime( 'tomorrow', current_time( 'timestamp' ) ) );
-    $today                       = date( 'l', current_time( 'timestamp' ) );
-    $yesterday                   = date( 'l', strtotime( '-1 days', current_time( 'timestamp' ) ) );
-    $current_month               = date( 'F', current_time( 'timestamp' ) );
-    $last_month                  = date( 'F', mktime( 0, 0, 0, date( 'n', current_time( 'timestamp' ) ) - 1, 1, date( 'Y', current_time( 'timestamp' ) ) ) );
-    $current_year                = date( 'Y', current_time( 'timestamp' ) );
-    $last_year                   = date( 'Y', strtotime( '-1 year', current_time( 'timestamp' ) ) );
+    // Get current time in site's timezone.
+    // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- We need site timezone, not UTC.
+    $current_timestamp = current_time( 'timestamp' );
+
+    // Use WordPress timezone-aware date functions.
+    if ( function_exists( 'wp_date' ) ) {
+        // WordPress 5.3+ wp_date() respects site timezone.
+        $tomorrow      = wp_date( 'l', strtotime( 'tomorrow', $current_timestamp ) );
+        $today         = wp_date( 'l', $current_timestamp );
+        $yesterday     = wp_date( 'l', strtotime( '-1 days', $current_timestamp ) );
+        $current_month = wp_date( 'F', $current_timestamp );
+        $last_month    = wp_date( 'F', mktime( 0, 0, 0, wp_date( 'n', $current_timestamp ) - 1, 1, wp_date( 'Y', $current_timestamp ) ) );
+        $current_year  = wp_date( 'Y', $current_timestamp );
+        $last_year     = wp_date( 'Y', strtotime( '-1 year', $current_timestamp ) );
+    } else {
+        // Fallback for older WordPress versions.
+        $tomorrow      = date( 'l', strtotime( 'tomorrow', $current_timestamp ) );
+        $today         = date( 'l', $current_timestamp );
+        $yesterday     = date( 'l', strtotime( '-1 days', $current_timestamp ) );
+        $current_month = date( 'F', $current_timestamp );
+        $last_month    = date( 'F', mktime( 0, 0, 0, date( 'n', $current_timestamp ) - 1, 1, date( 'Y', $current_timestamp ) ) );
+        $current_year  = date( 'Y', $current_timestamp );
+        $last_year     = date( 'Y', strtotime( '-1 year', $current_timestamp ) );
+    }
     $order_dates_variable        = woo_ce_get_option( 'order_dates_filter_variable', '' );
     $order_dates_variable_length = woo_ce_get_option( 'order_dates_filter_variable_length', '' );
     $date_format                 = woo_ce_get_option( 'date_format', 'd/m/Y' );

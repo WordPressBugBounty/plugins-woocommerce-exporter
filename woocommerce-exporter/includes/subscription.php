@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable
 if ( is_admin() ) {
 
     /* Start of: WordPress Administration */
@@ -993,7 +994,7 @@ function woo_ce_get_subscriptions( $args = array(), $export_settings = null ) {
             'offset'                 => $offset,
             'orderby'                => $orderby,
             'order'                  => $order,
-            'fields'                 => 'ids',
+            'return'                 => 'ids',
         );
 
         // Filter Subscriptions by Subscription Status.
@@ -1020,44 +1021,8 @@ function woo_ce_get_subscriptions( $args = array(), $export_settings = null ) {
             woo_ce_error_log( sprintf( 'Debug: %s', '$args: ' . print_r( $args, true ) ) );
         }
 
-        if ( function_exists( 'wcs_get_subscriptions' ) ) {
-            // Let's add some special sauce to override wcs_get_subscriptions() and only return the Post IDs.
-            add_filter( 'woocommerce_get_subscriptions_query_args', 'woo_ce_woocommerce_get_subscriptions_query_args' );
-            add_filter( 'woocommerce_got_subscriptions', 'woo_ce_woocommerce_got_subscriptions' );
-            $subscription_ids = wcs_get_subscriptions( $args );
-
-            if ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
-                woo_ce_error_log( sprintf( 'Debug: %s', 'subscription_ids( $args ): ' . ( time() - $export->start_time ) ) );
-                woo_ce_error_log( sprintf( 'Debug: %s', '$subscription_ids: ' . print_r( $subscription_ids, true ) ) );
-            }
-
-            // Filter Subscription dates - Avoids being overwritten by wcs_get_subscriptions above.
-            if ( ! empty( $subscription_dates_from ) && ! empty( $subscription_dates_to ) ) {
-                $args['date_query'] = array(
-                    array(
-                        'column'    => apply_filters( 'woo_ce_get_subscriptions_filter_subscription_dates_column', 'post_date' ),
-                        'before'    => $subscription_dates_to,
-                        'after'     => $subscription_dates_from,
-                        'inclusive' => true,
-                    ),
-                );
-            }
-
-            // Check if we are filtering Subscriptions by Last Export.
-            if ( 'last_export' === $subscription_dates_filter ) {
-                $args['meta_query'][] = array(
-                    'relation' => 'AND',
-                    'key'      => '_woo_cd_exported',
-                    'value'    => 1,
-                    'compare'  => 'NOT EXISTS',
-                );
-            }
-
-            if ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
-                woo_ce_error_log( sprintf( 'Debug: %s', '$args (loaded from a Transient): ' . ( time() - $export->start_time ) ) );
-                woo_ce_error_log( sprintf( 'Debug: %s', '$args: ' . print_r( $args, true ) ) );
-            }
-        } elseif ( version_compare( $wcs_version, '1.5.26', '<' ) ) {
+        // Handle legacy WooCommerce Subscriptions versions < 1.5.26.
+        if ( version_compare( $wcs_version, '1.5.26', '<' ) ) {
             $subscription_ids = WC_Subscriptions::get_subscriptions( $args );
             if ( ! empty( $subscription_ids ) ) {
                 $subscription_keys = array();
@@ -1066,40 +1031,58 @@ function woo_ce_get_subscriptions( $args = array(), $export_settings = null ) {
                 }
                 return $subscription_keys;
             }
+            return array();
         }
 
+        // Modern WooCommerce Subscriptions (1.5.26+).
+        if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+            if ( WOO_CE_LOGGING ) {
+                woo_ce_error_log( sprintf( 'Warning: %s', 'wcs_get_subscriptions() function not found: ' . ( time() - $export->start_time ) ) );
+            }
+            return array();
+        }
+
+        // Add date filters before calling wcs_get_subscriptions.
+        if ( ! empty( $subscription_dates_from ) && ! empty( $subscription_dates_to ) ) {
+            $args['date_query'] = array(
+                array(
+                    'column'    => apply_filters( 'woo_ce_get_subscriptions_filter_subscription_dates_column', 'post_date' ),
+                    'before'    => $subscription_dates_to,
+                    'after'     => $subscription_dates_from,
+                    'inclusive' => true,
+                ),
+            );
+        }
+
+        // Check if we are filtering Subscriptions by Last Export.
+        if ( 'last_export' === $subscription_dates_filter ) {
+            $args['meta_query'][] = array(
+                'key'     => '_woo_cd_exported',
+                'compare' => 'NOT EXISTS',
+            );
+        }
+
+        // Debug logging before query.
         if ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
-            woo_ce_error_log( sprintf( 'Debug: %s', 'subscription_ids( $args ): ' . ( time() - $export->start_time ) ) );
-            woo_ce_error_log( sprintf( 'Debug: %s', '$subscription_ids: ' . print_r( $subscription_ids, true ) ) );
+            woo_ce_error_log( sprintf( 'Debug: %s', 'Before wcs_get_subscriptions(): ' . ( time() - $export->start_time ) ) );
+            woo_ce_error_log( sprintf( 'Debug: %s', '$args: ' . print_r( $args, true ) ) );
         }
 
-        if ( ! empty( $args ) ) {
-            $subscription_ids = array();
-            if ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
-                woo_ce_error_log( sprintf( 'Debug: %s', 'before WP_Query( $args ): ' . ( time() - $export->start_time ) ) );
-                woo_ce_error_log( sprintf( 'Debug: %s', '$args: ' . print_r( $args, true ) ) );
-            }
-            $subscriptions = wcs_get_subscriptions( $args );
-            if ( ! empty( $subscriptions ) ) {
-                if ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
-                    woo_ce_error_log( sprintf( 'Debug: %s', 'after WP_Query( $args ): ' . ( time() - $export->start_time ) ) );
-                    woo_ce_error_log( sprintf( 'Debug: %s', '$subscriptions->posts: ' . print_r( $subscriptions->posts, true ) ) );
-                }
-                foreach ( $subscriptions as $subscription_id ) {
-                    $subscription_ids[] = $subscription_id;
-                }
-            } elseif ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
-                $message = 'No Posts were returned by WP_Query: ' . ( time() - $export->start_time );
-                woo_ce_error_log( sprintf( 'Debug: %s', $message ) );
-            }
-            unset( $subscriptions );
-        } elseif ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
-            $message = 'No $args detected, skipping WP_Query for Subscriptions: ' . ( time() - $export->start_time );
-            woo_ce_error_log( sprintf( 'Debug: %s', $message ) );
-        }
+        // Add filter to save query args for debugging.
+        add_filter( 'woocommerce_get_subscriptions_query_args', 'woo_ce_woocommerce_get_subscriptions_query_args' );
 
-        remove_filter( 'woocommerce_got_subscriptions', 'woo_ce_woocommerce_got_subscriptions' );
+        // Get subscription IDs - wcs_get_subscriptions() with 'return' => 'ids' returns array of IDs.
+        $subscription_ids = wcs_get_subscriptions( $args );
+
+        // Remove filter immediately after use.
         remove_filter( 'woocommerce_get_subscriptions_query_args', 'woo_ce_woocommerce_get_subscriptions_query_args' );
+
+        // Debug logging after query.
+        if ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_subscriptions', false ) ) {
+            woo_ce_error_log( sprintf( 'Debug: %s', 'After wcs_get_subscriptions(): ' . ( time() - $export->start_time ) ) );
+            woo_ce_error_log( sprintf( 'Debug: %s', '$subscription_ids: ' . print_r( $subscription_ids, true ) ) );
+            woo_ce_error_log( sprintf( 'Debug: %s', 'Count: ' . count( $subscription_ids ) ) );
+        }
         $subscriptions = array();
 
         if ( ! empty( $subscription_ids ) ) {
@@ -1168,15 +1151,6 @@ function woo_ce_woocommerce_get_subscriptions_query_args( $args ) {
 
     set_transient( WOO_CE_PREFIX . '_subscription_wcs_get_subscriptions', $args, HOUR_IN_SECONDS );
     return $args;
-}
-
-// Override wcs_get_subscriptions() to only return the Subscription Post ID
-function woo_ce_woocommerce_got_subscriptions( $subscriptions ) {
-
-    if ( ! empty( $subscriptions ) ) {
-        $subscriptions = array_keys( $subscriptions );
-    }
-    return $subscriptions;
 }
 
 if ( ! function_exists( 'woo_ce_export_dataset_override_subscription' ) ) {

@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable
 // Exit if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
@@ -4330,7 +4331,7 @@ function woo_ce_get_order_items( $order, $order_items_types = array( 'line_item'
                 $order_item_meta = $order_item->get_meta_data();
                 if ( ! empty( $order_item_meta ) ) {
                     foreach ( $order_item_meta as $meta ) {
-                        $order_item_data = apply_filters( 'woo_ce_order_item_custom_meta', $order_item_data, $meta->value, $meta->key );
+                        $order_item_data = apply_filters( 'woo_ce_order_item_custom_meta', $order_item_data, $meta->key, $meta->value );
                     }
                 }
 

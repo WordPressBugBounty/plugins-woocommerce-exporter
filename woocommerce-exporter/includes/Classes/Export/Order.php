@@ -18,6 +18,7 @@ use VisserLabs\WSE\Helpers\Export as Export_Helper;
 use WC_Order_Query;
 use WC_Tax;
 use WC_Product;
+use WC_Order_Refund;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -1622,7 +1623,12 @@ class Order extends Abstract_Class {
             in_array( 'refund', $export->args['order_items_types'], true ) &&
             $max_order_items > 0 && $i <= $max_order_items
         ) {
-            $refunds = $order->get_refunds();
+            // Skip refund processing for OrderRefund objects (they don't have sub-refunds).
+            if ( $order instanceof WC_Order_Refund || is_a( $order, 'Automattic\WooCommerce\Admin\Overrides\OrderRefund' ) ) {
+                $refunds = array();
+            } else {
+                $refunds = $order->get_refunds();
+            }
             if ( ! empty( $refunds ) ) {
                 foreach ( $refunds as $refund ) {
                     $data        = array();
@@ -2022,25 +2028,25 @@ class Order extends Abstract_Class {
                     $data[ $key ] = wc_get_order_status_name( $order_data['status'] );
                     break;
                 case 'order_currency':
-                    $data[ $key ] = $order_data['currency'];
+                    $data[ $key ] = isset( $order_data['currency'] ) ? $order_data['currency'] : '';
                     break;
                 case 'payment_gateway_id':
-                    $data[ $key ] = $order_data['payment_method'];
+                    $data[ $key ] = isset( $order_data['payment_method'] ) ? $order_data['payment_method'] : '';
                     break;
                 case 'payment_gateway':
-                    $data[ $key ] = $order_data['payment_method_title'];
+                    $data[ $key ] = isset( $order_data['payment_method_title'] ) ? $order_data['payment_method_title'] : '';
                     break;
                 case 'order_key':
-                    $data[ $key ] = $order_data['order_key'];
+                    $data[ $key ] = isset( $order_data['order_key'] ) ? $order_data['order_key'] : '';
                     break;
                 case 'transaction_id':
-                    $data[ $key ] = $order_data['transaction_id'];
+                    $data[ $key ] = isset( $order_data['transaction_id'] ) ? $order_data['transaction_id'] : '';
                     break;
                 case 'created_via':
-                    $data[ $key ] = $order_data['created_via'];
+                    $data[ $key ] = isset( $order_data['created_via'] ) ? $order_data['created_via'] : '';
                     break;
                 case 'cart_hash':
-                    $data[ $key ] = $order_data['cart_hash'];
+                    $data[ $key ] = isset( $order_data['cart_hash'] ) ? $order_data['cart_hash'] : '';
                     break;
                 case 'purchase_date':
                     $data[ $key ] = Formatting::format_date( $order_data['date_created'] );
@@ -2055,16 +2061,18 @@ class Order extends Abstract_Class {
                     $data[ $key ] = Formatting::format_date( $order_data['date_created'], get_option( 'time_format' ) );
                     break;
                 case 'ip_address':
-                    $data[ $key ] = $order_data['customer_ip_address'];
+                    $data[ $key ] = isset( $order_data['customer_ip_address'] ) ? $order_data['customer_ip_address'] : '';
                     break;
                 case 'browser_agent':
-                    $data[ $key ] = $order_data['customer_user_agent'];
+                    $data[ $key ] = isset( $order_data['customer_user_agent'] ) ? $order_data['customer_user_agent'] : '';
                     break;
                 case 'total_quantity':
                     $data[ $key ] = $order->get_item_count();
                     break;
                 case 'total_order_items':
-                    $data[ $key ] = $order->get_item_count( 'line_items' );
+                    $total_items  = 0;
+                    $total_items += count( $order->get_items( array( 'line_item', 'fee', 'tax', 'shipping', 'coupon' ) ) );
+                    $data[ $key ] = $total_items;
                     break;
                 case 'has_downloads':
                     $data[ $key ] = $order->has_downloadable_item() ? 'Yes' : 'No';
@@ -2073,115 +2081,131 @@ class Order extends Abstract_Class {
                     $data[ $key ] = $order->is_download_permitted() ? 'Yes' : 'No';
                     break;
                 case 'customer_message':
-                    $data[ $key ] = $order_data['customer_note'];
+                    $data[ $key ] = isset( $order_data['customer_note'] ) ? $order_data['customer_note'] : '';
                     break;
 
                 // Shipping fields.
                 case 'billing_first_name':
-                    $data[ $key ] = $order_data['billing']['first_name'];
+                    $data[ $key ] = isset( $order_data['billing']['first_name'] ) ? $order_data['billing']['first_name'] : '';
                     break;
                 case 'billing_last_name':
-                    $data[ $key ] = $order_data['billing']['last_name'];
+                    $data[ $key ] = isset( $order_data['billing']['last_name'] ) ? $order_data['billing']['last_name'] : '';
                     break;
                 case 'billing_full_name':
-                    $data[ $key ] = $order_data['billing']['first_name'] . ' ' . $order_data['billing']['last_name'];
+                    $first_name   = isset( $order_data['billing']['first_name'] ) ? $order_data['billing']['first_name'] : '';
+                    $last_name    = isset( $order_data['billing']['last_name'] ) ? $order_data['billing']['last_name'] : '';
+                    $data[ $key ] = trim( $first_name . ' ' . $last_name );
                     break;
                 case 'billing_company':
-                    $data[ $key ] = $order_data['billing']['company'];
+                    $data[ $key ] = isset( $order_data['billing']['company'] ) ? $order_data['billing']['company'] : '';
                     break;
                 case 'billing_address':
-                    $data[ $key ] = $order_data['billing']['address_1'] . ' ' . $order_data['billing']['address_2'];
+                    $address_1    = isset( $order_data['billing']['address_1'] ) ? $order_data['billing']['address_1'] : '';
+                    $address_2    = isset( $order_data['billing']['address_2'] ) ? $order_data['billing']['address_2'] : '';
+                    $data[ $key ] = trim( $address_1 . ' ' . $address_2 );
                     break;
                 case 'billing_address_1':
-                    $data[ $key ] = $order_data['billing']['address_1'];
+                    $data[ $key ] = isset( $order_data['billing']['address_1'] ) ? $order_data['billing']['address_1'] : '';
                     break;
                 case 'billing_address_2':
-                    $data[ $key ] = $order_data['billing']['address_2'];
+                    $data[ $key ] = isset( $order_data['billing']['address_2'] ) ? $order_data['billing']['address_2'] : '';
                     break;
                 case 'billing_city':
-                    $data[ $key ] = $order_data['billing']['city'];
+                    $data[ $key ] = isset( $order_data['billing']['city'] ) ? $order_data['billing']['city'] : '';
                     break;
                 case 'billing_postcode':
-                    $data[ $key ] = $order_data['billing']['postcode'];
+                    $data[ $key ] = isset( $order_data['billing']['postcode'] ) ? $order_data['billing']['postcode'] : '';
                     break;
                 case 'billing_state':
-                    $data[ $key ] = $order_data['billing']['state'];
+                    $data[ $key ] = isset( $order_data['billing']['state'] ) ? $order_data['billing']['state'] : '';
                     break;
                 case 'billing_country':
-                    $data[ $key ] = $order_data['billing']['country'];
+                    $data[ $key ] = isset( $order_data['billing']['country'] ) ? $order_data['billing']['country'] : '';
                     break;
                 case 'billing_email':
-                    $data[ $key ] = $order_data['billing']['email'];
+                    $data[ $key ] = isset( $order_data['billing']['email'] ) ? $order_data['billing']['email'] : '';
                     break;
                 case 'billing_phone':
-                    $data[ $key ] = $order_data['billing']['phone'];
+                    $data[ $key ] = isset( $order_data['billing']['phone'] ) ? $order_data['billing']['phone'] : '';
                     break;
                 case 'billing_state_full':
-                    $data[ $key ] = Formatting::state_name( $order_data['billing']['country'], $order_data['billing']['state'] );
+                    $country      = isset( $order_data['billing']['country'] ) ? $order_data['billing']['country'] : '';
+                    $state        = isset( $order_data['billing']['state'] ) ? $order_data['billing']['state'] : '';
+                    $data[ $key ] = $country && $state ? Formatting::state_name( $country, $state ) : '';
                     break;
                 case 'billing_country_full':
-                    $data[ $key ] = Formatting::country_name( $order_data['billing']['country'] );
+                    $country      = isset( $order_data['billing']['country'] ) ? $order_data['billing']['country'] : '';
+                    $data[ $key ] = $country ? Formatting::country_name( $country ) : '';
                     break;
 
                 // Shipping fields.
                 case 'shipping_first_name':
-                    $data[ $key ] = $order_data['shipping']['first_name'];
+                    $data[ $key ] = isset( $order_data['shipping']['first_name'] ) ? $order_data['shipping']['first_name'] : '';
                     break;
                 case 'shipping_last_name':
-                    $data[ $key ] = $order_data['shipping']['last_name'];
+                    $data[ $key ] = isset( $order_data['shipping']['last_name'] ) ? $order_data['shipping']['last_name'] : '';
                     break;
                 case 'shipping_full_name':
-                    $data[ $key ] = $order_data['shipping']['first_name'] . ' ' . $order_data['shipping']['last_name'];
+                    $first_name   = isset( $order_data['shipping']['first_name'] ) ? $order_data['shipping']['first_name'] : '';
+                    $last_name    = isset( $order_data['shipping']['last_name'] ) ? $order_data['shipping']['last_name'] : '';
+                    $data[ $key ] = trim( $first_name . ' ' . $last_name );
                     break;
                 case 'shipping_company':
-                    $data[ $key ] = $order_data['shipping']['company'];
+                    $data[ $key ] = isset( $order_data['shipping']['company'] ) ? $order_data['shipping']['company'] : '';
                     break;
                 case 'shipping_address':
-                    $data[ $key ] = $order_data['shipping']['address_1'] . ' ' . $order_data['shipping']['address_2'];
+                    $address_1    = isset( $order_data['shipping']['address_1'] ) ? $order_data['shipping']['address_1'] : '';
+                    $address_2    = isset( $order_data['shipping']['address_2'] ) ? $order_data['shipping']['address_2'] : '';
+                    $data[ $key ] = trim( $address_1 . ' ' . $address_2 );
                     break;
                 case 'shipping_address_1':
-                    $data[ $key ] = $order_data['shipping']['address_1'];
+                    $data[ $key ] = isset( $order_data['shipping']['address_1'] ) ? $order_data['shipping']['address_1'] : '';
                     break;
                 case 'shipping_address_2':
-                    $data[ $key ] = $order_data['shipping']['address_2'];
+                    $data[ $key ] = isset( $order_data['shipping']['address_2'] ) ? $order_data['shipping']['address_2'] : '';
                     break;
                 case 'shipping_city':
-                    $data[ $key ] = $order_data['shipping']['city'];
+                    $data[ $key ] = isset( $order_data['shipping']['city'] ) ? $order_data['shipping']['city'] : '';
                     break;
                 case 'shipping_postcode':
-                    $data[ $key ] = $order_data['shipping']['postcode'];
+                    $data[ $key ] = isset( $order_data['shipping']['postcode'] ) ? $order_data['shipping']['postcode'] : '';
                     break;
                 case 'shipping_state':
-                    $data[ $key ] = $order_data['shipping']['state'];
+                    $data[ $key ] = isset( $order_data['shipping']['state'] ) ? $order_data['shipping']['state'] : '';
                     break;
                 case 'shipping_country':
-                    $data[ $key ] = $order_data['shipping']['country'];
+                    $data[ $key ] = isset( $order_data['shipping']['country'] ) ? $order_data['shipping']['country'] : '';
                     break;
                 case 'shipping_phone':
-                    $data[ $key ] = $order_data['shipping']['phone'];
+                    $data[ $key ] = isset( $order_data['shipping']['phone'] ) ? $order_data['shipping']['phone'] : '';
                     break;
                 case 'shipping_state_full':
-                    $data[ $key ] = Formatting::state_name( $order_data['shipping']['country'], $order_data['shipping']['state'] );
+                    $country      = isset( $order_data['shipping']['country'] ) ? $order_data['shipping']['country'] : '';
+                    $state        = isset( $order_data['shipping']['state'] ) ? $order_data['shipping']['state'] : '';
+                    $data[ $key ] = $country && $state ? Formatting::state_name( $country, $state ) : '';
                     break;
                 case 'shipping_country_full':
-                    $data[ $key ] = Formatting::country_name( $order_data['shipping']['country'] );
+                    $country      = isset( $order_data['shipping']['country'] ) ? $order_data['shipping']['country'] : '';
+                    $data[ $key ] = $country ? Formatting::country_name( $country ) : '';
                     break;
                 case 'shipping_cost':
-                    $data[ $key ] = Formatting::format_price( $order_data['shipping_total'] );
+                    $data[ $key ] = isset( $order_data['shipping_total'] ) ? Formatting::format_price( $order_data['shipping_total'] ) : '';
                     break;
                 case 'order_shipping_tax':
-                    $data[ $key ] = Formatting::format_price( $order_data['shipping_tax'] );
+                    $data[ $key ] = isset( $order_data['shipping_tax'] ) ? Formatting::format_price( $order_data['shipping_tax'] ) : '';
                     break;
                 case 'shipping_excl_tax':
-                    $data[ $key ] = Formatting::format_price( $order_data['shipping_total'] );
+                    $data[ $key ] = isset( $order_data['shipping_total'] ) ? Formatting::format_price( $order_data['shipping_total'] ) : '';
                     break;
                 case 'shipping_incl_tax':
-                    $data[ $key ] = Formatting::format_price( (float) $order_data['shipping_total'] + (float) $order_data['shipping_tax'] );
+                    $shipping_total = isset( $order_data['shipping_total'] ) ? (float) $order_data['shipping_total'] : 0;
+                    $shipping_tax   = isset( $order_data['shipping_tax'] ) ? (float) $order_data['shipping_tax'] : 0;
+                    $data[ $key ]   = Formatting::format_price( $shipping_total + $shipping_tax );
                     break;
 
                 // User fields.
                 case 'user_id':
-                    $data[ $key ] = $order_data['customer_id'];
+                    $data[ $key ] = isset( $order_data['customer_id'] ) ? $order_data['customer_id'] : '';
                     break;
 
                 // Prices.
@@ -2190,8 +2214,15 @@ class Order extends Abstract_Class {
                      * Order total deducted with refund amount.
                      * Why not `get_total()`? Because `get_total()` includes the refunded amount.
                      * This function is used to get the total amount of the order, minus the refunded amount.
+                     * For refund objects, we use get_amount() instead since get_remaining_refund_amount() doesn't exist.
                      */
-                    $data[ $key ] = Formatting::format_price( $order->get_remaining_refund_amount() );
+                    if ( $order instanceof WC_Order_Refund || is_a( $order, 'Automattic\WooCommerce\Admin\Overrides\OrderRefund' ) ) {
+                        // For refunds, use the refund amount (negative value).
+                        $data[ $key ] = Formatting::format_price( $order->get_amount() );
+                    } else {
+                        // For regular orders, use remaining amount after refunds.
+                        $data[ $key ] = Formatting::format_price( $order->get_remaining_refund_amount() );
+                    }
                     break;
                 case 'purchase_subtotal':
                     /**
@@ -2199,20 +2230,45 @@ class Order extends Abstract_Class {
                      * It is the sum of the line items, minus the sum of the line item discounts.
                      * $total_refunded_subtotal stands for the refund subtotal amount, without shipping and refund tax.
                      */
-                    $total_refunded_subtotal   = (float) $order->get_total_refunded() - ( (float) $order->get_total_shipping_refunded() + (float) $order->get_total_tax_refunded() );
-                    $data['purchase_subtotal'] = Formatting::format_price( (float) $order->get_subtotal() - (float) $order_data['discount_total'] - (float) $total_refunded_subtotal );
+                    if ( $order instanceof WC_Order_Refund || is_a( $order, 'Automattic\WooCommerce\Admin\Overrides\OrderRefund' ) ) {
+                        // For refunds, use the refund amount (negative value).
+                        $data['purchase_subtotal'] = Formatting::format_price( $order->get_amount() );
+                    } else {
+                        $total_refunded_subtotal   = (float) $order->get_total_refunded() - ( (float) $order->get_total_shipping_refunded() + (float) $order->get_total_tax_refunded() );
+                        $subtotal                  = (float) $order->get_subtotal();
+                        $discount_total            = isset( $order_data['discount_total'] ) ? (float) $order_data['discount_total'] : 0;
+                        $data['purchase_subtotal'] = Formatting::format_price( $subtotal - $discount_total - (float) $total_refunded_subtotal );
+                    }
                     break;
                 case 'purchase_total_tax':
-                    $data['purchase_total_tax'] = Formatting::format_price( (float) $order_data['total_tax'] - (float) $order->get_total_tax_refunded() );
+                    if ( $order instanceof WC_Order_Refund || is_a( $order, 'Automattic\WooCommerce\Admin\Overrides\OrderRefund' ) ) {
+                        // For refunds, use the refund tax amount.
+                        $data['purchase_total_tax'] = Formatting::format_price( $order->get_total_tax() );
+                    } else {
+                        $total_tax                  = isset( $order_data['total_tax'] ) ? (float) $order_data['total_tax'] : 0;
+                        $tax_refunded               = (float) $order->get_total_tax_refunded();
+                        $data['purchase_total_tax'] = Formatting::format_price( $total_tax - $tax_refunded );
+                    }
                     break;
                 case 'order_sales_tax':
-                    $data['order_sales_tax'] = Formatting::format_price( $order_data['cart_tax'] );
+                    $data['order_sales_tax'] = isset( $order_data['cart_tax'] ) ? Formatting::format_price( $order_data['cart_tax'] ) : '';
                     break;
                 case 'order_subtotal_excl_tax':
-                    $data['order_subtotal_excl_tax'] = Formatting::format_price( (float) $order->get_remaining_refund_amount() - (float) $order_data['total_tax'] - (float) $order->get_total_tax_refunded() );
+                    if ( $order instanceof WC_Order_Refund || is_a( $order, 'Automattic\WooCommerce\Admin\Overrides\OrderRefund' ) ) {
+                        // For refunds, get the refund amount excluding tax.
+                        $refund_amount                   = (float) $order->get_amount();
+                        $refund_tax                      = (float) $order->get_total_tax();
+                        $data['order_subtotal_excl_tax'] = Formatting::format_price( $refund_amount - $refund_tax );
+                    } else {
+                        // For regular orders, use remaining amount after refunds minus taxes.
+                        $remaining_refund_amount         = (float) $order->get_remaining_refund_amount();
+                        $total_tax                       = isset( $order_data['total_tax'] ) ? (float) $order_data['total_tax'] : 0;
+                        $tax_refunded                    = (float) $order->get_total_tax_refunded();
+                        $data['order_subtotal_excl_tax'] = Formatting::format_price( $remaining_refund_amount - $total_tax - $tax_refunded );
+                    }
                     break;
                 case 'order_discount':
-                    $data['order_discount'] = Formatting::format_price( $order_data['discount_total'] );
+                    $data['order_discount'] = isset( $order_data['discount_total'] ) ? Formatting::format_price( $order_data['discount_total'] ) : '';
                     break;
             }
         }
@@ -2436,21 +2492,31 @@ class Order extends Abstract_Class {
     private function _get_order_refund_data( &$data, $fields, $order, $category_separator ) {
         // Refunds.
         if ( isset( $fields['refund_total'] ) || isset( $fields['refund_tax'] ) || isset( $fields['refund_date'] ) ) {
-            $refunds = $order->get_refunds();
-            if ( ! empty( $refunds ) ) {
+            // Skip refund processing for OrderRefund objects (they don't have sub-refunds).
+            if ( $order instanceof WC_Order_Refund || is_a( $order, 'Automattic\WooCommerce\Admin\Overrides\OrderRefund' ) ) {
+                // For refund objects, use their own methods.
                 if ( isset( $fields['refund_total'] ) ) {
-                    $data['refund_total'] = $order->get_total_refunded();
+                    $data['refund_total'] = $order->get_amount();
                 }
                 if ( isset( $fields['refund_tax'] ) ) {
-                    $data['refund_tax'] = $order->get_total_tax_refunded();
+                    $data['refund_tax'] = $order->get_total_tax();
                 }
-
-                if ( isset( $fields['refund_date'] ) ) {
-                    $refunds_date = array();
-                    foreach ( $refunds as $refund ) {
-                        $refunds_date[] = Formatting::format_date( $refund->get_date_created() );
+            } else {
+                $refunds = $order->get_refunds();
+                if ( ! empty( $refunds ) ) {
+                    if ( isset( $fields['refund_total'] ) ) {
+                        $data['refund_total'] = $order->get_total_refunded();
                     }
-                    $data['refund_date'] = ( ! empty( $refunds_date ) ? implode( $category_separator, $refunds_date ) : '' );
+                    if ( isset( $fields['refund_tax'] ) ) {
+                        $data['refund_tax'] = $order->get_total_tax_refunded();
+                    }
+                    if ( isset( $fields['refund_date'] ) ) {
+                        $refunds_date = array();
+                        foreach ( $refunds as $refund ) {
+                            $refunds_date[] = Formatting::format_date( $refund->get_date_created() );
+                        }
+                        $data['refund_date'] = ( ! empty( $refunds_date ) ? implode( $category_separator, $refunds_date ) : '' );
+                    }
                 }
             }
         }
@@ -2842,11 +2908,30 @@ class Order extends Abstract_Class {
         }
 
         if ( isset( $fields['order_items_variation'] ) ) {
-            $data['variation'] = $product_data['attribute_summary'];
+            $data['variation'] = isset( $product_data['attribute_summary'] ) ? $product_data['attribute_summary'] : '';
         }
 
         if ( isset( $fields['order_items_variation_id'] ) ) {
-            $data['variation_id'] = $item_data['variation_id'];
+            $data['variation_id'] = isset( $item_data['variation_id'] ) ? $item_data['variation_id'] : '';
+        }
+
+        $missing_attributes_with_key_value = array(); // find and store the deleted attributes of variable product placed in an order.
+        $order_items_meta_data             = $item->get_meta_data() ?? array(); // focus on variation attributes only(do not consider other product attributes apart from variation attributes).
+
+        foreach ( $order_items_meta_data as $meta_data ) { // if somehow variation attributes are deleted from the product, but saved in order items(products). re-store the product attributes from the order items to the exported data.
+            if ( ! isset( $product_data['attributes'][ $meta_data->key ] ) ) {
+                $missing_attributes_with_key_value[ $meta_data->key ] = $meta_data->value;
+            }
+        }
+
+        foreach ( $missing_attributes_with_key_value as $attribute_key => $attribute_value ) { // now after getting the missing attributes from the line order items(products), append it to the 'attribute_summary' key.
+            $attribute_key                      = false === strpos( $attribute_key, 'pa_' ) ? 'pa_' . $attribute_key : $attribute_key;
+            $attribute_label                    = wc_attribute_label( $attribute_key ) ?? '';
+            $term                               = get_term_by( 'slug', $attribute_value, $attribute_key );
+            $is_the_term_value_empty            = ( $term && ! is_wp_error( $term ) ) ? false : true;
+            $attribute_value                    = ! $is_the_term_value_empty ? $term->name : $attribute_value;
+            $attribute_label                    = $is_the_term_value_empty ? str_replace( 'pa_', '', $attribute_label ) : $attribute_label;
+            $product_data['attribute_summary'] .= empty( $product_data['attribute_summary'] ) ? "$attribute_label: $attribute_value" : ", $attribute_label: $attribute_value";
         }
 
         // Check if Variation fields are selected.
