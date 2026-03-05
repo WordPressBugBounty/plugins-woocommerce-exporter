@@ -3566,8 +3566,8 @@ function woo_ce_get_product_attributes( $slice = '' ) {
 
         $output = array();
         // Check if there are any records in wp_woocommerce_attribute_taxonomies.
-        if ( $wpdb->get_var( "SHOW TABLES LIKE '{$wpdb->prefix}woocommerce_attribute_taxonomies';" ) ) {
-            $attributes = $wpdb->get_results( 'SELECT * FROM `' . $wpdb->prefix . 'woocommerce_attribute_taxonomies`' );
+        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'woocommerce_attribute_taxonomies' ) ) ) {
+            $attributes = $wpdb->get_results( 'SELECT * FROM `' . esc_sql( $wpdb->prefix ) . 'woocommerce_attribute_taxonomies`' );
             $wpdb->flush();
             if ( WOO_CE_LOGGING ) {
                 if ( isset( $export->start_time ) ) {

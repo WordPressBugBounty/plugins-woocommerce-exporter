@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable
 // Adds custom Customer columns to the Customer fields list
 function woo_ce_extend_customer_fields( $fields = array() ) {
 
@@ -17,21 +18,6 @@ function woo_ce_extend_customer_fields( $fields = array() ) {
 			'label' => __( 'Source', 'woocommerce-exporter' ),
 			'hover' => __( 'WooCommerce Hear About Us', 'woocommerce-exporter' )
 		);
-	}
-
-	// Custom Order fields
-	$custom_orders = woo_ce_get_option( 'custom_orders', '' );
-	if( !empty( $custom_orders ) ) {
-		foreach( $custom_orders as $custom_order ) {
-			if( !empty( $custom_order ) ) {
-				$fields[] = array(
-					'name' => $custom_order,
-					'label' => woo_ce_clean_export_label( $custom_order ),
-					'hover' => sprintf( apply_filters( 'woo_ce_extend_customer_fields_custom_order_hover', '%s: %s' ), __( 'Custom Order', 'woocommerce-exporter' ), $custom_order )
-				);
-			}
-		}
-		unset( $custom_orders, $custom_order );
 	}
 
 	// Custom Customer fields

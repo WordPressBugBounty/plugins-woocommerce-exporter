@@ -1362,12 +1362,13 @@ class Order extends Abstract_Class {
 
             // Order Coupons.
             if ( ! empty( $export_args['order_coupon'] ) ) {
-                $object_ids = array_intersect(
+                $coupon_placeholders = $this->get_in_clause_placeholders( $export_args['order_coupon'] );
+                $object_ids          = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
-                            "SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_order_coupon_lookup WHERE coupon_id IN (%s)",
-                            implode( "','", $export_args['order_coupon'] )
+                            "SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_order_coupon_lookup WHERE coupon_id IN ({$coupon_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                            $export_args['order_coupon']
                         )
                     )
                 );
@@ -1375,13 +1376,14 @@ class Order extends Abstract_Class {
 
             // Order Products.
             if ( ! empty( $export_args['order_product'] ) ) {
-                $excl_or_incl = $export_args['order_product_exclude'] ? 'NOT IN' : 'IN';
-                $object_ids   = array_intersect(
+                $excl_or_incl         = $export_args['order_product_exclude'] ? 'NOT IN' : 'IN';
+                $product_placeholders = $this->get_in_clause_placeholders( $export_args['order_product'] );
+                $object_ids           = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
-                            "SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_order_product_lookup WHERE product_id {$excl_or_incl} (%s)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                            implode( "','", $export_args['order_product'] )
+                            "SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_order_product_lookup WHERE product_id {$excl_or_incl} ({$product_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                            $export_args['order_product']
                         )
                     )
                 );
@@ -1389,15 +1391,16 @@ class Order extends Abstract_Class {
 
             // Order Categories.
             if ( ! empty( $export_args['order_category'] ) ) {
-                $object_ids = array_intersect(
+                $category_placeholders = $this->get_in_clause_placeholders( $export_args['order_category'] );
+                $object_ids            = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
                             "SELECT DISTINCT order_id
                                 FROM {$wpdb->prefix}wc_order_product_lookup as wopl
                                 INNER JOIN {$wpdb->prefix}term_relationships as tr ON tr.object_id = wopl.product_id
-                                WHERE tr.term_taxonomy_id IN (%s)",
-                            implode( "','", $export_args['order_category'] )
+                                WHERE tr.term_taxonomy_id IN ({$category_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                            $export_args['order_category']
                         )
                     )
                 );
@@ -1405,15 +1408,16 @@ class Order extends Abstract_Class {
 
             // Order Tags.
             if ( ! empty( $export_args['order_tag'] ) ) {
-                $object_ids = array_intersect(
+                $tag_placeholders = $this->get_in_clause_placeholders( $export_args['order_tag'] );
+                $object_ids       = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
                             "SELECT DISTINCT order_id
                                 FROM {$wpdb->prefix}wc_order_product_lookup as wopl
                                 INNER JOIN {$wpdb->prefix}term_relationships as tr ON tr.object_id = wopl.product_id
-                                WHERE tr.term_taxonomy_id IN (%s)",
-                            implode( "','", $export_args['order_tag'] ),
+                                WHERE tr.term_taxonomy_id IN ({$tag_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                            $export_args['order_tag']
                         )
                     )
                 );
@@ -1657,6 +1661,20 @@ class Order extends Abstract_Class {
      * @param WC_Order      $order  The order object.
      * @param object        $export The export settings.
      */
+    /**
+     * Get IN clause placeholders for prepared SQL queries.
+     *
+     * @since 2.7.8
+     * @access private
+     *
+     * @param array  $items  The items to create placeholders for.
+     * @param string $format The placeholder format. Default '%s'.
+     * @return string
+     */
+    private function get_in_clause_placeholders( $items, $format = '%s' ) {
+        return implode( ',', array_fill( 0, count( $items ), $format ) );
+    }
+
     private function _process_order_item( $item, $fields, $order, $export ) {
         $data      = array();
         $item_data = $item->get_data();

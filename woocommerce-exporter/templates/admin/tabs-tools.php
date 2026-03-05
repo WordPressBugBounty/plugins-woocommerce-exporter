@@ -6,7 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 
-<h2><?php esc_html_e( 'Growth Tools', 'woocommerce-store-toolkit' ); ?></h2>
+<h2><?php esc_html_e( 'Growth Tools', 'woocommerce-exporter' ); ?></h2>
 
 <div class="growth-tools-container">
 
@@ -17,359 +17,379 @@ if ( ! defined( 'ABSPATH' ) ) {
 
     <div class="growth-tools-left-menu">
         <ul>
-            <li><a href="#by-our-team"><?php esc_html_e( 'By Our Team', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#payments"><?php esc_html_e( 'Payments', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#coupon-marketing"><?php esc_html_e( 'Coupon Marketing', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#analytics"><?php esc_html_e( 'Analytics', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#email-marketing"><?php esc_html_e( 'Email Marketing', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#form-builders"><?php esc_html_e( 'Form Builders', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#offers-discounts"><?php esc_html_e( 'Offers & Discounts', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#bulk-sales"><?php esc_html_e( 'Bulk Sales', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#automation"><?php esc_html_e( 'Automation', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#data-management"><?php esc_html_e( 'Data Management', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#reviews"><?php esc_html_e( 'Reviews', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#giveaways"><?php esc_html_e( 'Giveaways', 'woocommerce-store-toolkit' ); ?></a></li>
-            <li><a href="#seo"><?php esc_html_e( 'SEO', 'woocommerce-store-toolkit' ); ?></a></li>
+            <li><a href="#by-our-team"><?php esc_html_e( 'By Our Team', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#payments"><?php esc_html_e( 'Payments', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#coupon-marketing"><?php esc_html_e( 'Coupon Marketing', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#analytics"><?php esc_html_e( 'Analytics', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#email-marketing"><?php esc_html_e( 'Email Marketing', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#form-builders"><?php esc_html_e( 'Form Builders', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#offers-discounts"><?php esc_html_e( 'Offers & Discounts', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#bulk-sales"><?php esc_html_e( 'Bulk Sales', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#automation"><?php esc_html_e( 'Automation', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#data-management"><?php esc_html_e( 'Data Management', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#reviews"><?php esc_html_e( 'Reviews', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#giveaways"><?php esc_html_e( 'Giveaways', 'woocommerce-exporter' ); ?></a></li>
+            <li><a href="#seo"><?php esc_html_e( 'SEO', 'woocommerce-exporter' ); ?></a></li>
         </ul>
     </div>
 
     <div class="growth-tools-right-content">
         <div class="growth-tools-card" data-tags="by-our-team,coupon-marketing,offers-discounts">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/advanced-coupons-for-woocommerce-free/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Advanced Coupons', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Advanced Coupons for WooCommerce (Free Plugin)', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/advanced-coupons-for-woocommerce-free/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Advanced Coupons', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Advanced Coupons for WooCommerce (Free Plugin)', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Extends your coupon features so you can market your store better. Adds cart conditions (coupon rules), buy one get one (BOGO) deals, url coupons, coupon categories and loads more.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Extends your coupon features so you can market your store better. Adds cart conditions (coupon rules), buy one get one (BOGO) deals, url coupons, coupon categories and loads more.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'advanced-coupons-for-woocommerce-free/advanced-coupons-for-woocommerce-free.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'advanced-coupons-for-woocommerce-free/advanced-coupons-for-woocommerce-free.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'advanced-coupons-for-woocommerce-free/advanced-coupons-for-woocommerce-free.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="advanced-coupons-for-woocommerce-free" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="advanced-coupons-for-woocommerce-free" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="by-our-team,bulk-sales,payments">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/wc-vendors/assets/icon.svg' ); ?>" alt="<?php esc_attr_e( 'WC Vendors', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'WC Vendors (Free Plugin)', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/wc-vendors/assets/icon.svg' ); ?>" alt="<?php esc_attr_e( 'WC Vendors', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'WC Vendors (Free Plugin)', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Easiest way to create your multivendor marketplace and earn commission from every sale. Create a WooCommerce marketplace with multi-seller, product vendor & multi vendor commissions.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Easiest way to create your multivendor marketplace and earn commission from every sale. Create a WooCommerce marketplace with multi-seller, product vendor & multi vendor commissions.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <?php echo woo_ce_is_plugin_installed( 'wc-vendors/class-wc-vendors.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'wc-vendors/class-wc-vendors.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'wc-vendors/class-wc-vendors.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="wc-vendors" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="wc-vendors" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="by-our-team,bulk-sales,payments">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/woocommerce-wholesale-prices/assets/icon-128x128.jpg' ); ?>" alt="<?php esc_attr_e( 'WooCommerce Wholesale Prices', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'WooCommerce Wholesale Prices (Free Plugin)', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/woocommerce-wholesale-prices/assets/icon-128x128.jpg' ); ?>" alt="<?php esc_attr_e( 'WooCommerce Wholesale Prices', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'WooCommerce Wholesale Prices (Free Plugin)', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'The #1 WooCommerce wholesale plugin for adding wholesale prices & managing B2B customers. Trusted by over 25k store owners for managing wholesale orders, pricing, visibility, user roles, and more.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'The #1 WooCommerce wholesale plugin for adding wholesale prices & managing B2B customers. Trusted by over 25k store owners for managing wholesale orders, pricing, visibility, user roles, and more.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'woocommerce-wholesale-prices/woocommerce-wholesale-prices.bootstrap.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'woocommerce-wholesale-prices/woocommerce-wholesale-prices.bootstrap.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'woocommerce-wholesale-prices/woocommerce-wholesale-prices.bootstrap.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="woocommerce-wholesale-prices" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="woocommerce-wholesale-prices" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="by-our-team,bulk-sales,payments">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/invoice-gateway-for-woocommerce/assets/icon-128x128.jpg' ); ?>" alt="<?php esc_attr_e( 'Invoice Gateway for WooCommerce', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Invoice Gateway for WooCommerce (Free Plugin)', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/invoice-gateway-for-woocommerce/assets/icon-128x128.jpg' ); ?>" alt="<?php esc_attr_e( 'Invoice Gateway for WooCommerce', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Invoice Gateway for WooCommerce (Free Plugin)', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Accept orders via a special invoice payment gateway method which lets your customer enter their order without upfront payment. Then just issue an invoice from your accounting system and paste in the number.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Accept orders via a special invoice payment gateway method which lets your customer enter their order without upfront payment. Then just issue an invoice from your accounting system and paste in the number.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'invoice-gateway-for-woocommerce/invoice-gateway-for-woocommerce.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'invoice-gateway-for-woocommerce/invoice-gateway-for-woocommerce.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'invoice-gateway-for-woocommerce/invoice-gateway-for-woocommerce.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="invoice-gateway-for-woocommerce" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="invoice-gateway-for-woocommerce" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="by-our-team,data-management">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/woocommerce-exporter/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Store Exporter for WooCommerce', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Store Exporter for WooCommerce (Free Plugin)', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/woocommerce-exporter/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Store Exporter for WooCommerce', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Store Exporter for WooCommerce (Free Plugin)', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Easily export Orders, Subscriptions, Coupons, Products, Categories, Tags to a variety of formats. The deluxe version also adds scheduled exporting for easy reporting and syncing with other systems.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Easily export Orders, Subscriptions, Coupons, Products, Categories, Tags to a variety of formats. The deluxe version also adds scheduled exporting for easy reporting and syncing with other systems.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'woocommerce-store-exporter/exporter.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'woocommerce-store-exporter/exporter.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'woocommerce-store-exporter/exporter.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="woocommerce-store-exporter" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="woocommerce-store-exporter" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="by-our-team,data-management,automation">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/woo-product-feed-pro/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Product Feed Pro by AdTribes', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Product Feed Pro (Free Plugin)', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/woo-product-feed-pro/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Product Feed Pro by AdTribes', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Product Feed Pro (Free Plugin)', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Helps you generate and manage product feeds for various marketing channels, such as Google Shopping, Facebook, and more, to optimize your eCommerce store\'s visibility and sales.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Helps you generate and manage product feeds for various marketing channels, such as Google Shopping, Facebook, and more, to optimize your eCommerce store\'s visibility and sales.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'woo-product-feed-pro/woocommerce-sea.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'woo-product-feed-pro/woocommerce-sea.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'woo-product-feed-pro/woocommerce-sea.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="woo-product-feed-pro" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="woo-product-feed-pro" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <div class="growth-tools-card" data-tags="by-our-team,email-marketing,offers-discounts">
+            <div class="card-title">
+                <img src="<?php echo esc_url( 'https://ps.w.org/saveto-wishlist-lite-for-woocommerce/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'SaveTo Wishlist', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'SaveTo Wishlist (Free Plugin)', 'woocommerce-exporter' ); ?></h3>
+            </div>
+            <div class="card-body xs-text-center">
+                <p class="mt-0"><?php esc_html_e( 'Let customers save their favorite products and come back to buy later. Adds beautiful wishlist functionality to your WooCommerce store — helping you increase conversions and customer engagement.', 'woocommerce-exporter' ); ?></p>
+            </div>
+            <div class="card-footer">
+                <div class="install-status">
+                    <p class="m-0">
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'saveto-wishlist-lite-for-woocommerce/saveto-wishlist-lite-for-woocommerce.php' ) ? esc_html__( 'Installed', 'woocommerce-exporter' ) : esc_html__( 'Not installed', 'woocommerce-exporter' ); ?></span>
+                    </p>
+                    <?php if ( ! woo_ce_is_plugin_installed( 'saveto-wishlist-lite-for-woocommerce/saveto-wishlist-lite-for-woocommerce.php' ) ) : ?>
+                        <a href="#" data-plugin-slug="saveto-wishlist-lite-for-woocommerce" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="payments">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/funnelkit-stripe-woo-payment-gateway/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'FunnelKit Stripe Woo Payment Gateway', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'FunnelKit Stripe Woo Payment Gateway', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/funnelkit-stripe-woo-payment-gateway/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'FunnelKit Stripe Woo Payment Gateway', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'FunnelKit Stripe Woo Payment Gateway', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Enable secure and efficient payment processing on your WooCommerce store with Stripe integration.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Enable secure and efficient payment processing on your WooCommerce store with Stripe integration.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'funnelkit-stripe-woo-payment-gateway/funnelkit-stripe-woo-payment-gateway.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'funnelkit-stripe-woo-payment-gateway/funnelkit-stripe-woo-payment-gateway.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'funnelkit-stripe-woo-payment-gateway/funnelkit-stripe-woo-payment-gateway.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="funnelkit-stripe-woo-payment-gateway" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="funnelkit-stripe-woo-payment-gateway" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="form-builders,offers-discounts">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/funnel-builder/assets/icon-128x128.jpg' ); ?>" alt="<?php esc_attr_e( 'Funnel Builder by FunnelKit', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Funnel Builder by FunnelKit', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/funnel-builder/assets/icon-128x128.jpg' ); ?>" alt="<?php esc_attr_e( 'Funnel Builder by FunnelKit', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Funnel Builder by FunnelKit', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Create high-converting sales funnels to optimize your WooCommerce store’s revenue.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Create high-converting sales funnels to optimize your WooCommerce store’s revenue.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'funnel-builder/funnel-builder.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'funnel-builder/funnel-builder.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'funnel-builder/funnel-builder.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="funnel-builder" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="funnel-builder" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="form-builders,data-management">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/wpforms-lite/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'WPForms Lite', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'WPForms Lite', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/wpforms-lite/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'WPForms Lite', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'WPForms Lite', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Easily create forms for your website with this user-friendly drag-and-drop form builder.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Easily create forms for your website with this user-friendly drag-and-drop form builder.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'wpforms-lite/wpforms.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'wpforms-lite/wpforms.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'wpforms-lite/wpforms.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="wpforms-lite" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="wpforms-lite" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="form-builders,data-management">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/formidable/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Formidable Forms', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Formidable Forms', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/formidable/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Formidable Forms', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Formidable Forms', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Create advanced forms and manage form entries with this powerful form builder.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Create advanced forms and manage form entries with this powerful form builder.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'formidable/formidable.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'formidable/formidable.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'formidable/formidable.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="formidable" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="formidable" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="analytics">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/google-analytics-for-wordpress/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Google Analytics for WordPress by MonsterInsights', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Google Analytics for WordPress by MonsterInsights', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/google-analytics-for-wordpress/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Google Analytics for WordPress by MonsterInsights', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Google Analytics for WordPress by MonsterInsights', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Integrate Google Analytics with your WordPress site and get insights into your visitors and content.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Integrate Google Analytics with your WordPress site and get insights into your visitors and content.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'google-analytics-for-wordpress/googleanalytics.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'google-analytics-for-wordpress/googleanalytics.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'google-analytics-for-wordpress/googleanalytics.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="google-analytics-for-wordpress" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="google-analytics-for-wordpress" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="email-marketing">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/optinmonster/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'OptinMonster', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'OptinMonster', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/optinmonster/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'OptinMonster', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'OptinMonster', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Create high-converting popups and forms to boost your email list and grow your leads.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Create high-converting popups and forms to boost your email list and grow your leads.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'optinmonster/optin-monster-wp-api.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'optinmonster/optin-monster-wp-api.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'optinmonster/optin-monster-wp-api.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="optinmonster" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="optinmonster" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="automation">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/uncanny-automator/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Uncanny Automator', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Uncanny Automator', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/uncanny-automator/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Uncanny Automator', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Uncanny Automator', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Automate your WordPress workflows by connecting plugins, apps, and sites with ease.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Automate your WordPress workflows by connecting plugins, apps, and sites with ease.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'uncanny-automator/uncanny-automator.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'uncanny-automator/uncanny-automator.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'uncanny-automator/uncanny-automator.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="uncanny-automator" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="uncanny-automator" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="analytics">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/metorik-helper/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Metorik Helper', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Metorik', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/metorik-helper/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Metorik Helper', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Metorik', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Enhance your WooCommerce store analytics and reporting with Metorik.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Enhance your WooCommerce store analytics and reporting with Metorik.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'metorik-helper/metorik-helper.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'metorik-helper/metorik-helper.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'metorik-helper/metorik-helper.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="metorik-helper" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="metorik-helper" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="reviews">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/reviews-feed/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Reviews Feed', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'Reviews Feed', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/reviews-feed/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'Reviews Feed', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'Reviews Feed', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Display reviews from multiple platforms on your WordPress site to boost credibility.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Display reviews from multiple platforms on your WordPress site to boost credibility.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'reviews-feed/sb-reviews.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'reviews-feed/sb-reviews.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'reviews-feed/sb-reviews.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="reviews-feed" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="reviews-feed" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="giveaways">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/rafflepress/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'RafflePress', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'RafflePress', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/rafflepress/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'RafflePress', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'RafflePress', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Create viral giveaways and contests to grow your email list and social media following.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Create viral giveaways and contests to grow your email list and social media following.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'rafflepress/rafflepress.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'rafflepress/rafflepress.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'rafflepress/rafflepress.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="rafflepress" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="rafflepress" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         <div class="growth-tools-card" data-tags="seo">
             <div class="card-title">
-                <img src="<?php echo esc_url( 'https://ps.w.org/all-in-one-seo-pack/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'All in One SEO Pack', 'woocommerce-store-toolkit' ); ?>" />
-                <h3><?php esc_html_e( 'All in One SEO Pack', 'woocommerce-store-toolkit' ); ?></h3>
+                <img src="<?php echo esc_url( 'https://ps.w.org/all-in-one-seo-pack/assets/icon-128x128.png' ); ?>" alt="<?php esc_attr_e( 'All in One SEO Pack', 'woocommerce-exporter' ); ?>" />
+                <h3><?php esc_html_e( 'All in One SEO Pack', 'woocommerce-exporter' ); ?></h3>
             </div>
             <div class="card-body xs-text-center">
-                <p class="mt-0"><?php esc_html_e( 'Optimize your WordPress site for SEO with this comprehensive and user-friendly plugin.', 'woocommerce-store-toolkit' ); ?></p>
+                <p class="mt-0"><?php esc_html_e( 'Optimize your WordPress site for SEO with this comprehensive and user-friendly plugin.', 'woocommerce-exporter' ); ?></p>
             </div>
             <div class="card-footer">
                 <div class="install-status">
                     <p class="m-0">
-                        <strong><?php esc_html_e( 'Status:', 'woocommerce-store-toolkit' ); ?></strong>
-                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ) ? esc_html_e( 'Installed', 'woocommerce-store-toolkit' ) : esc_html_e( 'Not installed', 'woocommerce-store-toolkit' ); ?></span>
+                        <strong><?php esc_html_e( 'Status:', 'woocommerce-exporter' ); ?></strong>
+                        <span class="install-status-value"><?php echo woo_ce_is_plugin_installed( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ) ? esc_html_e( 'Installed', 'woocommerce-exporter' ) : esc_html_e( 'Not installed', 'woocommerce-exporter' ); ?></span>
                     </p>
                     <?php if ( ! woo_ce_is_plugin_installed( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ) ) : ?>
-                        <a href="#" data-plugin-slug="all-in-one-seo-pack" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-store-toolkit' ); ?></a>
+                        <a href="#" data-plugin-slug="all-in-one-seo-pack" class="button button-primary"><?php esc_html_e( 'Install Plugin', 'woocommerce-exporter' ); ?></a>
                     <?php endif; ?>
                 </div>
             </div>

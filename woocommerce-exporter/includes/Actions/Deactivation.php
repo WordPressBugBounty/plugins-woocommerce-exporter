@@ -57,7 +57,7 @@ class Deactivation extends Abstract_Class {
             // check if the plugin has been activated on the network or on a single site.
             if ( $this->network_wide ) {
                 // get ids of all sites.
-                $blog_ids = $wpdb->get_col( "SELECT blog_id FROM $wpdb->blogs" );
+                $blog_ids = $wpdb->get_col( 'SELECT blog_id FROM ' . esc_sql( $wpdb->blogs ) );
 
                 foreach ( $blog_ids as $blog_id ) {
                     switch_to_blog( $blog_id );

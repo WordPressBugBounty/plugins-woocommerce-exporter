@@ -31,9 +31,9 @@ class Woocommerce_Subscription extends Abstract_Class {
         $count['subscription'] = 0;
         // WooCommerce Subscriptions.
         if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
-            $query = "SELECT COUNT(*) as count FROM {$wpdb->prefix}wc_orders WHERE type = 'shop_subscription'";
+            $query = $wpdb->prepare( "SELECT COUNT(*) as count FROM {$wpdb->prefix}wc_orders WHERE type = %s", 'shop_subscription' );
         } else {
-            $query = "SELECT COUNT(*) as count FROM {$wpdb->posts} WHERE post_type = 'shop_subscription'";
+            $query = $wpdb->prepare( "SELECT COUNT(*) as count FROM {$wpdb->posts} WHERE post_type = %s", 'shop_subscription' );
         }
         $count['subscription'] = $wpdb->get_var( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         return $count;

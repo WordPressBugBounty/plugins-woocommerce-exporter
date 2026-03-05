@@ -2693,7 +2693,7 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
         $order_data['purchase_id']    = $order->get_id();
         $order_data['order_discount'] = $order->get_total_discount();
         $order_data['coupon_code']    = woo_ce_get_order_assoc_coupon( $order_id );
-        if ( ! empty( $attributesorder_data['coupon_code'] ) ) {
+        if ( ! empty( $order_data['coupon_code'] ) ) {
             $coupon = wc_get_coupon_id_by_code( $order_data['coupon_code'] );
             if ( null !== $coupon ) {
                 $order_data['coupon_description'] = $coupon->get_description();
@@ -2703,9 +2703,9 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
         $order_data['order_sales_tax']    = $order->get_total_tax();
         $order_data['order_shipping_tax'] = $order->get_shipping_tax();
         $order_data['shipping_cost']      = $order->get_shipping_total();
-        $order_data['shipping_incl_tax']  = ( $order_data['shipping_cost'] + $order_data['order_shipping_tax'] );
-        $order_data['shipping_excl_tax']  = ( $order_data['shipping_cost'] - $order_data['order_shipping_tax'] );
-        $order_data['purchase_total_tax'] = ( $order_data['order_sales_tax'] + $order_data['order_shipping_tax'] - $order_data['refund_tax'] );
+        $order_data['shipping_incl_tax']  = ( floatval( $order_data['shipping_cost'] ) + floatval( $order_data['order_shipping_tax'] ) );
+        $order_data['shipping_excl_tax']  = ( floatval( $order_data['shipping_cost'] ) - floatval( $order_data['order_shipping_tax'] ) );
+        $order_data['purchase_total_tax'] = ( floatval( $order_data['order_sales_tax'] ) + floatval( $order_data['order_shipping_tax'] ) - floatval( $order_data['refund_tax'] ) );
 
         $tax_rates = $order->get_taxes();
         if ( ! empty( $order_data['purchase_total_tax'] ) && ! empty( $tax_rates ) ) {
@@ -2713,9 +2713,9 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
                 $order_data[ 'purchase_total_tax_rate_' . $tax_rate->get_rate_id() ] = woo_ce_format_price( $tax_rate->get_tax_total(), $order->get_currency() );
             }
         }
-        $order_data['purchase_total']          = $order_data['purchase_total'] - $order_data['refund_total'];
-        $order_data['order_subtotal_excl_tax'] = ( $order_data['purchase_total'] - $order_data['purchase_total_tax'] );
-        $order_data['purchase_subtotal']       = $order_data['order_subtotal_excl_tax'] - $order_data['shipping_cost'];
+        $order_data['purchase_total']          = floatval( $order_data['purchase_total'] ) - floatval( $order_data['refund_total'] );
+        $order_data['order_subtotal_excl_tax'] = ( floatval( $order_data['purchase_total'] ) - floatval( $order_data['purchase_total_tax'] ) );
+        $order_data['purchase_subtotal']       = floatval( $order_data['order_subtotal_excl_tax'] ) - floatval( $order_data['shipping_cost'] );
         // Order Tax Percentage - Order Total - Total Tax / Total Tax.
         $order_data['order_tax_percentage'] = 0;
         if ( ! empty( $order_data['purchase_total_tax'] ) && ! empty( $order_data['purchase_total'] ) ) {
@@ -3035,7 +3035,7 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
             $custom_users = woo_ce_get_option( 'custom_users', '' );
             if ( ! empty( $custom_users ) ) {
                 foreach ( $custom_users as $custom_user ) {
-                    if ( ! empty( $custom_user ) && ! isset( $order->{$custom_user} ) ) {
+                    if ( ! empty( $custom_user ) && ! isset( $order_data[ $custom_user ] ) ) {
                         $order_data[ $custom_user ] = woo_ce_format_custom_meta( get_user_meta( $order->get_user_id(), $custom_user, true ) );
                     }
                 }
@@ -3056,8 +3056,8 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
                 global $wpdb;
 
                 if ( isset( $user->email ) ) {
-                    $followup_optout_sql    = $wpdb->prepare( 'SELECT `id` FROM `' . $wpdb->prefix . 'followup_email_excludes` WHERE `email` = %s LIMIT 1', $user->email );
-                    $order->followup_optout = $wpdb->get_var( $followup_optout_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+                    $followup_optout_sql          = $wpdb->prepare( 'SELECT `id` FROM `' . esc_sql( $wpdb->prefix ) . 'followup_email_excludes` WHERE `email` = %s LIMIT 1', $user->email );
+                    $order_data['followup_optout'] = $wpdb->get_var( $followup_optout_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
                 }
             }
 
@@ -3065,8 +3065,8 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
             $custom_users = woo_ce_get_option( 'custom_users', '' );
             if ( ! empty( $custom_users ) ) {
                 foreach ( $custom_users as $custom_user ) {
-                    if ( ! empty( $custom_user ) && ! isset( $order->{$custom_user} ) ) {
-                        $order->{$custom_user} = woo_ce_format_custom_meta( get_user_meta( $order->user_id, $custom_user, true ) );
+                    if ( ! empty( $custom_user ) && ! isset( $order_data[ $custom_user ] ) ) {
+                        $order_data[ $custom_user ] = woo_ce_format_custom_meta( get_user_meta( $order->get_user_id(), $custom_user, true ) );
                     }
                 }
             }
@@ -3085,7 +3085,7 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
         if ( ! empty( $custom_orders ) ) {
             foreach ( $custom_orders as $custom_order ) {
                 if ( ! empty( $custom_order ) ) {
-                    $order->{$custom_order} = esc_attr( get_user_meta( $order_id, $custom_order, true ) );
+                    $order_data[ $custom_order ] = esc_attr( get_user_meta( $order_id, $custom_order, true ) );
                 }
             }
         }
@@ -3095,7 +3095,7 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
         if ( ! empty( $custom_customers ) ) {
             foreach ( $custom_customers as $custom_customer ) {
                 if ( ! empty( $custom_customer ) ) {
-                    $order->{$custom_customer} = esc_attr( get_user_meta( $order->user_id, $custom_customer, true ) );
+                    $order_data[ $custom_customer ] = esc_attr( get_user_meta( $order->get_user_id(), $custom_customer, true ) );
                 }
             }
         }

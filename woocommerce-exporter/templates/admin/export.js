@@ -762,6 +762,7 @@ $j(function () {
     var data = {
       action: "woo_ce_export_load_export_template",
       export_template: export_template,
+      nonce: export_params.load_export_template_nonce,
     };
     $j.post(ajaxurl, data, function (response) {
       var data = $j.parseJSON(response);

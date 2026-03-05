@@ -3,9 +3,9 @@
 Contributors: jkohlbach, RymeraWebCo, visser.labs, smub
 Tags: woocommerce export, export products, export orders, export subscriptions, csv excel export
 Requires at least: 2.9.2
-Tested up to: 6.8.3
+Tested up to: 7.0
 Requires PHP: 5.6
-Stable tag: 2.7.7
+Stable tag: 2.7.8
 License: GPLv2 or later
 
 Export WooCommerce products, orders, customers, categories, tags, subscriptions & more into formatted files like CSV, XML, Excel 2007, XLS, XLSX.
@@ -164,6 +164,16 @@ You can report security bugs through the Patchstack Vulnerability Disclosure Pro
 6. Manage Plugin options from the Settings screen.
 
 == Changelog ==
+
+= 2.7.8 =
+* Bug Fix: Custom order meta incorrectly appear for customer and subscription export
+* Bug Fix: Export to SFTP doesn't work for scheduled exports
+* Bug Fix: Filtering orders by multiple coupon codes only exports a single coupon order
+* Bug Fix: PHP 8.2: Cannot use dynamic creation of properties during export
+* Bug Fix: Special characters break Excel export
+* Bug Fix: Text with file extension is not exported to XLS format
+* Bug Fix: WooCommerce Subscriptions division by zero
+* Bug Fix: Potential security issues
 
 = 2.7.7 =
 * Bug Fix: Security Issue: Local file inclusion security issue (Windows machines only)

@@ -52,6 +52,15 @@ class Activation extends Abstract_Class {
             }
         }
 
+        // Record initial install date for new installs only.
+        // WSE_OPTION_INSTALLED_VERSION is still the old value at this point.
+        // false = fresh install (no previous version), so we record the date.
+        if ( false === get_site_option( WSE_OPTION_INSTALLED_VERSION ) ) {
+            if ( false === get_option( 'woo_ce_initial_install_date' ) ) {
+                update_option( 'woo_ce_initial_install_date', time() );
+            }
+        }
+
         // Update current installed plugin version.
         update_site_option( WSE_OPTION_INSTALLED_VERSION, Helper::get_plugin_version() );
 

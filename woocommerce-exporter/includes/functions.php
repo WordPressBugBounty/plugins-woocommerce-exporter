@@ -1696,7 +1696,7 @@ if ( is_admin() ) {
 				}
 				return $count;
 			} elseif ( $count_sql ) {
-				$count = $wpdb->get_var( $wpdb->prepare( '%s', $count_sql ) );
+				$count = $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			} else {
 				$count = 0;
 			}

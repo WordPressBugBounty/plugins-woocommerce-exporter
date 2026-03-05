@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable
 if ( is_admin() ) {
 
 	/* Start of: WordPress Administration */
@@ -141,21 +142,7 @@ function woo_ce_extend_subscription_fields( $fields = array() ) {
 				);
 			}
 		}
-		unset( $custom_orders, $custom_order );
-	}
-
-	// Custom Order fields
-	$custom_orders = woo_ce_get_option( 'custom_orders', '' );
-	if ( ! empty( $custom_orders ) ) {
-		foreach ( $custom_orders as $custom_order ) {
-			if ( ! empty( $custom_order ) ) {
-				$fields[] = array(
-					'name'  => $custom_order,
-					'label' => woo_ce_clean_export_label( $custom_order ),
-				);
-			}
-		}
-		unset( $custom_orders, $custom_order );
+		unset( $custom_subscriptions, $custom_subscription );
 	}
 
 	// Custom User fields
@@ -231,16 +218,6 @@ function woo_ce_subscription_extend( $subscription, $subscription_id ) {
 			if ( ! empty( $custom_subscription ) ) {
 				$subscription->{$custom_subscription} = woo_ce_format_custom_meta( get_post_meta( $subscription_id, $custom_subscription, true ) );
 			}
-		}
-	}
-
-	// Custom Order fields
-	$custom_orders = woo_ce_get_option( 'custom_orders', '' );
-	if ( ! empty( $custom_orders ) ) {
-		foreach ( $custom_orders as $custom_order ) {
-			if ( ! empty( $custom_order ) && ! isset( $subscription->{$custom_order} ) ) {
-				$subscription->{$custom_order} = esc_attr( get_post_meta( $subscription->order_id, $custom_order, true ) );
-            }
 		}
 	}
 

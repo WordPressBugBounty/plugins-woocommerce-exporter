@@ -78,6 +78,33 @@ class Helper {
     }
 
     /**
+     * Validate a file path to prevent directory traversal attacks.
+     *
+     * @since 2.7.8
+     *
+     * @param string $file_path The file path to validate.
+     * @return bool True if the file path is valid, false otherwise.
+     */
+    public static function validate_file_path( $file_path ) {
+        // Check for directory traversal attempts.
+        if ( false !== strpos( $file_path, '..' ) ) {
+            return false;
+        }
+
+        // Check for null bytes.
+        if ( false !== strpos( $file_path, "\0" ) ) {
+            return false;
+        }
+
+        // Validate the file using WordPress function.
+        if ( 0 !== validate_file( $file_path ) ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Load templates in an overridable manner.
      *
      * @since 2.7.3

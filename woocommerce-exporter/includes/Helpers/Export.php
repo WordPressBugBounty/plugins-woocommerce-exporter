@@ -45,53 +45,66 @@ class Export {
                 'shipping_class' => 0,
             );
 
+            $values = array();
+
             // Product.
-            $query .= "SELECT COUNT(*) AS count FROM {$wpdb->posts} WHERE post_type = 'product' OR post_type = 'product_variation' UNION ALL ";
+            $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->posts} WHERE post_type = %s OR post_type = %s UNION ALL ";
+            $values[] = 'product';
+            $values[] = 'product_variation';
 
             // Product Categories.
-            $query .= "SELECT COUNT(*) AS count FROM {$wpdb->term_taxonomy} WHERE taxonomy = 'product_cat' UNION ALL ";
+            $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->term_taxonomy} WHERE taxonomy = %s UNION ALL ";
+            $values[] = 'product_cat';
 
             // Product Tags.
-            $query .= "SELECT COUNT(*) AS count FROM {$wpdb->term_taxonomy} WHERE taxonomy = 'product_tag' UNION ALL ";
+            $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->term_taxonomy} WHERE taxonomy = %s UNION ALL ";
+            $values[] = 'product_tag';
 
             // Orders.
             if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
-                $query .= "SELECT COUNT(*) AS count FROM {$wpdb->prefix}wc_orders WHERE type = 'shop_order' UNION ALL ";
+                $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->prefix}wc_orders WHERE type = %s UNION ALL ";
+                $values[] = 'shop_order';
             } else {
-                $query .= "SELECT COUNT(*) AS count FROM {$wpdb->posts} WHERE post_type = 'shop_order' UNION ALL ";
+                $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->posts} WHERE post_type = %s UNION ALL ";
+                $values[] = 'shop_order';
             }
 
             // Customers.
             if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
-                $query .= "SELECT COUNT(DISTINCT cl.customer_id) AS count
+                $query   .= "SELECT COUNT(DISTINCT cl.customer_id) AS count
                     FROM {$wpdb->prefix}wc_customer_lookup AS cl
                         INNER JOIN {$wpdb->prefix}wc_order_stats AS os ON os.customer_id = cl.customer_id
                         INNER JOIN {$wpdb->prefix}wc_orders AS o ON os.order_id = o.id
-                    WHERE o.type = 'shop_order' UNION ALL ";
+                    WHERE o.type = %s UNION ALL ";
+                $values[] = 'shop_order';
             } else {
-                $query .= "SELECT COUNT(DISTINCT cl.customer_id) AS count
+                $query   .= "SELECT COUNT(DISTINCT cl.customer_id) AS count
                     FROM {$wpdb->prefix}wc_customer_lookup AS cl
                         INNER JOIN {$wpdb->prefix}wc_order_stats AS os ON os.customer_id = cl.customer_id
                         INNER JOIN {$wpdb->posts} AS p ON os.order_id = p.ID
-                    WHERE p.post_type = 'shop_order' UNION ALL ";
+                    WHERE p.post_type = %s UNION ALL ";
+                $values[] = 'shop_order';
             }
 
             // Users.
             $query .= "SELECT COUNT(*) AS count FROM {$wpdb->users} UNION ALL ";
 
             // Reviews.
-            $query .= "SELECT COUNT(*) AS count FROM {$wpdb->comments} WHERE comment_type = 'review' UNION ALL ";
+            $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->comments} WHERE comment_type = %s UNION ALL ";
+            $values[] = 'review';
 
             // Coupons.
-            $query .= "SELECT COUNT(*) AS count FROM {$wpdb->posts} WHERE post_type = 'shop_coupon' UNION ALL ";
+            $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->posts} WHERE post_type = %s UNION ALL ";
+            $values[] = 'shop_coupon';
 
             // Attributes.
             $query .= "SELECT COUNT(*) AS count FROM {$wpdb->prefix}woocommerce_attribute_taxonomies UNION ALL ";
 
             // Shipping Class.
-            $query .= "SELECT COUNT(*) AS count FROM {$wpdb->term_taxonomy} WHERE taxonomy = 'product_shipping_class'";
+            $query   .= "SELECT COUNT(*) AS count FROM {$wpdb->term_taxonomy} WHERE taxonomy = %s";
+            $values[] = 'product_shipping_class';
 
-            $result = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore
+            $result = $wpdb->get_results( $wpdb->prepare( $query, $values ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
             // Set the count based on the order of the SQL query.
             $count = array();

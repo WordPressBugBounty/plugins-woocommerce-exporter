@@ -71,8 +71,8 @@ function woo_cd_admin_notice_html( $message = '', $priority = 'updated', $screen
 		$message   = '<span class="spinner is-active"></span>' . $message;
 	}
 
-	echo '<div id="' . ( ! empty( $id ) ? sprintf( 'message-%s', $id ) : 'message' ) . '" class="' . implode( ' ', $classes ) . '">';
-	echo '<p>' . $message . '</p>';
+	echo '<div id="' . ( ! empty( $id ) ? sprintf( 'message-%s', esc_attr( $id ) ) : 'message' ) . '" class="' . esc_attr( implode( ' ', $classes ) ) . '">';
+	echo '<p>' . wp_kses_post( $message ) . '</p>';
 	echo '</div>';
 }
 
@@ -83,7 +83,7 @@ function woo_cd_admin_notice_print() {
 	if ( $output !== false ) {
 		delete_transient( WOO_CE_PREFIX . '_notice' );
 		$output = base64_decode( $output );
-		echo $output;
+		echo wp_kses_post( $output );
 	}
 }
 
@@ -96,9 +96,9 @@ function woo_cd_template_header( $title = '', $icon = 'woocommerce' ) {
 		$output = __( 'Store Export', 'woocommerce-exporter' );
     } ?>
 <div id="woo-ce" class="wrap">
-	<div id="icon-<?php echo $icon; ?>" class="icon32 icon32-woocommerce-importer"><br /></div>
+	<div id="icon-<?php echo esc_attr( $icon ); ?>" class="icon32 icon32-woocommerce-importer"><br /></div>
 	<h2>
-		<?php echo $output; ?>
+		<?php echo esc_html( $output ); ?>
 	</h2>
 	<hr class="wp-header-end">
 <?php
@@ -154,10 +154,16 @@ add_action( 'woo_ce_export_before_options', 'woo_ce_quick_export_in_process' );
 
 function woo_ce_ajax_load_export_template() {
 
+	check_ajax_referer( 'woo_ce_load_export_template', 'nonce' );
+
+	if ( ! current_user_can( apply_filters( 'woo_ce_admin_user_capability', 'view_woocommerce_reports' ) ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'woocommerce-exporter' ) ) );
+	}
+
 	$export_template = ( isset( $_POST['export_template'] ) ? absint( $_POST['export_template'] ) : false );
 	if ( empty( $export_template ) ) {
-		return;
-    }
+		wp_send_json( false );
+	}
 
 	$response = false;
 
@@ -194,9 +200,7 @@ function woo_ce_ajax_load_export_template() {
 		}
 	}
 
-	$response = json_encode( $response );
-	echo $response;
-	wp_die();
+	wp_send_json( $response );
 }
 
 // Add Export, Docs and Support links to the Plugins screen
@@ -229,13 +233,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Product Meta
 	if ( isset( $_POST['custom_products'] ) ) {
-		$custom_products = $_POST['custom_products'];
+		$custom_products = sanitize_textarea_field( wp_unslash( $_POST['custom_products'] ) );
 		$custom_products = explode( "\n", trim( $custom_products ) );
 		if ( ! empty( $custom_products ) ) {
 			$size = count( $custom_products );
 			if ( ! empty( $size ) ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_products[ $i ] = sanitize_text_field( trim( stripslashes( $custom_products[ $i ] ) ) );
+					$custom_products[ $i ] = sanitize_text_field( trim( $custom_products[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_products', $custom_products );
 			}
@@ -247,13 +251,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Attributes
 	if ( isset( $_POST['custom_attributes'] ) ) {
-		$custom_attributes = $_POST['custom_attributes'];
+		$custom_attributes = sanitize_textarea_field( wp_unslash( $_POST['custom_attributes'] ) );
 		$custom_attributes = explode( "\n", trim( $custom_attributes ) );
 		if ( ! empty( $custom_attributes ) ) {
 			$size = count( $custom_attributes );
 			if ( ! empty( $size ) ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_attributes[ $i ] = sanitize_text_field( trim( stripslashes( $custom_attributes[ $i ] ) ) );
+					$custom_attributes[ $i ] = sanitize_text_field( trim( $custom_attributes[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_attributes', $custom_attributes );
 			}
@@ -264,13 +268,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Product Add-ons
 	if ( isset( $_POST['custom_product_addons'] ) ) {
-		$custom_product_addons = $_POST['custom_product_addons'];
+		$custom_product_addons = sanitize_textarea_field( wp_unslash( $_POST['custom_product_addons'] ) );
 		$custom_product_addons = explode( "\n", trim( $custom_product_addons ) );
 		if ( ! empty( $custom_product_addons ) ) {
 			$size = count( $custom_product_addons );
 			if ( ! empty( $size ) ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_product_addons[ $i ] = sanitize_text_field( trim( stripslashes( $custom_product_addons[ $i ] ) ) );
+					$custom_product_addons[ $i ] = sanitize_text_field( trim( $custom_product_addons[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_product_addons', $custom_product_addons );
 			}
@@ -282,13 +286,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Extra Product Options
 	if ( isset( $_POST['custom_extra_product_options'] ) ) {
-		$custom_extra_product_options = $_POST['custom_extra_product_options'];
+		$custom_extra_product_options = sanitize_textarea_field( wp_unslash( $_POST['custom_extra_product_options'] ) );
 		$custom_extra_product_options = explode( "\n", trim( $custom_extra_product_options ) );
 		if ( ! empty( $custom_extra_product_options ) ) {
 			$size = count( $custom_extra_product_options );
 			if ( ! empty( $size ) ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_extra_product_options[ $i ] = sanitize_text_field( trim( stripslashes( $custom_extra_product_options[ $i ] ) ) );
+					$custom_extra_product_options[ $i ] = sanitize_text_field( trim( $custom_extra_product_options[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_extra_product_options', $custom_extra_product_options );
 			}
@@ -300,13 +304,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Product Tabs
 	if ( isset( $_POST['custom_product_tabs'] ) ) {
-		$custom_product_tabs = $_POST['custom_product_tabs'];
+		$custom_product_tabs = sanitize_textarea_field( wp_unslash( $_POST['custom_product_tabs'] ) );
 		$custom_product_tabs = explode( "\n", trim( $custom_product_tabs ) );
 		if ( ! empty( $custom_product_tabs ) ) {
 			$size = count( $custom_product_tabs );
 			if ( ! empty( $size ) ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_product_tabs[ $i ] = sanitize_text_field( trim( stripslashes( $custom_product_tabs[ $i ] ) ) );
+					$custom_product_tabs[ $i ] = sanitize_text_field( trim( $custom_product_tabs[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_product_tabs', $custom_product_tabs );
 			}
@@ -318,13 +322,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom WooTabs
 	if ( isset( $_POST['custom_wootabs'] ) ) {
-		$custom_wootabs = $_POST['custom_wootabs'];
+		$custom_wootabs = sanitize_textarea_field( wp_unslash( $_POST['custom_wootabs'] ) );
 		$custom_wootabs = explode( "\n", trim( $custom_wootabs ) );
 		if ( ! empty( $custom_wootabs ) ) {
 			$size = count( $custom_wootabs );
 			if ( ! empty( $size ) ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_wootabs[ $i ] = sanitize_text_field( trim( stripslashes( $custom_wootabs[ $i ] ) ) );
+					$custom_wootabs[ $i ] = sanitize_text_field( trim( $custom_wootabs[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_wootabs', $custom_wootabs );
 			}
@@ -336,13 +340,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Order meta
 	if ( isset( $_POST['custom_orders'] ) ) {
-		$custom_orders = $_POST['custom_orders'];
+		$custom_orders = sanitize_textarea_field( wp_unslash( $_POST['custom_orders'] ) );
 		if ( ! empty( $custom_orders ) ) {
 			$custom_orders = explode( "\n", trim( $custom_orders ) );
 			$size          = count( $custom_orders );
 			if ( $size ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_orders[ $i ] = sanitize_text_field( trim( stripslashes( $custom_orders[ $i ] ) ) );
+					$custom_orders[ $i ] = sanitize_text_field( trim( $custom_orders[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_orders', $custom_orders );
 			}
@@ -354,13 +358,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Order Item meta
 	if ( isset( $_POST['custom_order_items'] ) ) {
-		$custom_order_items = $_POST['custom_order_items'];
+		$custom_order_items = sanitize_textarea_field( wp_unslash( $_POST['custom_order_items'] ) );
 		if ( ! empty( $custom_order_items ) ) {
 			$custom_order_items = explode( "\n", trim( $custom_order_items ) );
 			$size               = count( $custom_order_items );
 			if ( $size ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_order_items[ $i ] = sanitize_text_field( trim( stripslashes( $custom_order_items[ $i ] ) ) );
+					$custom_order_items[ $i ] = sanitize_text_field( trim( $custom_order_items[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_order_items', $custom_order_items );
 			}
@@ -372,13 +376,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Product Order Item meta
 	if ( isset( $_POST['custom_order_products'] ) ) {
-		$custom_order_products = $_POST['custom_order_products'];
+		$custom_order_products = sanitize_textarea_field( wp_unslash( $_POST['custom_order_products'] ) );
 		if ( ! empty( $custom_order_products ) ) {
 			$custom_order_products = explode( "\n", trim( $custom_order_products ) );
 			$size                  = count( $custom_order_products );
 			if ( $size ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_order_products[ $i ] = sanitize_text_field( trim( stripslashes( $custom_order_products[ $i ] ) ) );
+					$custom_order_products[ $i ] = sanitize_text_field( trim( $custom_order_products[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_order_products', $custom_order_products );
 			}
@@ -390,13 +394,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Subscription meta
 	if ( isset( $_POST['custom_subscriptions'] ) ) {
-		$custom_subscriptions = $_POST['custom_subscriptions'];
+		$custom_subscriptions = sanitize_textarea_field( wp_unslash( $_POST['custom_subscriptions'] ) );
 		if ( ! empty( $custom_subscriptions ) ) {
 			$custom_subscriptions = explode( "\n", trim( $custom_subscriptions ) );
 			$size                 = count( $custom_subscriptions );
 			if ( $size ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_subscriptions[ $i ] = sanitize_text_field( trim( stripslashes( $custom_subscriptions[ $i ] ) ) );
+					$custom_subscriptions[ $i ] = sanitize_text_field( trim( $custom_subscriptions[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_subscriptions', $custom_subscriptions );
 			}
@@ -408,13 +412,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom User meta
 	if ( isset( $_POST['custom_users'] ) ) {
-		$custom_users = $_POST['custom_users'];
+		$custom_users = sanitize_textarea_field( wp_unslash( $_POST['custom_users'] ) );
 		if ( ! empty( $custom_users ) ) {
 			$custom_users = explode( "\n", trim( $custom_users ) );
 			$size         = count( $custom_users );
 			if ( $size ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_users[ $i ] = sanitize_text_field( trim( stripslashes( $custom_users[ $i ] ) ) );
+					$custom_users[ $i ] = sanitize_text_field( trim( $custom_users[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_users', $custom_users );
 			}
@@ -426,13 +430,13 @@ function woo_ce_admin_custom_fields_save() {
 
 	// Save Custom Customer meta
 	if ( isset( $_POST['custom_customers'] ) ) {
-		$custom_customers = $_POST['custom_customers'];
+		$custom_customers = sanitize_textarea_field( wp_unslash( $_POST['custom_customers'] ) );
 		if ( ! empty( $custom_customers ) ) {
 			$custom_customers = explode( "\n", trim( $custom_customers ) );
 			$size             = count( $custom_customers );
 			if ( $size ) {
 				for ( $i = 0; $i < $size; $i++ ) {
-					$custom_customers[ $i ] = sanitize_text_field( trim( stripslashes( $custom_customers[ $i ] ) ) );
+					$custom_customers[ $i ] = sanitize_text_field( trim( $custom_customers[ $i ] ) );
                 }
 				woo_ce_update_option( 'custom_customers', $custom_customers );
 			}
@@ -548,7 +552,14 @@ function woo_ce_enqueue_scripts() {
 	// Common.
 	wp_enqueue_style( 'woo_ce_styles', plugins_url( '/templates/admin/export.css', WOO_CE_RELPATH ) );
 	wp_enqueue_script( 'woo_ce_scripts', plugins_url( '/templates/admin/export.js', WOO_CE_RELPATH ), array( 'jquery', 'jquery-ui-sortable' ) );
-	wp_localize_script( 'woo_ce_scripts', 'export_params', array( 'hpos_enabled' => wc_get_container()->get( CustomOrdersTableController::class )->custom_orders_table_usage_is_enabled() ?? true ) );
+	wp_localize_script(
+		'woo_ce_scripts',
+		'export_params',
+		array(
+			'hpos_enabled'                => wc_get_container()->get( CustomOrdersTableController::class )->custom_orders_table_usage_is_enabled() ?? true,
+			'load_export_template_nonce'  => wp_create_nonce( 'woo_ce_load_export_template' ),
+		)
+	);
 
 	add_action( 'admin_footer', 'woo_ce_admin_footer_javascript' );
 	wp_enqueue_style( 'dashicons' );
@@ -603,7 +614,14 @@ function woo_ce_admin_current_screen() {
 	wp_enqueue_script( 'woo_ce_scripts', plugins_url( '/templates/admin/export.js', WOO_CE_RELPATH ), array( 'jquery', 'jquery-ui-sortable', 'jquery-tiptip' ) );
 
 	if ( woo_is_woo_activated() ) {
-		wp_localize_script( 'woo_ce_scripts', 'export_params', array( 'hpos_enabled' => wc_get_container()->get( CustomOrdersTableController::class )->custom_orders_table_usage_is_enabled() ?? true ) );
+		wp_localize_script(
+			'woo_ce_scripts',
+			'export_params',
+			array(
+				'hpos_enabled'                => wc_get_container()->get( CustomOrdersTableController::class )->custom_orders_table_usage_is_enabled() ?? true,
+				'load_export_template_nonce'  => wp_create_nonce( 'woo_ce_load_export_template' ),
+			)
+		);
 	}
 
 	switch ( $screen->id ) {
@@ -959,6 +977,30 @@ function woo_ce_admin_current_screen() {
 	}
 }
 
+/**
+ * Get allowed HTML tags for action buttons output.
+ *
+ * @since 2.7.8
+ * @return array Allowed HTML tags and attributes.
+ */
+function woo_ce_get_action_button_allowed_html() {
+	return array(
+		'a'     => array(
+			'href'  => array(),
+			'title' => array(),
+			'class' => array(),
+			'style' => array(),
+		),
+		'input' => array(
+			'type'  => array(),
+			'title' => array(),
+			'class' => array(),
+			'style' => array(),
+			'value' => array(),
+		),
+	);
+}
+
 function woo_ce_extend_woo_st_product_data_actions( $post_id, $meta_key = '' ) {
 
 	// Check if the Product meta_key is already in the saved list
@@ -983,7 +1025,7 @@ function woo_ce_extend_woo_st_product_data_actions( $post_id, $meta_key = '' ) {
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom Product export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woo_st_category_data_actions( $term_id, $meta_key = '' ) {
@@ -1010,7 +1052,7 @@ function woo_ce_extend_woo_st_category_data_actions( $term_id, $meta_key = '' ) 
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom Category export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woo_st_tag_data_actions( $term_id, $meta_key = '' ) {
@@ -1037,7 +1079,7 @@ function woo_ce_extend_woo_st_tag_data_actions( $term_id, $meta_key = '' ) {
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom Tag export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woo_st_brand_data_actions( $term_id, $meta_key = '' ) {
@@ -1064,7 +1106,7 @@ function woo_ce_extend_woo_st_brand_data_actions( $term_id, $meta_key = '' ) {
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom Brand export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woo_st_order_data_actions( $post_id, $meta_key = '' ) {
@@ -1091,7 +1133,7 @@ function woo_ce_extend_woo_st_order_data_actions( $post_id, $meta_key = '' ) {
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom Order export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woo_st_order_item_data_actions( $post_id, $meta_key = '' ) {
@@ -1118,7 +1160,7 @@ function woo_ce_extend_woo_st_order_item_data_actions( $post_id, $meta_key = '' 
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom Order Item export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woo_st_coupon_data_actions( $post_id, $meta_key = '' ) {
@@ -1145,7 +1187,7 @@ function woo_ce_extend_woo_st_coupon_data_actions( $post_id, $meta_key = '' ) {
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom Coupon export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woo_st_user_data_actions( $user_id, $meta_key = '' ) {
@@ -1172,7 +1214,7 @@ function woo_ce_extend_woo_st_user_data_actions( $user_id, $meta_key = '' ) {
 	} else {
 		$output = '<input type="button" title="' . sprintf( __( '\'%s\' has already been added as a custom User export field in Store Exporter Deluxe', 'woocommerce-exporter' ), esc_attr( $meta_key ) ) . '" class="button disabled" style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Oxygen-Sans,Ubuntu,Cantarell,\'Helvetica Neue\',sans-serif;" value="' . __( 'Add to export', 'woocommerce-exporter' ) . '" />';
 	}
-	echo $output;
+	echo wp_kses( $output, woo_ce_get_action_button_allowed_html() );
 }
 
 function woo_ce_extend_woocommerce_system_status_report() {
@@ -2966,7 +3008,7 @@ function woo_ce_modules_status_class( $status = 'inactive' ) {
 			break;
 
 	}
-	echo $output;
+	echo esc_attr( $output );
 }
 
 function woo_ce_modules_status_label( $status = 'inactive' ) {
@@ -2983,7 +3025,7 @@ function woo_ce_modules_status_label( $status = 'inactive' ) {
 			break;
 
 	}
-	echo $output;
+	echo esc_html( $output );
 }
 
 function woo_ce_is_network_admin() {

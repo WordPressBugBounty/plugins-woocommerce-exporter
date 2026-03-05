@@ -64,22 +64,26 @@ class WP_Admin extends Abstract_Class {
      * @access public
      */
     public function ajax_quick_export() {
-        if ( ! isset( $_REQUEST['nonce'] ) || ! wp_verify_nonce( $_REQUEST['nonce'], 'manual_export' ) ) {
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'manual_export' ) ) {
             wp_send_json_error( array( 'message' => __( 'Nonce verification failed.', 'woocommerce-exporter' ) ) );
         }
 
-        if ( ! isset( $_REQUEST['type'] ) || ! isset( $_REQUEST['method'] ) ) {
+        if ( ! current_user_can( apply_filters( 'woo_ce_admin_user_capability', 'view_woocommerce_reports' ) ) ) {
+            wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'woocommerce-exporter' ) ) );
+        }
+
+        if ( ! isset( $_POST['type'] ) || ! isset( $_POST['method'] ) ) {
             wp_send_json_error( array( 'message' => __( 'Type or method not specified.', 'woocommerce-exporter' ) ) );
 		}
 
         $instance = new Exporter();
-        $instance->set_exporter( $_REQUEST['type'] );
+        $instance->set_exporter( sanitize_text_field( wp_unslash( $_POST['type'] ) ) );
         // On first call (ajax_prepare), set the form data.
-        if ( 'prepare' === $_REQUEST['method'] ) {
-            $instance->set_form_data( $_REQUEST['form_data'] );
+        if ( 'prepare' === sanitize_text_field( wp_unslash( $_POST['method'] ) ) ) {
+            $instance->set_form_data( $_POST['form_data'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
         }
 
-        $method = 'ajax_' . $_REQUEST['method'];
+        $method = 'ajax_' . sanitize_text_field( wp_unslash( $_POST['method'] ) );
         if ( ! method_exists( $instance, $method ) ) {
             // translators: %s: method name.
             wp_send_json_error( array( 'message' => sprintf( __( 'Unknown AJAX method %s.', 'woocommerce-exporter' ), esc_html( $method ) ) ) );
@@ -102,16 +106,16 @@ class WP_Admin extends Abstract_Class {
             'download_file' === wp_unslash( $_GET['action'] )
         ) {
             $instance = new Exporter();
-            $instance->set_exporter( $_REQUEST['type'] );
+            $instance->set_exporter( isset( $_GET['type'] ) ? sanitize_text_field( wp_unslash( $_GET['type'] ) ) : '' );
 
-            if ( empty( $_GET['filename'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if ( empty( $_GET['filename'] ) ) {
                 wp_send_json_error( array( 'message' => __( 'Filename not specified.', 'woocommerce-exporter' ) ) );
             }
 
             $instance->set_export_settings( get_transient( WOO_CE_PREFIX . '_export_settings' ) );
-            $instance->set_export_format( wp_unslash( $_GET['format'] ) );
-            $instance->set_export_encoding( wp_unslash( $_GET['encoding'] ) );
-            $instance->set_filename( wp_unslash( $_GET['filename'] ) );
+            $instance->set_export_format( isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '' );
+            $instance->set_export_encoding( isset( $_GET['encoding'] ) ? sanitize_text_field( wp_unslash( $_GET['encoding'] ) ) : '' );
+            $instance->set_filename( sanitize_text_field( wp_unslash( $_GET['filename'] ) ) );
             $instance->clear_export_transient();
             $instance->export();
         }

@@ -89,19 +89,20 @@ class Customer extends Abstract_Class {
 
         $export_args = $export->args;
 
-        $query = "SELECT 
+        $query  = "SELECT
             cl.*,
             max(o.id) AS order_id
             FROM {$wpdb->prefix}wc_customer_lookup cl
                 INNER JOIN {$wpdb->prefix}wc_order_stats os ON os.customer_id = cl.customer_id
                 INNER JOIN {$wpdb->prefix}wc_orders o ON os.order_id = o.id
             WHERE o.type = 'shop_order'";
+        $values = array();
 
         if ( ! empty( $export_args['order_status'] ) ) {
             $sql_placeholders = implode( ',', array_fill( 0, count( $export_args['order_status'] ), '%s' ) );
 
             $query .= " AND o.status IN ({$sql_placeholders})";
-            $query  = $wpdb->prepare( $query, $export_args['order_status'] ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            $values = array_merge( $values, $export_args['order_status'] );
         }
 
         $query .= ' GROUP BY cl.customer_id';
@@ -112,13 +113,17 @@ class Customer extends Abstract_Class {
         }
 
         if ( ! empty( $export_args['limit_volume'] ) && $export_args['limit_volume'] > 0 ) {
-            $query .= ' LIMIT %d';
-            $query  = $wpdb->prepare( $query, $export_args['limit_volume'] ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            $query   .= ' LIMIT %d';
+            $values[] = $export_args['limit_volume'];
         }
 
         if ( ! empty( $export_args['offset'] ) ) {
-            $query .= ' OFFSET %d';
-            $query  = $wpdb->prepare( $query, $export_args['offset'] ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+            $query   .= ' OFFSET %d';
+            $values[] = $export_args['offset'];
+        }
+
+        if ( ! empty( $values ) ) {
+            $query = $wpdb->prepare( $query, $values ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
         }
 
         $objects = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared

@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable
 if ( is_admin() ) {
 
 	/* Start of: WordPress Administration */
@@ -3129,9 +3130,9 @@ $order_data['purchase_id'] = $order_id;
 
 	// WooCommerce UPS Access Point Shipping - https://shop.renoovodesign.co.uk/product/ups-access-point-plugin-woocommerce/
 	if ( woo_ce_detect_export_plugin( 'ups_ap_shipping' ) ) {
-		$product->ups_ap_id        = $order->get_meta( 'ups_ap_id', true );
-		$product->ups_ap_name      = $order->get_meta( 'ups_ap_shipping_company', true );
-		$product->ups_ap_image     = $order->get_meta( 'ups_ap_image', true );
+		$order_data['ups_ap_id']    = $order->get_meta( 'ups_ap_id', true );
+		$order_data['ups_ap_name']  = $order->get_meta( 'ups_ap_shipping_company', true );
+		$order_data['ups_ap_image'] = $order->get_meta( 'ups_ap_image', true );
 		$ups_ap_shipping_address   = '';
 		$ups_ap_shipping_address_1 = $order->get_meta( 'ups_ap_shipping_address_1', true );
 		$ups_ap_shipping_address_2 = $order->get_meta( 'ups_ap_shipping_address_2', true );
@@ -3161,10 +3162,10 @@ $order_data['purchase_id'] = $order_id;
 		if ( ! empty( $ups_ap_shipping_country ) ) {
 			$ups_ap_shipping_address .= $ups_ap_shipping_country;
         }
-		$product->ups_ap_address      = $ups_ap_shipping_address;
-		$product->ups_ap_telephone    = $order->get_meta( 'ups_ap_telephone', true );
-		$product->ups_ap_locationhint = $order->get_meta( 'ups_ap_locationhint', true );
-		$product->ups_ap_openinghours = $order->get_meta( 'ups_ap_openinghours', true );
+		$order_data['ups_ap_address']      = $ups_ap_shipping_address;
+		$order_data['ups_ap_telephone']    = $order->get_meta( 'ups_ap_telephone', true );
+		$order_data['ups_ap_locationhint'] = $order->get_meta( 'ups_ap_locationhint', true );
+		$order_data['ups_ap_openinghours'] = $order->get_meta( 'ups_ap_openinghours', true );
 		unset( $ups_ap_shipping_address, $ups_ap_shipping_address_1, $ups_ap_shipping_address_2, $ups_ap_shipping_address_3, $ups_ap_shipping_city, $ups_ap_shipping_state, $ups_ap_shipping_postcode, $ups_ap_shipping_country );
 	}
 
@@ -3370,8 +3371,8 @@ $order_data['purchase_id'] = $order_id;
 		global $wpdb;
 
 		// Check the wc_quick_donation table exists
-		if ( $wpdb->get_var( "SHOW TABLES LIKE '" . $wpdb->prefix . "wc_quick_donation'" ) ) {
-			$project_id_sql             = $wpdb->prepare( 'SELECT `projectid` FROM `' . $wpdb->prefix . 'wc_quick_donation` WHERE `donationid` = %d LIMIT 1', $order_id );
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'wc_quick_donation' ) ) ) {
+			$project_id_sql             = $wpdb->prepare( 'SELECT `projectid` FROM `' . esc_sql( $wpdb->prefix ) . 'wc_quick_donation` WHERE `donationid` = %d LIMIT 1', $order_id );
 			$order_data['project_id']   = absint( $wpdb->get_var( $project_id_sql ) );
 			$order_data['project_name'] = get_the_title( $order_data['project_id'] );
 		}

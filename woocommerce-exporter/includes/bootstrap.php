@@ -116,10 +116,10 @@ if ( is_admin() ) {
             case 'save-fields':
                 // We need to verify the nonce.
                 if ( ! empty( $_POST ) && check_admin_referer( 'save_fields', 'woo_ce_save_fields' ) ) {
-                    $fields       = ( isset( $_POST['fields'] ) ? array_filter( $_POST['fields'] ) : array() );
-                    $fields       = array_map( 'stripslashes', (array) $fields );
-                    $hidden       = ( isset( $_POST['hidden'] ) ? array_filter( $_POST['hidden'] ) : array() );
-                    $export_type  = ( isset( $_POST['type'] ) ? sanitize_text_field( $_POST['type'] ) : '' );
+                    $fields       = ( isset( $_POST['fields'] ) ? array_filter( wp_unslash( $_POST['fields'] ) ) : array() ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+                    $fields       = array_map( 'sanitize_text_field', (array) $fields );
+                    $hidden       = ( isset( $_POST['hidden'] ) ? array_filter( wp_unslash( $_POST['hidden'] ) ) : array() ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+                    $export_type  = ( isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( $_POST['type'] ) ) : '' );
                     $export_types = array_keys( woo_ce_get_export_types() );
                     // Check we are saving against a valid export type.
                     if ( in_array( $export_type, $export_types, true ) ) {

@@ -36,6 +36,7 @@ class Plugin_Installer {
         'reviews-feed'                          => 'reviews-feed/sb-reviews.php',
         'rafflepress'                           => 'rafflepress/rafflepress.php',
         'all-in-one-seo-pack'                   => 'all-in-one-seo-pack/all_in_one_seo_pack.php',
+        'saveto-wishlist-lite-for-woocommerce'  => 'saveto-wishlist-lite-for-woocommerce/saveto-wishlist-lite-for-woocommerce.php',
     );
 
     /**
@@ -61,12 +62,12 @@ class Plugin_Installer {
 
         // Check if the current user has the required permissions.
         if ( ! current_user_can( 'install_plugins' ) || ! current_user_can( 'activate_plugins' ) ) {
-            return new \WP_Error( 'permission_denied', __( 'You do not have sufficient permissions to install and activate plugins.', 'woocommerce-store-toolkit' ) );
+            return new \WP_Error( 'permission_denied', __( 'You do not have sufficient permissions to install and activate plugins.', 'woocommerce-exporter' ) );
         }
 
         // Check if the plugin is valid.
         if ( ! $this->_is_plugin_allowed_for_install( $plugin_slug ) ) {
-            return new \WP_Error( 'woo_ce_plugin_not_allowed', __( 'The plugin is not valid.', 'woocommerce-store-toolkit' ) );
+            return new \WP_Error( 'woo_ce_plugin_not_allowed', __( 'The plugin is not valid.', 'woocommerce-exporter' ) );
         }
 
         // Get required files since we're calling this outside of context.
@@ -85,7 +86,7 @@ class Plugin_Installer {
 
         // Check if the plugin is already active.
         if ( is_plugin_active( $plugin_basename ) ) {
-            return new \WP_Error( 'woo_ce_plugin_already_active', __( 'The plugin is already installed.', 'woocommerce-store-toolkit' ) );
+            return new \WP_Error( 'woo_ce_plugin_already_active', __( 'The plugin is already installed.', 'woocommerce-exporter' ) );
         }
 
         // Check if the plugin is already installed but inactive, just activate it and return true.
