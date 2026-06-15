@@ -8,6 +8,7 @@
 namespace VisserLabs\WSE\Classes\Export;
 
 use VisserLabs\WSE\Abstracts\Abstract_Class;
+use VisserLabs\WSE\Traits\Brands_Detection_Trait;
 use VisserLabs\WSE\Traits\Singleton_Trait;
 use VisserLabs\WSE\Helpers\Export as Export_Helper;
 
@@ -20,6 +21,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Brand extends Abstract_Class {
 
+    use Brands_Detection_Trait;
     use Singleton_Trait;
 
     /**
@@ -117,7 +119,7 @@ class Brand extends Abstract_Class {
      * @access public
      */
     public function run() {
-        if ( ! is_plugin_active( 'woocommerce-brands/woocommerce-brands.php' ) ) {
+        if ( ! $this->is_brands_available() ) {
             return;
         }
 

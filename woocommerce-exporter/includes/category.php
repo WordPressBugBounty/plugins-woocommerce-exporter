@@ -60,19 +60,26 @@ if ( is_admin() ) {
 	 *
 	 * @param array  $args        The existing arguments.
 	 * @param string $export_type The export type.
+	 * @param array  $form_data   Parsed Quick Export form data.
 	 * @return array
 	 */
-	function woo_ce_category_dataset_args( $args, $export_type = '' ) {
+	function woo_ce_category_dataset_args( $args, $export_type = '', $form_data = array() ) {
 		// Check if we're dealing with the Category Export Type.
 		if ( 'category' !== $export_type ) {
 			return $args;
 		}
 
+		// Forward-compat guard: every in-tree caller passes $form_data, but fall back to $_POST so an external 2-arg apply_filters() never hits an undefined $form_data.
+		if ( empty( $form_data ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verification handled by parent function.
+			$form_data = $_POST;
+		}
+
 		// Merge in the form data for this dataset.
 		$defaults = array(
-			'category_language' => isset( $_POST['category_filter_language'] ) ? array_map( 'sanitize_text_field', wp_unslash( (array) $_POST['category_filter_language'] ) ) : false,
-			'category_orderby'  => isset( $_POST['category_orderby'] ) ? sanitize_text_field( wp_unslash( $_POST['category_orderby'] ) ) : false,
-			'category_order'    => isset( $_POST['category_order'] ) ? sanitize_text_field( wp_unslash( $_POST['category_order'] ) ) : false,
+			'category_language' => isset( $form_data['category_filter_language'] ) ? array_map( 'sanitize_text_field', wp_unslash( (array) $form_data['category_filter_language'] ) ) : false,
+			'category_orderby'  => isset( $form_data['category_orderby'] ) ? sanitize_text_field( wp_unslash( $form_data['category_orderby'] ) ) : false,
+			'category_order'    => isset( $form_data['category_order'] ) ? sanitize_text_field( wp_unslash( $form_data['category_order'] ) ) : false,
 		);
 		$args     = wp_parse_args( $args, $defaults );
 
@@ -86,7 +93,7 @@ if ( is_admin() ) {
 
 		return $args;
 	}
-	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_category_dataset_args', 10, 2 );
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_category_dataset_args', 10, 3 );
 
 	/* End of: WordPress Administration */
 

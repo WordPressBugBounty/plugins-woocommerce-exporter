@@ -2,6 +2,19 @@
   // Get params from localized script.
   var $params = wsed_export_params;
 
+  /**
+   * Extract error message from a failed jqXHR response.
+   *
+   * @param {Object} jqXHR The jQuery XMLHttpRequest object.
+   * @return {string} The error message.
+   */
+  function getExportErrorMessage(jqXHR) {
+    if (jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
+      return jqXHR.responseJSON.data.message;
+    }
+    return $params.i18n.export_error;
+  }
+
   var WSED_QuickExport = (function () {
     /**
      * QuickExport contructor.
@@ -86,14 +99,14 @@
               self.$progressBarLabel.text(response.data.message);
             }
           },
-          error: function (response) {
+          error: function (jqXHR) {
             self.exportStatus = 'failed';
             self.exportRunning = false;
 
             self.$modalCloseBtn.show();
             self.$progressBar.progressbar({ value: 100 });
             self.$progressBar.addClass('progress-bar-error');
-            self.$progressBarLabel.text(response.data.message);
+            self.$progressBarLabel.text(getExportErrorMessage(jqXHR));
           },
         });
       });
@@ -200,7 +213,7 @@
             self.$progressBarLabel.text(response.data.message);
           }
         },
-        error: function (response) {
+        error: function (jqXHR) {
           self.clearExportTransient();
 
           self.exportRunning = false;
@@ -209,7 +222,7 @@
           self.$modalCloseBtn.show();
           self.$progressBar.progressbar({ value: 100 });
           self.$progressBar.addClass('progress-bar-error');
-          self.$progressBarLabel.text(response.data.message);
+          self.$progressBarLabel.text(getExportErrorMessage(jqXHR));
         },
       });
     };

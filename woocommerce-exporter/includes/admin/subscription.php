@@ -9,13 +9,14 @@
  */
 function woo_ce_subscriptions_filter_by_date() {
 
-    $tomorrow                              = date( 'l', strtotime( 'tomorrow', current_time( 'timestamp' ) ) );
-    $today                                 = date( 'l', current_time( 'timestamp' ) );
-    $yesterday                             = date( 'l', strtotime( '-1 days', current_time( 'timestamp' ) ) );
-    $current_month                         = date( 'F', current_time( 'timestamp' ) );
-    $last_month                            = date( 'F', mktime( 0, 0, 0, date( 'n', current_time( 'timestamp' ) ) - 1, 1, date( 'Y', current_time( 'timestamp' ) ) ) );
-    $current_year                          = date( 'Y', current_time( 'timestamp' ) );
-    $last_year                             = date( 'Y', strtotime( '-1 year', current_time( 'timestamp' ) ) );
+    $now                                   = new DateTimeImmutable( 'now', wp_timezone() );
+    $tomorrow                              = wp_date( 'l', $now->modify( '+1 day' )->getTimestamp() );
+    $today                                 = wp_date( 'l', $now->getTimestamp() );
+    $yesterday                             = wp_date( 'l', $now->modify( '-1 day' )->getTimestamp() );
+    $current_month                         = wp_date( 'F', $now->getTimestamp() );
+    $last_month                            = wp_date( 'F', $now->modify( 'first day of last month' )->getTimestamp() );
+    $current_year                          = wp_date( 'Y', $now->getTimestamp() );
+    $last_year                             = wp_date( 'Y', $now->modify( '-1 year' )->getTimestamp() );
     $subscription_dates_variable           = woo_ce_get_option( 'subscription_dates_filter_variable', '' );
     $subscription_dates_variable_length    = woo_ce_get_option( 'subscription_dates_filter_variable_length', '' );
     $date_format                           = woo_ce_get_option( 'date_format', 'd/m/Y' );

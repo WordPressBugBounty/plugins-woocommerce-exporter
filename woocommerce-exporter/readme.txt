@@ -5,7 +5,7 @@ Tags: woocommerce export, export products, export orders, export subscriptions, 
 Requires at least: 2.9.2
 Tested up to: 7.0
 Requires PHP: 5.6
-Stable tag: 2.7.8
+Stable tag: 2.7.9
 License: GPLv2 or later
 
 Export WooCommerce products, orders, customers, categories, tags, subscriptions & more into formatted files like CSV, XML, Excel 2007, XLS, XLSX.
@@ -164,6 +164,23 @@ You can report security bugs through the Patchstack Vulnerability Disclosure Pro
 6. Manage Plugin options from the Settings screen.
 
 == Changelog ==
+
+= 2.7.9 =
+* Bug Fix: Brands are not being exported
+* Bug Fix: Custom user meta fields (woo_ce_custom_users) missing from order exports after v5.x refactor
+* Bug Fix: Export fails with fatal error when date format uses slashes (d/m/Y)
+* Bug Fix: Fatal error calling get_description() on int when exporting subscriptions with coupons
+* Bug Fix: Fatal error: attempt to assign property 'order_id' on null when exporting subscriptions with HPOS enabled
+* Bug Fix: Fatal error: call to get_description() on int when exporting orders/subscriptions with recurring discount coupons
+* Bug Fix: Incorrect "last month" date filter when using UTC-1 or negative timezones
+* Bug Fix: Quick Export filters silently ignored for non-user export types (follow-up to #233)
+* Bug Fix: Quick Export of users fails with 500 error on large user sites, permanently locks exports
+* Bug Fix: Subscription Items export reads from parent order instead of current subscription
+* Bug Fix: Subscription Items: product variation and variation ID columns always empty for variable subscriptions
+* Bug Fix: Subscription export 500 error when HPOS enabled and date filter applied
+* Bug Fix: User export: WooCommerce Memberships filter ignored (exports all users)
+* Bug Fix: User export: disabled filters still applied (stale filter state)
+* Feature: Add support to export Cost of Goods Sold (COGS) in the products and order type export
 
 = 2.7.8 =
 * Bug Fix: Custom order meta incorrectly appear for customer and subscription export

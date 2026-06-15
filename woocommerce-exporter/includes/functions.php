@@ -501,8 +501,11 @@ if ( is_admin() ) {
 			case 'dismiss_export_running_prompt':
 				// We need to verify the nonce.
 				if ( ! empty( $_GET ) && check_admin_referer( 'woo_ce_dismiss_export_running_prompt' ) ) {
-					// Remember that we've dismissed this notice.
+					// Remember that we've dismissed this notice. Clear both the legacy
+					// procedural lock and the modern Quick Export lock so a crashed
+					// background export can no longer permanently block new exports.
 					delete_transient( WOO_CE_PREFIX . '_running' );
+					delete_transient( WOO_CE_PREFIX . '_export_running' );
 					$url = add_query_arg(
 						array(
 							'action'   => null,

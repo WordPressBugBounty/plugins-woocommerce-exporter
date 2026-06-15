@@ -3098,17 +3098,24 @@ function woo_ce_format_measurement_input_type( $input_type = '' ) {
 
 }
 
-function woo_ce_extend_product_dataset_args( $args, $export_type = '' ) {
+function woo_ce_extend_product_dataset_args( $args, $export_type = '', $form_data = array() ) {
 
 	// Check if we're dealing with the Product Export Type
 	if( $export_type <> 'product' )
 		return $args;
 
+	// Forward-compat guard: every in-tree caller passes $form_data, but fall back to $_POST so an external 2-arg apply_filters() never hits an undefined $form_data.
+	if ( empty( $form_data ) ) {
+		$form_data = $_POST;
+	}
+
 	$custom_products = woo_ce_get_option( 'custom_products', '' );
 	if( !empty( $custom_products ) ) {
 		$product_meta = array();
-		foreach( $custom_products as $custom_product )
-			$product_meta[esc_attr( $custom_product )] = ( isset( $_POST[sprintf( 'product_filter_custom_meta-%s', esc_attr( $custom_product ) )] ) ? $_POST[sprintf( 'product_filter_custom_meta-%s', esc_attr( $custom_product ) )] : false );
+		foreach( $custom_products as $custom_product ) {
+			$meta_key                                    = sprintf( 'product_filter_custom_meta-%s', esc_attr( $custom_product ) );
+			$product_meta[ esc_attr( $custom_product ) ] = ( isset( $form_data[ $meta_key ] ) ? sanitize_text_field( wp_unslash( $form_data[ $meta_key ] ) ) : false );
+		}
 		if( !empty( $product_meta ) )
 			$args['product_custom_meta'] = $product_meta;
 	}
@@ -3116,7 +3123,7 @@ function woo_ce_extend_product_dataset_args( $args, $export_type = '' ) {
 	return $args;
 
 }
-add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_product_dataset_args', 10, 2 );
+add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_product_dataset_args', 10, 3 );
 
 function woo_ce_extend_get_products_args( $args ) {
 

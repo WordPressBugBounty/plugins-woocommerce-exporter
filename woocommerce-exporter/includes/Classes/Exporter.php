@@ -96,8 +96,8 @@ class Exporter extends Abstract_Exporter {
                 throw new Exception( __( 'An export is already running.', 'woocommerce-exporter' ) );
             }
 
-            // Set transient.
-            set_transient( WOO_CE_PREFIX . '_export_running', true );
+            // Set transient with 30 minute expiration to auto-clear if export crashes.
+            set_transient( WOO_CE_PREFIX . '_export_running', true, 30 * MINUTE_IN_SECONDS );
 
             $this->prepare_server();
 
@@ -113,6 +113,15 @@ class Exporter extends Abstract_Exporter {
             }
 
             $this->set_export_settings( $export );
+
+            // Mirror ajax_batch()'s global assignment so the legacy
+            // woo_ce_extend_get_products_args consumer (hooked to
+            // woo_ce_get_products_args, applied by woo_ce_get_products() in the
+            // product path) can read `global $export->args['product_custom_meta']`
+            // during the prepare step and append its meta_query clause to the
+            // WP_Query args. The order path filters custom meta directly in
+            // Order::get_object_ids() and does not depend on this global.
+            $GLOBALS['export'] = $export;
 
             // Set the filename.
             $this->set_filename( $export->filename );
@@ -335,6 +344,20 @@ class Exporter extends Abstract_Exporter {
         delete_transient( WOO_CE_PREFIX . '_export_batch' );
         delete_transient( WOO_CE_PREFIX . '_export_filename' );
         delete_transient( WOO_CE_PREFIX . '_total_exported' );
+        delete_transient( WOO_CE_PREFIX . '_order_statuses' );
+    }
+
+    /**
+     * Invalidate the cached order statuses transient.
+     *
+     * Hooked to order lifecycle events so the cached counts used by the
+     * Filter Orders by Status UI stay in sync with the database without
+     * waiting for the 1-hour TTL or a manual "Clear Export Transient" click.
+     *
+     * @access public
+     */
+    public function clear_order_statuses_transient() {
+        delete_transient( WOO_CE_PREFIX . '_order_statuses' );
     }
 
     /**
@@ -343,5 +366,8 @@ class Exporter extends Abstract_Exporter {
      * @since 2.7.3
      * @access public
      */
-    public function run() {}
+    public function run() {
+        add_action( 'woocommerce_new_order', array( $this, 'clear_order_statuses_transient' ) );
+        add_action( 'woocommerce_order_status_changed', array( $this, 'clear_order_statuses_transient' ) );
+    }
 }

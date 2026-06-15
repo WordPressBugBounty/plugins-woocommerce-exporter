@@ -8,15 +8,17 @@
  */
 function woo_ce_commissions_filter_by_date() {
 
-    $today                            = date( 'l' );
-    $yesterday                        = date( 'l', strtotime( '-1 days' ) );
-    $current_month                    = date( 'F' );
-    $last_month                       = date( 'F', mktime( 0, 0, 0, date( 'n' ) - 1, 1, date( 'Y' ) ) );
+    $now           = new DateTimeImmutable( 'now', wp_timezone() );
+    $today         = wp_date( 'l', $now->getTimestamp() );
+    $yesterday     = wp_date( 'l', $now->modify( '-1 day' )->getTimestamp() );
+    $current_month = wp_date( 'F', $now->getTimestamp() );
+    $last_month    = wp_date( 'F', $now->modify( 'first day of last month' )->getTimestamp() );
+
     $commission_dates_variable        = '';
     $commission_dates_variable_length = '';
     $date_format                      = 'd/m/Y';
     $commission_dates_from            = woo_ce_get_commission_first_date( $date_format );
-    $commission_dates_to              = date( $date_format );
+    $commission_dates_to              = wp_date( $date_format, $now->getTimestamp() );
 
     ob_start(); ?>
     <p>

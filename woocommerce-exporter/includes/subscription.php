@@ -1044,14 +1044,45 @@ function woo_ce_get_subscriptions( $args = array(), $export_settings = null ) {
 
         // Add date filters before calling wcs_get_subscriptions.
         if ( ! empty( $subscription_dates_from ) && ! empty( $subscription_dates_to ) ) {
-            $args['date_query'] = array(
-                array(
-                    'column'    => apply_filters( 'woo_ce_get_subscriptions_filter_subscription_dates_column', 'post_date' ),
-                    'before'    => $subscription_dates_to,
-                    'after'     => $subscription_dates_from,
-                    'inclusive' => true,
-                ),
-            );
+            $hpos_enabled = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )
+                && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+
+            if ( $hpos_enabled ) {
+                // HPOS routes wcs_get_subscriptions() through OrdersTableQuery, which does not
+                // support WP_Query-style date_query arrays. Use the native string range syntax
+                // (inclusive on both ends) instead.
+                $format_dt = static fn( array $dt ): string => sprintf(
+                    '%04d-%02d-%02d %02d:%02d:%02d',
+                    $dt['year'],
+                    $dt['month'],
+                    $dt['day'],
+                    $dt['hour'],
+                    $dt['minute'],
+                    $dt['second']
+                );
+
+                // Map legacy CPT date columns to OrdersTableQuery date-arg keys so the
+                // existing filter contract is preserved on HPOS stores.
+                $column          = apply_filters( 'woo_ce_get_subscriptions_filter_subscription_dates_column', 'post_date' );
+                $hpos_column_map = array(
+                    'post_date'         => 'date_created',
+                    'post_date_gmt'     => 'date_created_gmt',
+                    'post_modified'     => 'date_updated',
+                    'post_modified_gmt' => 'date_updated_gmt',
+                );
+                $hpos_arg_key    = $hpos_column_map[ $column ] ?? 'date_created';
+
+                $args[ $hpos_arg_key ] = $format_dt( $subscription_dates_from ) . '...' . $format_dt( $subscription_dates_to );
+            } else {
+                $args['date_query'] = array(
+                    array(
+                        'column'    => apply_filters( 'woo_ce_get_subscriptions_filter_subscription_dates_column', 'post_date' ),
+                        'before'    => $subscription_dates_to,
+                        'after'     => $subscription_dates_from,
+                        'inclusive' => true,
+                    ),
+                );
+            }
         }
 
         // Check if we are filtering Subscriptions by Last Export.
@@ -1347,6 +1378,22 @@ function woo_ce_get_subscription_data( $subscription_id, $args = array(), $field
         if ( class_exists( 'WC_Subscriptions_Manager' ) ) {
             if ( method_exists( 'WC_Subscriptions_Manager', 'get_subscription' ) ) {
                 $wcs_subscription = WC_Subscriptions_Manager::get_subscription( $subscription_id );
+            }
+        }
+    }
+
+    // get_post() returns null when HPOS is active (subscriptions stored in custom tables).
+    // Hydrate a placeholder using $wcs_subscription so downstream paths that read
+    // WP_Post-equivalent fields (post_parent, post_status, ID) continue to work and
+    // the exported row matches the legacy wp_posts path.
+    if ( null === $subscription ) {
+        $subscription = new stdClass();
+        if ( ! empty( $wcs_subscription ) && is_object( $wcs_subscription ) ) {
+            $subscription->ID          = method_exists( $wcs_subscription, 'get_id' ) ? $wcs_subscription->get_id() : (int) $subscription_id;
+            $subscription->post_parent = method_exists( $wcs_subscription, 'get_parent_id' ) ? $wcs_subscription->get_parent_id() : 0;
+            if ( method_exists( $wcs_subscription, 'get_status' ) ) {
+                $status                    = $wcs_subscription->get_status();
+                $subscription->post_status = ( '' !== $status && 0 !== strpos( $status, 'wc-' ) ) ? 'wc-' . $status : $status;
             }
         }
     }

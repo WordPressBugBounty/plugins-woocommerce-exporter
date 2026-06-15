@@ -723,6 +723,20 @@ class Order extends Abstract_Class {
             }
         }
 
+        // Custom User meta fields.
+        $custom_users = get_option( WOO_CE_PREFIX . '_custom_users', '' );
+        if ( ! empty( $custom_users ) ) {
+            foreach ( $custom_users as $custom_user ) {
+                if ( ! empty( $custom_user ) ) {
+                    $fields[] = array(
+                        'name'  => $custom_user,
+                        'label' => Export_Helper::clean_export_label( $custom_user ),
+                        'hover' => sprintf( apply_filters( 'wsed_extend_order_fields_custom_user_hover', '%s: %s' ), __( 'Custom User', 'woocommerce-exporter' ), $custom_user ),
+                    );
+                }
+            }
+        }
+
         // Custom Order Items fields.
         $custom_order_items = get_option( WOO_CE_PREFIX . '_custom_order_items', '' );
         if ( ! empty( $custom_order_items ) ) {
@@ -1060,6 +1074,20 @@ class Order extends Abstract_Class {
      * @return array
      */
     public function extend_export_dataset_args( $args, $export, $settings ) {
+        // Fire the legacy `woo_ce_extend_dataset_args` filter so third-party Order
+        // filter callbacks registered in `includes/order-extend.php` (Brand, Product
+        // Vendor, Delivery Date, Booking Date, Voucher Redeemed, Subscription Order
+        // Type, custom order meta) actually run during Quick Export. Every other
+        // export class fires this filter; Order was the lone exception, leaving
+        // those third-party filters dead in Quick Export. The legacy callback fires
+        // first with the bare dataset args; this class's gated modern logic below
+        // then overwrites keys it has authoritative handling for (`order_customer`,
+        // `order_coupon`, `order_order_type`) when the matching filter checkbox is
+        // enabled.
+        if ( ! $export->scheduled_export ) {
+            $args = apply_filters( 'woo_ce_extend_dataset_args', $args, $export->type, $settings );
+        }
+
         $orders_filters = $settings['orders_filters'] ?? array();
         if ( ! empty( $orders_filters ) ) {
             if ( isset( $orders_filters['date'] ) && 'on' === $orders_filters['date'] ) {
@@ -1311,6 +1339,17 @@ class Order extends Abstract_Class {
                         'compare' => 'IN',
                     ),
                 );
+            } else {
+                // Selected role(s) resolved to no users; force zero results.
+                // -1 is safe as a sentinel because WP user IDs are always positive,
+                // so no order's customer_id can ever equal it.
+                $args['field_query'][] = array(
+                    array(
+                        'field'   => 'customer_id',
+                        'value'   => -1,
+                        'compare' => '=',
+                    ),
+                );
             }
         }
 
@@ -1334,6 +1373,31 @@ class Order extends Abstract_Class {
                     'compare' => 'IN',
                 ),
             );
+        }
+
+        // Order Custom meta.
+        // The Quick Export order path builds its query with wc_get_orders() and never
+        // applies the legacy `woo_ce_get_orders_args` filter, so the
+        // `woo_ce_extend_get_orders_args` callback that normally turns `order_custom_meta`
+        // into a meta_query never fires. Translate it directly here so the custom-meta
+        // filter actually scopes the export.
+        $order_meta = ( isset( $export_args['order_custom_meta'] ) ? $export_args['order_custom_meta'] : false );
+        if ( ! empty( $order_meta ) ) {
+            $custom_orders = woo_ce_get_option( 'custom_orders', '' );
+            if ( ! empty( $custom_orders ) ) {
+                if ( ! isset( $args['meta_query'] ) ) {
+                    $args['meta_query'] = array();
+                }
+                foreach ( $custom_orders as $custom_order ) {
+                    if ( isset( $order_meta[ esc_attr( $custom_order ) ] ) && ! empty( $order_meta[ esc_attr( $custom_order ) ] ) ) {
+                        $args['meta_query'][] = array(
+                            'key'   => $custom_order,
+                            'value' => is_array( $order_meta[ esc_attr( $custom_order ) ] ) ? $order_meta[ esc_attr( $custom_order ) ] : explode( ',', $order_meta[ esc_attr( $custom_order ) ] ),
+                        );
+                    }
+                }
+            }
+            unset( $custom_orders, $custom_order );
         }
 
         /**
@@ -2492,6 +2556,19 @@ class Order extends Abstract_Class {
                 $data['user_role'] = isset( $fields['user_role'] ) && ! empty( $user->roles ) ? implode( $category_separator, $user->roles ) : '';
             }
         }
+
+        // Custom User meta fields.
+        // Guarded against overwriting standard order columns (e.g. billing_email) when an admin
+        // registers a user meta key that collides with a built-in field name.
+        $custom_users = get_option( WOO_CE_PREFIX . '_custom_users', '' );
+        if ( ! empty( $custom_users ) && 0 !== $order->get_customer_id() ) {
+            foreach ( $custom_users as $custom_user ) {
+                if ( ! empty( $custom_user ) && isset( $fields[ $custom_user ] ) && 'on' === $fields[ $custom_user ] && ! isset( $data[ $custom_user ] ) ) {
+                    $data[ $custom_user ] = maybe_serialize( get_user_meta( $order->get_user_id(), $custom_user, true ) );
+                }
+            }
+        }
+
         return $data;
     }
 

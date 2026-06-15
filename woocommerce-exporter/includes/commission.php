@@ -103,23 +103,28 @@ if( is_admin() ) {
 
 	}
 
-	function woo_ce_commission_dataset_args( $args, $export_type = '' ) {
+	function woo_ce_commission_dataset_args( $args, $export_type = '', $form_data = array() ) {
 
 		// Check if we're dealing with the Commission Export Type
 		if( $export_type <> 'commission' )
 			return $args;
 
+		// Forward-compat guard: every in-tree caller passes $form_data, but fall back to $_POST so an external 2-arg apply_filters() never hits an undefined $form_data.
+		if ( empty( $form_data ) ) {
+			$form_data = $_POST;
+		}
+
 		// Merge in the form data for this dataset
 		$defaults = array(
-			'commission_dates_filter' => ( isset( $_POST['commission_dates_filter'] ) ? sanitize_text_field( $_POST['commission_dates_filter'] ) : false ),
-			'commission_dates_from' => ( isset( $_POST['commission_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['commission_dates_from'] ) ) : '' ),
-			'commission_dates_to' => ( isset( $_POST['commission_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['commission_dates_to'] ) ) : '' ),
-			'commission_dates_filter_variable' => ( isset( $_POST['commission_dates_filter_variable'] ) ? absint( $_POST['commission_dates_filter_variable'] ) : false ),
-			'commission_dates_filter_variable_length' => ( isset( $_POST['commission_dates_filter_variable_length'] ) ? sanitize_text_field( $_POST['commission_dates_filter_variable_length'] ) : false ),
-			'commission_product_vendor' => ( isset( $_POST['commission_filter_product_vendor'] ) ? woo_ce_format_product_filters( array_map( 'absint', (array)$_POST['commission_filter_product_vendor'] ) ) : false ),
-			'commission_status' => ( isset( $_POST['commission_filter_commission_status'] ) ? woo_ce_format_product_filters( array_map( 'sanitize_text_field', (array)$_POST['commission_filter_commission_status'] ) ) : false ),
-			'commission_orderby' => ( isset( $_POST['commission_orderby'] ) ? sanitize_text_field( $_POST['commission_orderby'] ) : false ),
-			'commission_order' => ( isset( $_POST['commission_order'] ) ? sanitize_text_field( $_POST['commission_order'] ) : false )
+			'commission_dates_filter' => ( isset( $form_data['commission_dates_filter'] ) ? sanitize_text_field( wp_unslash( $form_data['commission_dates_filter'] ) ) : false ),
+			'commission_dates_from' => ( isset( $form_data['commission_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['commission_dates_from'] ) ) ) : '' ),
+			'commission_dates_to' => ( isset( $form_data['commission_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['commission_dates_to'] ) ) ) : '' ),
+			'commission_dates_filter_variable' => ( isset( $form_data['commission_dates_filter_variable'] ) ? absint( $form_data['commission_dates_filter_variable'] ) : false ),
+			'commission_dates_filter_variable_length' => ( isset( $form_data['commission_dates_filter_variable_length'] ) ? sanitize_text_field( wp_unslash( $form_data['commission_dates_filter_variable_length'] ) ) : false ),
+			'commission_product_vendor' => ( isset( $form_data['commission_filter_product_vendor'] ) ? woo_ce_format_product_filters( array_map( 'absint', (array) wp_unslash( $form_data['commission_filter_product_vendor'] ) ) ) : false ),
+			'commission_status' => ( isset( $form_data['commission_filter_commission_status'] ) ? woo_ce_format_product_filters( array_map( 'sanitize_text_field', (array) wp_unslash( $form_data['commission_filter_commission_status'] ) ) ) : false ),
+			'commission_orderby' => ( isset( $form_data['commission_orderby'] ) ? sanitize_text_field( wp_unslash( $form_data['commission_orderby'] ) ) : false ),
+			'commission_order' => ( isset( $form_data['commission_order'] ) ? sanitize_text_field( wp_unslash( $form_data['commission_order'] ) ) : false )
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -132,7 +137,7 @@ if( is_admin() ) {
 		return $args;
 
 	}
-	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_commission_dataset_args', 10, 2 );
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_commission_dataset_args', 10, 3 );
 
 	/* End of: WordPress Administration */
 

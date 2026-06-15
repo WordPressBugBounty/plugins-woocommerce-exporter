@@ -8,6 +8,7 @@
 namespace VisserLabs\WSE\Helpers;
 
 use DateTime;
+use DateTimeZone;
 use WC_DateTime;
 use WC_Countries;
 
@@ -56,32 +57,67 @@ class Formatting {
     /**
      * Format a date.
      *
-     * @param string|int|WC_DateTime $date Date.
-     * @param string                 $format Date format.
-     * @param bool                   $time Whether to include time.
-     * @return string
+     * Handles DateTimeInterface inputs without stripping timezone, and parses
+     * string inputs via the store-configured date format to avoid fatal errors
+     * on slash-delimited (d/m/Y) strings whose day value exceeds 12.
+     *
+     * @param string|int|\DateTimeInterface $date   Date.
+     * @param string                        $format Date format. Defaults to the store-configured date format option.
+     * @param bool                          $time   Whether to append wc_time_format() to the output.
+     * @return string Formatted date, or empty string if parsing fails.
      */
     public static function format_date( $date, $format = '', $time = false ) {
         if ( ! $date ) {
             return '';
         }
 
-        // If string is passed, convert to WC_DateTime.
-        // If timestamp is passed, convert to WC_DateTime.
-        $date = is_numeric( $date ) ? new WC_DateTime( '@' . $date ) : new WC_DateTime( $date );
+        $store_format = get_option( WOO_CE_PREFIX . '_date_format', 'Y-m-d H:i:s' );
 
-        $format = empty( $format ) ? get_option( WOO_CE_PREFIX . '_date_format', 'Y-m-d H:i:s' ) : $format;
-        $format = $time ? $format . ' ' . wc_time_format() : $format;
-
-        if ( $time ) {
-            $format = $format . ' ' . wc_time_format();
-        }
-
-        if ( $date instanceof WC_DateTime ) {
-            return $date->format( $format );
+        if ( $date instanceof \DateTimeInterface ) {
+            // Preserve the input's timezone so format() outputs in the same offset the
+            // caller's object carries (e.g. store-local time for WC_DateTime objects
+            // returned by $order->get_date_*()).
+            $datetime = $date;
+        } elseif ( is_numeric( $date ) ) {
+            $datetime = new WC_DateTime( '@' . $date );
         } else {
-            return '';
+            // String input: try the store's configured date format first, then fall back
+            // to native parsing (covers ISO 8601, MySQL datetime, etc.). Without this,
+            // PHP's DateTime constructor silently mis-parses slash-delimited dates as
+            // m/d/Y, causing a fatal error when the day value is > 12 (e.g. "31/10/2025"
+            // → invalid month 31). The store timezone is passed explicitly so the parser
+            // interprets the value in the same offset the WC ecosystem uses, and the
+            // parsed DateTime is used directly (rather than via '@' . getTimestamp()) so
+            // format() output stays in store-local time rather than UTC.
+            $store_timezone = new DateTimeZone( wc_timezone_string() );
+            $parsed         = DateTime::createFromFormat( '!' . $store_format, (string) $date, $store_timezone );
+            if ( $parsed instanceof DateTime ) {
+                $datetime = $parsed;
+            } else {
+                try {
+                    $datetime = new WC_DateTime( (string) $date );
+                } catch ( \Exception $e ) {
+                    if ( function_exists( 'wc_get_logger' ) ) {
+                        wc_get_logger()->debug(
+                            sprintf( 'format_date: unable to parse "%s"', (string) $date ),
+                            array( 'source' => 'woocommerce-exporter' )
+                        );
+                    }
+                    return '';
+                }
+            }
         }
+
+        $format = empty( $format ) ? $store_format : $format;
+        if ( $time ) {
+            $format .= ' ' . wc_time_format();
+        }
+
+        if ( $datetime instanceof \DateTimeInterface ) {
+            return $datetime->format( $format );
+        }
+
+        return '';
     }
 
     /**

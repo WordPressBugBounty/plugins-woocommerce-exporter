@@ -2694,7 +2694,8 @@ function woo_ce_get_order_data( $order_id = 0, $export_type = 'order', $args = a
         $order_data['order_discount'] = $order->get_total_discount();
         $order_data['coupon_code']    = woo_ce_get_order_assoc_coupon( $order_id );
         if ( ! empty( $order_data['coupon_code'] ) ) {
-            $coupon = wc_get_coupon_id_by_code( $order_data['coupon_code'] );
+            $coupon_id = wc_get_coupon_id_by_code( $order_data['coupon_code'] );
+            $coupon    = $coupon_id ? new WC_Coupon( $coupon_id ) : null;
             if ( null !== $coupon ) {
                 $order_data['coupon_description'] = $coupon->get_description();
                 $order_data['coupon_expiry_date'] = woo_ce_format_date( $coupon->get_date_expires(), $date_format );
@@ -3787,6 +3788,56 @@ function woo_ce_get_order_first_date( $date_format = 'd/m/Y' ) {
 }
 
 /**
+ * Returns an associative array of order status slug => count.
+ *
+ * Detects HPOS (High-Performance Order Storage) and queries the
+ * `wc_orders` table directly when enabled, falling back to
+ * `wp_count_posts()` for sites still using the legacy CPT storage.
+ *
+ * @param string $post_type Order post type. Default 'shop_order'.
+ * @return array<string,int> Counts keyed by both 'wc-<status>' and '<status>' slugs.
+ */
+function woo_ce_get_order_status_counts( $post_type = 'shop_order' ) {
+
+    $counts = array();
+
+    $hpos_enabled = (
+        class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )
+        && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled()
+    );
+
+    if ( $hpos_enabled ) {
+        global $wpdb;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT status, COUNT(*) AS num FROM {$wpdb->prefix}wc_orders WHERE type = %s GROUP BY status",
+                $post_type
+            )
+        );
+        if ( ! empty( $rows ) ) {
+            foreach ( $rows as $row ) {
+                $slug                    = (string) $row->status;
+                $bare                    = ( 0 === strpos( $slug, 'wc-' ) ) ? substr( $slug, 3 ) : $slug;
+                $counts[ $bare ]         = (int) $row->num;
+                $counts[ 'wc-' . $bare ] = (int) $row->num;
+            }
+        }
+    } else {
+        $posts_count = wp_count_posts( $post_type );
+        if ( ! empty( $posts_count ) ) {
+            foreach ( (array) $posts_count as $slug => $num ) {
+                $bare                    = ( 0 === strpos( (string) $slug, 'wc-' ) ) ? substr( (string) $slug, 3 ) : (string) $slug;
+                $counts[ $bare ]         = (int) $num;
+                $counts[ 'wc-' . $bare ] = (int) $num;
+            }
+        }
+    }
+
+    return $counts;
+}
+
+/**
  * Returns a list of WooCommerce Order statuses.
  *
  * @return array
@@ -3808,12 +3859,12 @@ function woo_ce_get_order_statuses() {
                 $terms     = array();
                 $post_type = 'shop_order';
                 if ( apply_filters( 'woo_ce_scheduled_export_allow_order_status_count', true ) ) {
-                    $posts_count = wp_count_posts( $post_type );
+                    $counts = woo_ce_get_order_status_counts( $post_type );
                     foreach ( $order_statuses as $key => $order_status ) {
                         $terms[] = (object) array(
                             'name'  => $order_status,
                             'slug'  => $key,
-                            'count' => ( isset( $posts_count->$key ) ? $posts_count->$key : 0 ),
+                            'count' => (int) ( $counts[ $key ] ?? 0 ),
                         );
                     }
                 } else {

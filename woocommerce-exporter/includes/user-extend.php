@@ -37,7 +37,7 @@ if( is_admin() ) {
 	}
 	add_action( 'woo_ce_export_user_options_before_table', 'woo_ce_users_filter_by_user_membership' );
 
-	function woo_ce_extend_user_dataset_args( $args, $export_type = '' ) {
+	function woo_ce_extend_user_dataset_args( $args, $export_type = '', $form_data = array() ) {
 
 		// Check if we're dealing with the User Export Type
 		if( $export_type <> 'user' )
@@ -45,13 +45,26 @@ if( is_admin() ) {
 
 		// WooCommerce Memberships - http://www.woothemes.com/products/woocommerce-memberships/
 		if( woo_ce_detect_export_plugin( 'wc_memberships' ) ) {
-			$args['user_membership'] = ( isset( $_POST['user_filter_user_membership'] ) ? woo_ce_format_user_role_filters( array_map( 'sanitize_text_field', (array)$_POST['user_filter_user_membership'] ) ) : false );
+			// Plan values are WC Memberships post IDs. Quick Export passes them via
+			// $form_data; older entry points still use $_POST. Cast each value to a
+			// positive integer at the source.
+			if ( ! empty( $form_data ) && isset( $form_data['user_filter_user_membership'] ) ) {
+				$user_membership_filter = array_map( 'absint', (array) $form_data['user_filter_user_membership'] );
+			} elseif ( isset( $_POST['user_filter_user_membership'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$user_membership_filter = array_map( 'absint', (array) wp_unslash( $_POST['user_filter_user_membership'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			} else {
+				$user_membership_filter = array();
+			}
+
+			$args['user_membership'] = ! empty( $user_membership_filter )
+				? woo_ce_format_user_role_filters( $user_membership_filter )
+				: false;
 		}
 
 		return $args;
 
 	}
-	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_user_dataset_args', 10, 2 );
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_user_dataset_args', 10, 3 );
 
 	function woo_ce_extend_get_users_args( $args, $export_args ) {
 

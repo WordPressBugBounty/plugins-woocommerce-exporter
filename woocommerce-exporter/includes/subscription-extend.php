@@ -4,24 +4,29 @@ if ( is_admin() ) {
 
 	/* Start of: WordPress Administration */
 
-	function woo_ce_extend_subscription_dataset_args( $args, $export_type = '' ) {
+	function woo_ce_extend_subscription_dataset_args( $args, $export_type = '', $form_data = array() ) {
 
 		// Check if we're dealing with the Subscription Export Type
 		if ( $export_type <> 'subscription' ) {
 			return $args;
         }
 
+		// Quick Export passes the parsed form fields as $form_data; fall back to $_POST for legacy 2-arg callers.
+		if ( empty( $form_data ) ) {
+			$form_data = $_POST;
+		}
+
 		$user_count = woo_ce_get_export_type_count( 'user' );
 		$list_limit = apply_filters( 'woo_ce_order_filter_subscription_list_limit', 100, $user_count );
 		if ( $user_count < $list_limit ) {
-			$args['subscription_customer'] = ( isset( $_POST['subscription_filter_customer'] ) ? array_map( 'absint', (array) $_POST['subscription_filter_customer'] ) : false );
+			$args['subscription_customer'] = ( isset( $form_data['subscription_filter_customer'] ) ? array_map( 'absint', (array) wp_unslash( $form_data['subscription_filter_customer'] ) ) : false );
 		} else {
-$args['subscription_customer'] = ( isset( $_POST['subscription_filter_customer'] ) ? sanitize_text_field( $_POST['subscription_filter_customer'] ) : false );
+			$args['subscription_customer'] = ( isset( $form_data['subscription_filter_customer'] ) ? sanitize_text_field( wp_unslash( $form_data['subscription_filter_customer'] ) ) : false );
         }
 
 		return $args;
 	}
-	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_subscription_dataset_args', 10, 2 );
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_subscription_dataset_args', 10, 3 );
 
 	/* End of: WordPress Administration */
 
@@ -170,7 +175,7 @@ function woo_ce_subscription_extend( $subscription, $subscription_id ) {
 	global $export;
 
 	// Product Add-ons - http://www.woothemes.com/
-	if ( woo_ce_detect_export_plugin( 'product_addons' ) && $subscription->order_items ) {
+	if ( woo_ce_detect_export_plugin( 'product_addons' ) && ! empty( $subscription->order_items ) ) {
 		foreach ( $subscription->order_items as $order_item ) {
 			if ( isset( $order_item->product_addons_summary ) ) {
 				$subscription->order_items_product_addons_summary .= $order_item->product_addons_summary . $export->category_separator;

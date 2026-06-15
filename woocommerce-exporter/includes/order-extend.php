@@ -3464,38 +3464,44 @@ $order_data['purchase_id'] = $order_id;
 }
 add_filter( 'woo_ce_order', 'woo_ce_order_extend', 10, 4 );
 
-function woo_ce_extend_order_dataset_args( $args, $export_type = '' ) {
+function woo_ce_extend_order_dataset_args( $args, $export_type = '', $form_data = array() ) {
 
 	// Check if we're dealing with the Order Export Type
 	if ( $export_type <> 'order' ) {
 		return $args;
     }
 
+	// Forward-compat guard: every in-tree caller passes $form_data, but fall back to $_POST so an external 2-arg apply_filters() never hits an undefined $form_data.
+	if ( empty( $form_data ) ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verification handled by parent function.
+		$form_data = $_POST;
+	}
+
 	// Merge in the form data for this dataset
 	$defaults = array(
 		// WooCommerce Brands - http://proword.net/Woocommerce_Brands/
 		// WooCommerce Brands Addon - http://woothemes.com/woocommerce/
-		'order_brand'                      => ( isset( $_POST['order_filter_brand'] ) ? woo_ce_format_product_filters( array_map( 'absint', (array) $_POST['order_filter_brand'] ) ) : false ),
+		'order_brand'                      => ( isset( $form_data['order_filter_brand'] ) ? woo_ce_format_product_filters( array_map( 'absint', (array) wp_unslash( $form_data['order_filter_brand'] ) ) ) : false ),
 		// Product Vendors - http://www.woothemes.com/products/product-vendors/
-		'order_product_vendor'             => ( isset( $_POST['order_filter_product_vendor'] ) ? woo_ce_format_product_filters( array_map( 'absint', (array) $_POST['order_filter_product_vendor'] ) ) : false ),
+		'order_product_vendor'             => ( isset( $form_data['order_filter_product_vendor'] ) ? woo_ce_format_product_filters( array_map( 'absint', (array) wp_unslash( $form_data['order_filter_product_vendor'] ) ) ) : false ),
 		// YITH WooCommerce Delivery Date Premium - http://yithemes.com/themes/plugins/yith-woocommerce-delivery-date/
 		// Order Delivery Date for WooCommerce - https://wordpress.org/plugins/order-delivery-date-for-woocommerce/
 		// Order Delivery Date Pro for WooCommerce - https://www.tychesoftwares.com/store/premium-plugins/order-delivery-date-for-woocommerce-pro-21/
-		'order_delivery_dates_filter'      => ( isset( $_POST['order_delivery_dates_filter'] ) ? sanitize_text_field( $_POST['order_delivery_dates_filter'] ) : false ),
-		'order_delivery_dates_from'        => ( isset( $_POST['order_delivery_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['order_delivery_dates_from'] ) ) : false ),
-		'order_delivery_dates_to'          => ( isset( $_POST['order_delivery_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['order_delivery_dates_to'] ) ) : false ),
+		'order_delivery_dates_filter'      => ( isset( $form_data['order_delivery_dates_filter'] ) ? sanitize_text_field( wp_unslash( $form_data['order_delivery_dates_filter'] ) ) : false ),
+		'order_delivery_dates_from'        => ( isset( $form_data['order_delivery_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['order_delivery_dates_from'] ) ) ) : false ),
+		'order_delivery_dates_to'          => ( isset( $form_data['order_delivery_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['order_delivery_dates_to'] ) ) ) : false ),
 		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
-		'order_booking_dates_filter'       => ( isset( $_POST['order_booking_dates_filter'] ) ? sanitize_text_field( $_POST['order_booking_dates_filter'] ) : false ),
-		'order_booking_dates_from'         => ( isset( $_POST['order_booking_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['order_booking_dates_from'] ) ) : false ),
-		'order_booking_dates_to'           => ( isset( $_POST['order_booking_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['order_booking_dates_to'] ) ) : false ),
+		'order_booking_dates_filter'       => ( isset( $form_data['order_booking_dates_filter'] ) ? sanitize_text_field( wp_unslash( $form_data['order_booking_dates_filter'] ) ) : false ),
+		'order_booking_dates_from'         => ( isset( $form_data['order_booking_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['order_booking_dates_from'] ) ) ) : false ),
+		'order_booking_dates_to'           => ( isset( $form_data['order_booking_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['order_booking_dates_to'] ) ) ) : false ),
 		// WooCommerce Easy Booking - https://wordpress.org/plugins/woocommerce-easy-booking-system/
-		'order_booking_start_dates_filter' => ( isset( $_POST['order_booking_start_dates_filter'] ) ? sanitize_text_field( $_POST['order_booking_start_dates_filter'] ) : false ),
-		'order_booking_start_dates_from'   => ( isset( $_POST['order_booking_start_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['order_booking_start_dates_from'] ) ) : false ),
-		'order_booking_start_dates_to'     => ( isset( $_POST['order_booking_start_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( $_POST['order_booking_start_dates_to'] ) ) : false ),
+		'order_booking_start_dates_filter' => ( isset( $form_data['order_booking_start_dates_filter'] ) ? sanitize_text_field( wp_unslash( $form_data['order_booking_start_dates_filter'] ) ) : false ),
+		'order_booking_start_dates_from'   => ( isset( $form_data['order_booking_start_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['order_booking_start_dates_from'] ) ) ) : false ),
+		'order_booking_start_dates_to'     => ( isset( $form_data['order_booking_start_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( wp_unslash( $form_data['order_booking_start_dates_to'] ) ) ) : false ),
 		// WooCommerce PDF Product Vouchers - http://www.woothemes.com/products/pdf-product-vouchers/
-		'order_voucher_redeemed'           => ( isset( $_POST['order_filter_voucher_redeemed'] ) ? sanitize_text_field( $_POST['order_filter_voucher_redeemed'] ) : false ),
+		'order_voucher_redeemed'           => ( isset( $form_data['order_filter_voucher_redeemed'] ) ? sanitize_text_field( wp_unslash( $form_data['order_filter_voucher_redeemed'] ) ) : false ),
 		// WooCommerce Subscriptions - http://www.woothemes.com/products/woocommerce-subscriptions/
-		'order_order_type'                 => ( isset( $_POST['order_filter_order_type'] ) ? sanitize_text_field( $_POST['order_filter_order_type'] ) : false ),
+		'order_order_type'                 => ( isset( $form_data['order_filter_order_type'] ) ? sanitize_text_field( wp_unslash( $form_data['order_filter_order_type'] ) ) : false ),
 	);
 	$args     = wp_parse_args( $args, $defaults );
 
@@ -3541,17 +3547,17 @@ function woo_ce_extend_order_dataset_args( $args, $export_type = '' ) {
 	$user_count = woo_ce_get_export_type_count( 'user' );
 	$list_limit = apply_filters( 'woo_ce_order_filter_customer_list_limit', 100, $user_count );
 	if ( $user_count < $list_limit ) {
-		$args['order_customer'] = ( isset( $_POST['order_filter_customer'] ) ? array_map( 'absint', (array) $_POST['order_filter_customer'] ) : false );
+		$args['order_customer'] = ( isset( $form_data['order_filter_customer'] ) ? array_map( 'absint', (array) wp_unslash( $form_data['order_filter_customer'] ) ) : false );
 	} else {
-$args['order_customer'] = ( isset( $_POST['order_filter_customer'] ) ? sanitize_text_field( $_POST['order_filter_customer'] ) : false );
+		$args['order_customer'] = ( isset( $form_data['order_filter_customer'] ) ? sanitize_text_field( wp_unslash( $form_data['order_filter_customer'] ) ) : false );
     }
 
 	$coupon_count = woo_ce_get_export_type_count( 'coupon' );
 	$list_limit   = apply_filters( 'woo_ce_order_filter_coupon_list_limit', 500, $coupon_count );
 	if ( $coupon_count < $list_limit ) {
-		$args['order_coupon'] = ( isset( $_POST['order_filter_coupon'] ) ? array_map( 'absint', (array) $_POST['order_filter_coupon'] ) : false );
+		$args['order_coupon'] = ( isset( $form_data['order_filter_coupon'] ) ? array_map( 'absint', (array) wp_unslash( $form_data['order_filter_coupon'] ) ) : false );
 	} else {
-$args['order_coupon'] = ( isset( $_POST['order_filter_coupon'] ) ? sanitize_text_field( $_POST['order_filter_coupon'] ) : false );
+		$args['order_coupon'] = ( isset( $form_data['order_filter_coupon'] ) ? sanitize_text_field( wp_unslash( $form_data['order_filter_coupon'] ) ) : false );
     }
 
 	// WPML - https://wpml.org/
@@ -3590,7 +3596,9 @@ $args['order_coupon'] = ( isset( $_POST['order_filter_coupon'] ) ? sanitize_text
 	if ( ! empty( $custom_orders ) ) {
 		$order_meta = array();
 		foreach ( $custom_orders as $custom_order ) {
-			$order_meta[ esc_attr( $custom_order ) ] = ( isset( $_POST[ sprintf( 'order_filter_custom_meta-%s', esc_attr( $custom_order ) ) ] ) && $_POST[ sprintf( 'order_filter_custom_meta-%s', esc_attr( $custom_order ) ) ] <> '' ? explode( ',', $_POST[ sprintf( 'order_filter_custom_meta-%s', esc_attr( $custom_order ) ) ] ) : false );
+			$meta_key                                = sprintf( 'order_filter_custom_meta-%s', esc_attr( $custom_order ) );
+			$raw_value                               = isset( $form_data[ $meta_key ] ) ? sanitize_text_field( wp_unslash( $form_data[ $meta_key ] ) ) : '';
+			$order_meta[ esc_attr( $custom_order ) ] = '' !== $raw_value ? explode( ',', $raw_value ) : false;
         }
 		if ( ! empty( $order_meta ) ) {
 			$args['order_custom_meta'] = $order_meta;
@@ -3600,7 +3608,7 @@ $args['order_coupon'] = ( isset( $_POST['order_filter_coupon'] ) ? sanitize_text
 
 	return $args;
 }
-add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_order_dataset_args', 10, 2 );
+add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_extend_order_dataset_args', 10, 3 );
 
 function woo_ce_extend_cron_order_dataset_args( $args, $export_type = '', $is_scheduled = 0 ) {
 

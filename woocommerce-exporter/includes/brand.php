@@ -46,16 +46,21 @@ if( is_admin() ) {
 	}
 	add_action( 'woo_ce_extend_scheduled_export_save', 'woo_ce_brand_scheduled_export_save' );
 
-	function woo_ce_brand_dataset_args( $args, $export_type = '' ) {
+	function woo_ce_brand_dataset_args( $args, $export_type = '', $form_data = array() ) {
 
 		// Check if we're dealing with the Brand Export Type
 		if( $export_type <> 'brand' )
 			return $args;
 
+		// Forward-compat guard: every in-tree caller passes $form_data, but fall back to $_POST so an external 2-arg apply_filters() never hits an undefined $form_data.
+		if ( empty( $form_data ) ) {
+			$form_data = $_POST;
+		}
+
 		// Merge in the form data for this dataset
 		$defaults = array(
-			'brand_orderby' => ( isset( $_POST['brand_orderby'] ) ? sanitize_text_field( $_POST['brand_orderby'] ) : false ),
-			'brand_order' => ( isset( $_POST['brand_order'] ) ? sanitize_text_field( $_POST['brand_order'] ) : false )
+			'brand_orderby' => ( isset( $form_data['brand_orderby'] ) ? sanitize_text_field( wp_unslash( $form_data['brand_orderby'] ) ) : false ),
+			'brand_order' => ( isset( $form_data['brand_order'] ) ? sanitize_text_field( wp_unslash( $form_data['brand_order'] ) ) : false )
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -68,7 +73,7 @@ if( is_admin() ) {
 		return $args;
 
 	}
-	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_brand_dataset_args', 10, 2 );
+	add_filter( 'woo_ce_extend_dataset_args', 'woo_ce_brand_dataset_args', 10, 3 );
 
 	/* End of: WordPress Administration */
 

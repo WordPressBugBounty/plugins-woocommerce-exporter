@@ -707,23 +707,17 @@ function woo_ce_get_users( $export_args = array(), $export = array() ) {
 	// Allow other developers to bake in their own filters
 	$args = apply_filters( 'woo_ce_get_users_args', $args, $export_args );
 
-	if( $user_ids = new WP_User_Query( $args ) ) {
-		$users = array();
-		foreach( $user_ids->results as $user_id ) {
+	// If user roles filter is set, use WP_User_Query's native role__in parameter
+	// instead of instantiating WP_User objects for every user (which causes memory
+	// exhaustion on large sites and can leave the export permanently locked).
+	if( !empty( $user_roles ) ) {
+		$args['role__in'] = $user_roles;
+	}
 
-			$user = new WP_User( $user_id );
+	$user_ids = new WP_User_Query( $args );
+	if( false !== $user_ids ) {
+		$users = $user_ids->results;
 
-			if( !empty( $user_roles ) ) {
-				if( count( array_intersect( $user_roles, $user->roles ) ) == 0 ) {
-					unset( $user, $user_id );
-					continue;
-				}
-			}
-
-			if( isset( $user_id ) )
-				$users[] = $user_id;
-
-		}
 		// Only populate the $export Global if it is an export
 		if( isset( $export ) )
 			$export->total_rows = count( $users );
