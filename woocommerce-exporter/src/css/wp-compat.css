@@ -1,0 +1,223 @@
+/**
+ * WordPress admin compatibility overrides — intentionally unlayered.
+ *
+ * WordPress core CSS is unlayered (written before CSS Cascade Layers existed).
+ * Unlayered CSS always beats any @layer block, regardless of specificity or
+ * source order. To beat WP admin's element-level rules we must also stay
+ * unlayered here. Our stylesheet loads after WP admin, so same-specificity
+ * ties resolve in our favour via source order.
+ *
+ * Rules MUST remain unlayered. Do not move them inside @layer components.
+ * Do not add global element selectors — all rules are scoped under .wse-app.
+ *
+ * @since 5.8.1
+ */
+
+/* ── Heading / paragraph margin reset ────────────────────────────────────
+ * reset.css uses @layer reset, which loses to WP admin's unlayered styles.
+ * These unlayered rules restore margin: 0 with enough specificity to win.
+ * ────────────────────────────────────────────────────────────────────── */
+.wse-app h1,
+.wse-app h2,
+.wse-app h3,
+.wse-app h4,
+.wse-app h5,
+.wse-app h6,
+.wse-app p {
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Link color reset ─────────────────────────────────────────────────────
+ * WP admin sets a { color: #2271b1 } unlayered, overriding reset.css which
+ * is inside @layer reset. This unlayered rule restores indigo as the default
+ * link colour across the app.
+ * ────────────────────────────────────────────────────────────────────── */
+.wse-app a {
+  color: #6C7BFF;
+  text-decoration: none;
+}
+
+/* ── Input reset ──────────────────────────────────────────────────────────
+ * Specificity: (0,1,1) — beats WP admin's generic input styles (0,0,1).
+ * :where() on the :not() args keeps those at (0,0,0) so a scoped component
+ * style at (0,2,0) can override without !important.
+ * ────────────────────────────────────────────────────────────────────── */
+.wse-app input:where(
+  :not([type="checkbox"]):not([type="radio"]):not([type="submit"])
+  :not([type="button"]):not([type="range"]):not([type="file"])
+) {
+  box-sizing: border-box;
+  box-shadow: none;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--color-surface, #fff);
+  padding: 8px 12px;
+  min-height: 0;
+  height: 38px;
+  color: var(--color-text-primary, #111827);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  outline: none;
+  transition: border-color var(--transition-fast, 120ms ease);
+}
+
+.wse-app input:where(
+  :not([type="checkbox"]):not([type="radio"]):not([type="submit"])
+  :not([type="button"]):not([type="range"]):not([type="file"])
+):focus {
+  border-color: var(--color-border-focus, #3858e9);
+}
+
+/* ── Search field — inner input must be transparent ──────────────────────
+ * The outer .wse-search-field wrapper provides the visual border/focus
+ * ring. Specificity (0,2,1) beats the generic input reset (0,1,1).
+ * ────────────────────────────────────────────────────────────────────── */
+.wse-app .wse-search-field input {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+}
+
+.wse-app .wse-search-field input:focus {
+  border-color: transparent;
+}
+
+/* ── Textarea reset ───────────────────────────────────────────────────── */
+.wse-app textarea {
+  box-sizing: border-box;
+  box-shadow: none;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--color-surface, #fff);
+  padding: 8px 12px;
+  color: var(--color-text-primary, #111827);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  outline: none;
+  transition: border-color var(--transition-fast, 120ms ease);
+}
+
+.wse-app textarea:focus {
+  border-color: var(--color-border-focus, #3858e9);
+}
+
+/* ── Number input — hide spinners ─────────────────────────────────────── */
+.wse-app input[type="number"]::-webkit-outer-spin-button,
+.wse-app input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.wse-app input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ── Base select reset ────────────────────────────────────────────────── */
+.wse-app select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  max-width: 100%;
+}
+
+/* ── Filter select ────────────────────────────────────────────────────────
+ * Specificity (0,2,0) — beats WP admin's unlayered select rules which set
+ * height: 30px and padding: 0 on bare <select> elements.
+ * ────────────────────────────────────────────────────────────────────── */
+.wse-app .wse-filter-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--color-surface, #fff);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236C7BFF' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  box-sizing: border-box;
+  width: auto;
+  height: 40px;
+  min-height: 0;
+  padding: 0 36px 0 12px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 6px;
+  box-shadow: none;
+  margin: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-primary, #111827);
+  line-height: 1.5;
+  transition: border-color var(--transition-fast, 120ms ease);
+}
+
+.wse-app .wse-filter-select:hover {
+  border-color: var(--color-primary-400, #8893FF);
+}
+
+.wse-app .wse-filter-select:focus {
+  border-color: var(--color-primary-600, #6C7BFF);
+  box-shadow: none;
+  outline: none;
+}
+
+/* ── Form select ──────────────────────────────────────────────────────────
+ * Unlayered at (0,2,0) so it beats WP admin's unlayered select rules.
+ * Chevron via CSS background-image SVG — avoids WP admin interfering with
+ * absolutely-positioned SVG siblings.
+ * ────────────────────────────────────────────────────────────────────── */
+.wse-app .wse-form-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--color-surface, #fff);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236C7BFF' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 44px;
+  min-height: 0;
+  padding: 0 40px 0 14px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: none;
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary, #111827);
+  line-height: 1.5;
+  transition: border-color var(--transition-fast, 120ms ease);
+}
+
+.wse-app .wse-form-select:hover {
+  border-color: var(--color-primary-400, #8893FF);
+}
+
+.wse-app .wse-form-select:focus {
+  border-color: var(--color-primary-500, #7986FF);
+  box-shadow: none;
+  outline: none;
+}
+
+.wse-app .wse-form-select--error {
+  border-color: #f87171;
+}
+
+.wse-app .wse-form-select--sm {
+  height: 36px;
+  padding: 0 34px 0 12px;
+  border-radius: var(--radius-sm, 6px);
+  background-position: right 10px center;
+}

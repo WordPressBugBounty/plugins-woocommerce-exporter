@@ -1,0 +1,14 @@
+/**
+ * Card component class.
+ *
+ * Inside @layer components so Tailwind utilities always take precedence.
+ * All selectors scoped under .wse-app.
+ *
+ * @since 5.8.1
+ */
+
+@layer components {
+  .wse-app .wse-card {
+    @apply bg-white border border-gray-200 rounded-[10px];
+  }
+}

@@ -3,7 +3,7 @@
  * Plugin Name:          Store Exporter for WooCommerce
  * Plugin URI:           https://visser.com.au/
  * Description:          Export Products, Orders, Users, Categories, Tags and other store details out of WooCommerce into Excel spreadsheets and other simple formatted files (e.g. CSV, TSV, Excel formats including XLS and XLSX, XML, etc.)
- * Version:              2.7.9
+ * Version:              2.8.0
  * Author:               Visser Labs
  * Author URI:           https://visser.com.au/
  * License:              GPL2
@@ -14,7 +14,7 @@
  * Tested up to: 7.0
  *
  * WC requires at least: 5.0
- * WC tested up to:      10.8
+ * WC tested up to:      10.9
  *
  * @package  VisserLabs\WSE
  * @author   Rymera Web Co <josh@rymera.com.au>
@@ -50,7 +50,7 @@ define( 'WOO_CE_PLUGIN_BASE_NAME', plugin_basename( WOO_CE_RELPATH ) );
 define( 'WOO_CE_PLUGINPATH', WP_PLUGIN_URL . '/' . basename( __DIR__ ) );
 define( 'WOO_CE_PLUGIN_FILE', __FILE__ );
 define( 'WOO_CE_PREFIX', 'woo_ce' );
-define( 'WOO_CE_VERSION', '2.7.9' );
+define( 'WOO_CE_VERSION', '2.8.0' );
 
 /**
  * Default batch size for exporting data.
@@ -128,5 +128,15 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
      */
     $app = require_once 'bootstrap/app.php';
 
-    $app->boot();
+    /*
+     * Guard the boot call. `require_once` only returns the App instance when
+     * bootstrap/app.php is included cleanly on its first include. In a bad-state
+     * load it can return null (stale OPcache or an incomplete update leaves
+     * exporter.php and bootstrap/app.php out of sync) or true (already
+     * included this request). Booting on a non-App value fatals the whole site,
+     * so we skip it and let the request self-recover on the next clean load.
+     */
+    if ( $app instanceof \VisserLabs\WSE\App ) {
+        $app->boot();
+    }
 }

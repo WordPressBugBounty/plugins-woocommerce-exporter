@@ -1465,7 +1465,15 @@ function woo_ce_get_subscription_data( $subscription_id, $args = array(), $field
         }
 
         try {
-            $subscription->coupon = woo_ce_get_order_assoc_coupon( $subscription->order_id );
+            // Read Coupons directly from the Subscription record, not the parent Order.
+            // Subscriptions only retain recurring Coupon types; when a recurring Coupon
+            // is removed via the Subscription edit screen, get_coupon_codes() reflects that
+            // change immediately, whereas the parent Order permanently keeps the original
+            // Coupon. Non-recurring (one-time checkout) Coupons live only on the parent
+            // Order and belong to the Order export, not the Subscription's recurring
+            // billing state.
+            $subscription_coupons = method_exists( $wcs_subscription, 'get_coupon_codes' ) ? (array) $wcs_subscription->get_coupon_codes() : array();
+            $subscription->coupon = ! empty( $subscription_coupons ) ? implode( $export->category_separator, $subscription_coupons ) : '';
         } catch ( Exception $e ) {
             // Handle exception.
         }

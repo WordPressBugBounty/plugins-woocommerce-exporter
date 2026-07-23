@@ -1,0 +1,13 @@
+/**
+ * Keyframes — not placed inside any @layer.
+ *
+ * CSS @keyframes are not subject to the cascade layer rules — they live in a
+ * separate name-space and are always accessible regardless of layer context.
+ * Keeping them here (unlayered) is correct and intentional.
+ *
+ * @since 5.8.1
+ */
+
+@keyframes wse-spin {
+  to { transform: rotate(360deg); }
+}

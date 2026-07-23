@@ -1,0 +1,22 @@
+// Strip WP-admin border/shadow from the inner input.
+// Specificity (0,2,1) beats WP admin's `.wp-admin input[type]` (0,2,1)
+// via source order, and generic `form input` (0,1,1) by specificity.
+
+.wse-ui-base-input {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  width: 100%;
+
+  &:focus {
+    border-color: transparent;
+    box-shadow: none;
+    outline: none;
+  }
+}

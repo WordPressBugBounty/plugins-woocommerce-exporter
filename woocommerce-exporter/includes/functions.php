@@ -2664,6 +2664,53 @@ function woo_ce_get_export_types( $plural = true, $default = false ) {
 }
 
 /**
+ * Returns the list of export types that are available in the free Store Exporter.
+ *
+ * Every other export type returned by woo_ce_get_export_types() is premium and
+ * requires Store Exporter Deluxe. This is the single source of truth consumed by
+ * the admin SPA (REST controllers + localized data) and the Quick Export runner
+ * gate, so the free plugin cannot generate or download premium datasets.
+ *
+ * @since 2.8.0
+ * @return array Array of export type slugs available in the free plugin.
+ */
+function woo_ce_get_free_export_types() {
+	return apply_filters(
+		'woo_ce_free_export_types',
+		array( 'product', 'category', 'tag', 'order', 'user' )
+	);
+}
+
+/**
+ * Determine whether an export type requires Store Exporter Deluxe.
+ *
+ * @since 2.8.0
+ * @param string $export_type Export type slug.
+ * @return bool True when the export type is premium (Deluxe-only), false when it is free.
+ */
+function woo_ce_is_premium_export_type( $export_type = '' ) {
+	if ( empty( $export_type ) ) {
+		return false;
+	}
+	return ! in_array( $export_type, woo_ce_get_free_export_types(), true );
+}
+
+/**
+ * Build the marketing upsell URL for a premium export type.
+ *
+ * @since 2.8.0
+ * @param string $export_type Export type slug.
+ * @return string Upsell URL with campaign UTM parameters.
+ */
+function woo_ce_get_export_type_upsell_url( $export_type = '' ) {
+	$utm = sprintf(
+		'?utm_source=wse&utm_medium=export&utm_campaign=exporttype%slink',
+		str_replace( '_', '', $export_type )
+	);
+	return esc_url_raw( 'https://visser.com.au/plugins/woocommerce-export/' . $utm );
+}
+
+/**
  * Returns label of Export type slug used on Store Exporter screen.
  *
  * @param string $export_type Export type slug.

@@ -1,0 +1,71 @@
+/**
+ * Scoped preflight — WordPress-safe Tailwind reset.
+ *
+ * All rules live inside @layer reset, which sits below @layer utilities in the
+ * declared layer order. This means any Tailwind utility (e.g. mb-4) can always
+ * override a reset rule without needing !important.
+ *
+ * Rules are scoped under .wse-app so nothing leaks into wp-admin chrome.
+ * :where() keeps specificity at (0,1,0) so component-level styles override
+ * these defaults without fighting specificity wars.
+ *
+ * @since 5.8.1
+ */
+
+@layer reset {
+  /* Box model */
+  .wse-app :where(*, *::before, *::after) {
+    box-sizing: border-box;
+  }
+
+  /* Block elements — remove browser/WP default margins */
+  .wse-app :where(
+    h1, h2, h3, h4, h5, h6,
+    p,
+    ul, ol, li,
+    figure, figcaption,
+    blockquote,
+    dl, dd,
+    fieldset, legend
+  ) {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Lists — remove bullets; restore when semantic list styling is needed */
+  .wse-app :where(ul, ol) {
+    list-style: none;
+  }
+
+  /* Links — inherit colour so component variants control the look */
+  .wse-app :where(a) {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Images — block so inline-gap never appears */
+  .wse-app :where(img, svg, video, canvas) {
+    display: block;
+    max-width: 100%;
+  }
+
+  /* Form elements — inherit font so WP admin fonts don't bleed in */
+  .wse-app :where(button, input, optgroup, select, textarea) {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  /* Buttons — remove browser default */
+  .wse-app :where(button) {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  /* Tables */
+  .wse-app :where(table) {
+    border-collapse: collapse;
+  }
+}

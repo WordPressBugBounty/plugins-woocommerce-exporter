@@ -1,0 +1,39 @@
+.wse-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 11px;
+  padding-bottom: 11px;
+  border-radius: $radius-sm;
+  font-size: $font-size-base;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background $transition-fast, color $transition-fast, box-shadow $transition-fast;
+
+  &--active {
+    background: $color-primary-50;
+    color: $color-primary-600;
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 $color-primary-600;
+
+    &:hover { background: $color-primary-100; }
+  }
+
+  &--default {
+    color: $gray-800;
+
+    &:hover {
+      background: $color-primary-50;
+      color: $gray-900;
+    }
+  }
+
+  &--danger {
+    color: #B91C1C;
+
+    &:hover {
+      background: #FEF2F2;
+      color: #991B1B;
+    }
+  }
+}

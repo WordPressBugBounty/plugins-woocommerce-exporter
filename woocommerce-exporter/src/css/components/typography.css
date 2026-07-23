@@ -1,0 +1,46 @@
+/**
+ * Typography component classes.
+ *
+ * Inside @layer components so Tailwind utilities always take precedence.
+ * All selectors scoped under .wse-app.
+ *
+ * @since 5.8.1
+ */
+
+@layer components {
+  /* ── Page title ───────────────────────────────────────────────────────── */
+  .wse-app .wse-page-title {
+    @apply text-[22px] font-bold text-gray-900 m-0 mb-1 leading-tight;
+  }
+
+  .wse-app .wse-page-sub {
+    @apply text-[13px] text-gray-500 m-0;
+  }
+
+  /* ── Section title ────────────────────────────────────────────────────── */
+  .wse-app .wse-section-title {
+    @apply text-[13.5px] font-semibold text-gray-900 m-0 flex items-center gap-[7px];
+  }
+
+  /* ── Breadcrumb ───────────────────────────────────────────────────────── */
+  .wse-app .wse-breadcrumb {
+    @apply flex items-center gap-1 mb-1.5 text-xs;
+  }
+
+  .wse-app .wse-breadcrumb__link {
+    @apply text-gray-500 no-underline cursor-pointer hover:text-gray-900 hover:underline;
+  }
+
+  .wse-app .wse-breadcrumb__sep {
+    @apply text-gray-400 flex-shrink-0;
+  }
+
+  .wse-app .wse-breadcrumb__current {
+    @apply text-gray-700 font-medium;
+  }
+
+  /* ── View-all link ────────────────────────────────────────────────────── */
+  .wse-app .wse-view-all {
+    @apply flex items-center gap-[3px] text-[12.5px] font-medium text-gray-700 no-underline hover:underline hover:text-gray-900;
+  }
+}

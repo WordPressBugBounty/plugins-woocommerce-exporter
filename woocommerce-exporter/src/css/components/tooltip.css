@@ -1,0 +1,74 @@
+/**
+ * Tooltip component classes.
+ *
+ * Inside @layer components so Tailwind utilities always take precedence.
+ *
+ * IMPORTANT: BaseTooltip.vue renders inline (no Teleport), so .wse-tooltip
+ * elements always live inside .wse-app. The .wse-app scope prevents these
+ * classes from polluting wp-admin chrome outside the plugin screen.
+ *
+ * The Vue transition classes (wse-tooltip-enter-*, wse-tooltip-leave-*)
+ * must also be scoped — Vue applies them to the element, which is inside
+ * .wse-app, so the descendant selector works correctly.
+ *
+ * @since 5.8.1
+ */
+
+@layer components {
+  /* ── Tooltip bubble ───────────────────────────────────────────────────── */
+  .wse-app .wse-tooltip {
+    position: absolute;
+    z-index: var(--z-tooltip, 400);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 220px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm, 6px);
+    background: #1f2937;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.45;
+    box-shadow: var(--shadow-tooltip, 0 4px 12px rgb(0 0 0 / 0.18));
+    pointer-events: none;
+    white-space: normal;
+  }
+
+  .wse-app .wse-tooltip--top {
+    bottom: calc(100% + 8px);
+  }
+
+  .wse-app .wse-tooltip--bottom {
+    top: calc(100% + 8px);
+  }
+
+  /* ── Arrow ────────────────────────────────────────────────────────────── */
+  .wse-app .wse-tooltip__arrow {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+  }
+
+  .wse-app .wse-tooltip--top .wse-tooltip__arrow {
+    top: 100%;
+    border-top-color: #1f2937;
+  }
+
+  .wse-app .wse-tooltip--bottom .wse-tooltip__arrow {
+    bottom: 100%;
+    border-bottom-color: #1f2937;
+  }
+
+  /* ── Vue transition ───────────────────────────────────────────────────── */
+  .wse-app .wse-tooltip-enter-active,
+  .wse-app .wse-tooltip-leave-active {
+    transition: opacity 100ms ease, transform 100ms ease;
+  }
+
+  .wse-app .wse-tooltip-enter-from,
+  .wse-app .wse-tooltip-leave-to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(3px);
+  }
+}

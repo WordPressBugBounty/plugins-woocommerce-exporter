@@ -1,0 +1,6 @@
+// Barrel — forward all abstracts so consumers do:
+//   @use '@scss/abstracts' as *;
+// and get all variables and mixins in scope.
+
+@forward 'variables';
+@forward 'mixins';

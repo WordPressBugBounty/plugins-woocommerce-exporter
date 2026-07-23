@@ -94,15 +94,70 @@ function woo_cd_template_header( $title = '', $icon = 'woocommerce' ) {
 		$output = $title;
 	} else {
 		$output = __( 'Store Export', 'woocommerce-exporter' );
-    } ?>
-<div id="woo-ce" class="wrap">
+    }
+
+	// Tabs handled by the Vue SPA render their own header & navigation, so the
+	// legacy WP page title/icon is skipped and a full-bleed wrapper class is
+	// added so the app owns the entire content rectangle.
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$tab        = woo_ce_resolve_current_tab();
+	$tab_base   = strstr( $tab, '/', true );
+	if ( false === $tab_base ) {
+		$tab_base = $tab;
+	}
+	$is_spa_tab = in_array( $tab_base, woo_ce_spa_tabs(), true );
+	?>
+<div id="woo-ce" class="wrap<?php echo $is_spa_tab ? ' wse-spa-wrap' : ''; ?>">
+	<?php if ( ! $is_spa_tab ) : ?>
 	<div id="icon-<?php echo esc_attr( $icon ); ?>" class="icon32 icon32-woocommerce-importer"><br /></div>
 	<h2>
 		<?php echo esc_html( $output ); ?>
 	</h2>
 	<hr class="wp-header-end">
+	<?php else : ?>
+	<h1 class="screen-reader-text"><?php echo esc_html( $output ); ?></h1>
+	<?php endif; ?>
 <?php
 	do_action( 'wsed_after_header_template' );
+}
+
+/**
+ * Tab base slugs that mount the Vue admin SPA.
+ *
+ * Kept in one place so the page wrapper (woo_cd_template_header) and the
+ * body renderer (woo_cd_manage_form) agree on which tabs the SPA owns. The
+ * four Deluxe-only slugs are present so the free plugin can show their
+ * in-app upsell views.
+ *
+ * @since 2.7.10
+ * @return string[]
+ */
+function woo_ce_spa_tabs() {
+	return array( 'overview', 'export_items', 'quick_export', 'scheduled_export', 'export_template', 'archive', 'settings', 'tools', 'custom_meta_fields', 'audit_log' );
+}
+
+/**
+ * Resolve the effective Store Export tab for the current request.
+ *
+ * Single source of truth shared by the page wrapper (woo_cd_template_header),
+ * the asset enqueue (WP_Admin::admin_enqueue_scripts) and the body renderer
+ * (woo_cd_manage_form) so all three agree on which screen — and therefore
+ * whether the SPA or the legacy UI — is active. A missing tab honours the
+ * legacy "skip overview" preference by landing on Quick Export, otherwise the
+ * Overview screen; both are SPA tabs, so the SPA always mounts on a bare
+ * ?page=woo_ce request.
+ *
+ * @since 2.7.10
+ * @return string Sanitized tab slug, possibly including a sub-path.
+ */
+function woo_ce_resolve_current_tab() {
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : '';
+	$tab = preg_replace( '/[^a-zA-Z0-9_\/\-]/', '', $tab );
+	if ( '' === $tab ) {
+		$tab = woo_ce_get_option( 'skip_overview', false ) ? 'quick_export' : 'overview';
+	}
+	return $tab;
 }
 
 // HTML template footer on Store Exporter screen

@@ -15,6 +15,7 @@ use VisserLabs\WSE\Helpers\Formatting;
 use VisserLabs\WSE\Helpers\Export as Export_Helper;
 
 // Woocommerce.
+use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Order_Query;
 use WC_Tax;
 use WC_Product;
@@ -1184,7 +1185,8 @@ class Order extends Abstract_Class {
         }
 
         // Order Export Options.
-        $args['order_items']              = isset( $settings['order_items'] ) ? sanitize_text_field( $settings['order_items'] ) : false;
+        $order_items_format               = ! empty( $settings['order_items'] ) ? sanitize_text_field( $settings['order_items'] ) : get_option( WOO_CE_PREFIX . '_order_items_formatting', 'unique' );
+        $args['order_items']              = ! empty( $order_items_format ) ? $order_items_format : 'unique';
         $args['order_items_types']        = isset( $settings['order_items_types'] ) ? array_map( 'sanitize_text_field', (array) $settings['order_items_types'] ) : false;
         $args['order_flag_notes']         = isset( $settings['order_flag_notes'] ) ? absint( $settings['order_flag_notes'] ) : false;
         $args['max_order_items']          = isset( $settings['max_order_items'] ) ? absint( $settings['max_order_items'] ) : 10;
@@ -1227,6 +1229,12 @@ class Order extends Abstract_Class {
      */
     public function get_object_ids( $export ) {
         $export_args = $export->args;
+
+        // HPOS stores resolve `field_query`; the legacy posts-table store does not.
+        // Detect the active storage mode so the field filters below can fall back to
+        // the equivalent WC_Order_Query vars (which map to postmeta) when HPOS is off.
+        $hpos_enabled = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )
+            && OrderUtil::custom_orders_table_usage_is_enabled();
 
         $args = array(
             'limit'  => -1,
@@ -1286,35 +1294,17 @@ class Order extends Abstract_Class {
 
         // Order Customers.
         if ( ! empty( $export_args['order_customer'] ) && 'all' !== $export_args['order_customer'] ) {
-            $args['field_query'][] = array(
-                array(
-                    'field'   => 'customer_id',
-                    'value'   => implode( ',', $export_args['order_customer'] ),
-                    'compare' => 'IN',
-                ),
-            );
+            $this->add_order_field_filter( $args, $hpos_enabled, 'customer_id', $export_args['order_customer'] );
         }
 
         // Order Billing Country.
         if ( ! empty( $export_args['order_billing_country'] ) && 'all' !== $export_args['order_billing_country'] ) {
-            $args['field_query'][] = array(
-                array(
-                    'field'   => 'billing_country',
-                    'value'   => implode( ',', $export_args['order_billing_country'] ),
-                    'compare' => 'IN',
-                ),
-            );
+            $this->add_order_field_filter( $args, $hpos_enabled, 'billing_country', $export_args['order_billing_country'] );
         }
 
         // Order Shipping Country.
         if ( ! empty( $export_args['order_shipping_country'] ) && 'all' !== $export_args['order_shipping_country'] ) {
-            $args['field_query'][] = array(
-                array(
-                    'field'   => 'shipping_country',
-                    'value'   => implode( ',', $export_args['order_shipping_country'] ),
-                    'compare' => 'IN',
-                ),
-            );
+            $this->add_order_field_filter( $args, $hpos_enabled, 'shipping_country', $export_args['order_shipping_country'] );
         }
 
         // Order User Roles.
@@ -1332,47 +1322,23 @@ class Order extends Abstract_Class {
             }
 
             if ( ! empty( $user_ids ) ) {
-                $args['field_query'][] = array(
-                    array(
-                        'field'   => 'customer_id',
-                        'value'   => implode( ',', $user_ids ),
-                        'compare' => 'IN',
-                    ),
-                );
+                $this->add_order_field_filter( $args, $hpos_enabled, 'customer_id', $user_ids );
             } else {
                 // Selected role(s) resolved to no users; force zero results.
                 // -1 is safe as a sentinel because WP user IDs are always positive,
                 // so no order's customer_id can ever equal it.
-                $args['field_query'][] = array(
-                    array(
-                        'field'   => 'customer_id',
-                        'value'   => -1,
-                        'compare' => '=',
-                    ),
-                );
+                $this->add_order_field_filter( $args, $hpos_enabled, 'customer_id', array( -1 ) );
             }
         }
 
         // Order IDs.
         if ( ! empty( $export_args['order_ids'] ) ) {
-            $args['field_query'][] = array(
-                array(
-                    'field'   => 'id',
-                    'value'   => implode( ',', $export_args['order_ids'] ),
-                    'compare' => 'IN',
-                ),
-            );
+            $this->add_order_field_filter( $args, $hpos_enabled, 'id', $export_args['order_ids'] );
         }
 
         // Order Payment Gateway.
         if ( ! empty( $export_args['order_payment'] ) ) {
-            $args['field_query'][] = array(
-                array(
-                    'field'   => 'payment_method',
-                    'value'   => implode( ',', $export_args['order_payment'] ),
-                    'compare' => 'IN',
-                ),
-            );
+            $this->add_order_field_filter( $args, $hpos_enabled, 'payment_method', $export_args['order_payment'] );
         }
 
         // Order Custom meta.
@@ -1573,6 +1539,81 @@ class Order extends Abstract_Class {
     }
 
     /**
+     * Add an order field filter that works under both HPOS and legacy order storage.
+     *
+     * HPOS-enabled stores resolve `field_query`, but the legacy posts-table store
+     * (`WC_Order_Data_Store_CPT`) ignores it. For legacy storage we instead pass the
+     * equivalent `WC_Order_Query` var as an array, which WooCommerce maps to a
+     * `_`-prefixed postmeta `IN` query via the order data store's internal meta keys.
+     * The `id` field has no meta equivalent, so it falls back to WP_Query `post__in`.
+     *
+     * @since 2.7.10
+     *
+     * @param array        $args         The Order Query args (passed by reference).
+     * @param bool         $hpos_enabled Whether HPOS custom order tables are in use.
+     * @param string       $field        The HPOS field name (e.g. 'payment_method', 'customer_id').
+     * @param array|string $values       The values to match against. Scalars are normalised to an
+     *                                   array, so this is left untyped by design.
+     * @return void
+     */
+    private function add_order_field_filter( array &$args, bool $hpos_enabled, string $field, $values ): void {
+        $values = array_values( (array) $values );
+
+        if ( $hpos_enabled ) {
+            $args['field_query'][] = array(
+                array(
+                    'field'   => $field,
+                    'value'   => implode( ',', $values ),
+                    'compare' => 'IN',
+                ),
+            );
+            return;
+        }
+
+        // Legacy posts-table store: 'id' has no postmeta equivalent, so scope by post__in.
+        if ( 'id' === $field ) {
+            $this->intersect_post__in( $args, array_map( 'absint', $values ) );
+            return;
+        }
+
+        // Other fields map to a postmeta IN query via the order data store's internal meta keys.
+        // When a second filter targets the same field (e.g. the Order Customers and Order User
+        // Roles filters both constrain customer_id), the HPOS path AND-combines them via separate
+        // field_query entries. Mirror that here by intersecting the value sets rather than letting
+        // the second call overwrite the first. -1 can never equal a real customer ID, country code
+        // or payment method, so an empty intersection resolves to no matching orders.
+        if ( isset( $args[ $field ] ) ) {
+            $intersection   = array_values( array_intersect( (array) $args[ $field ], $values ) );
+            $args[ $field ] = ! empty( $intersection ) ? $intersection : array( -1 );
+            return;
+        }
+
+        $args[ $field ] = $values;
+    }
+
+    /**
+     * Constrain a query's `post__in` to the given IDs, intersecting with any existing constraint.
+     *
+     * When `post__in` is already set, the two constraints are AND-ed via intersection so one
+     * filter can't overwrite another. An empty intersection falls back to `array( 0 )` because
+     * WP_Query silently ignores `post__in => array()` and would otherwise return all posts.
+     *
+     * @since 2.7.10
+     *
+     * @param array $args The Order Query args (passed by reference).
+     * @param array $ids  The order IDs to constrain to.
+     * @return void
+     */
+    private function intersect_post__in( array &$args, array $ids ): void {
+        if ( empty( $args['post__in'] ) ) {
+            $args['post__in'] = $ids;
+        } else {
+            $intersection     = array_intersect( $args['post__in'], $ids );
+            $args['post__in'] = ! empty( $intersection ) ? $intersection : array( 0 );
+        }
+    }
+
+    /**
      * Get dataset to export.
      *
      * @since 2.7.3
@@ -1715,17 +1756,6 @@ class Order extends Abstract_Class {
     }
 
     /**
-     * Process the order item.
-     *
-     * @since 2.7.3
-     * @access private
-     *
-     * @param WC_Order_Item $item   The order item object.
-     * @param array         $fields The selected fields.
-     * @param WC_Order      $order  The order object.
-     * @param object        $export The export settings.
-     */
-    /**
      * Get IN clause placeholders for prepared SQL queries.
      *
      * @since 2.7.8
@@ -1739,6 +1769,18 @@ class Order extends Abstract_Class {
         return implode( ',', array_fill( 0, count( $items ), $format ) );
     }
 
+    /**
+     * Process a single order item into a dataset row.
+     *
+     * @since 2.7.3
+     * @access private
+     *
+     * @param WC_Order_Item $item   The order item object.
+     * @param array         $fields The fields to include in the export.
+     * @param WC_Order      $order  The parent order object.
+     * @param object        $export The export object.
+     * @return array The processed order item data.
+     */
     private function _process_order_item( $item, $fields, $order, $export ) {
         $data      = array();
         $item_data = $item->get_data();
@@ -1809,7 +1851,12 @@ class Order extends Abstract_Class {
         }
 
         // Dynamically call a parser function based on the order items export format.
+        // Guard against an empty or unrecognised format so we never call an
+        // undefined method — fall back to the 'unique' parser.
         $parse_order_item_data_func = '_parse_order_item_data_' . $export->args['order_items'];
+        if ( ! method_exists( $this, $parse_order_item_data_func ) ) {
+            $parse_order_item_data_func = '_parse_order_item_data_unique';
+        }
         $this->$parse_order_item_data_func( $dataset, $default_data, $export->export_format, $export->category_separator );
 
         return $dataset;

@@ -1,0 +1,78 @@
+@use 'variables' as *;
+
+// ── Focus ring ───────────────────────────────────────────────────────────────
+// Standard accessible focus ring. Use on interactive elements.
+@mixin focus-ring($color: $color-primary-600, $offset: 2px) {
+  &:focus-visible {
+    outline: 2px solid $color;
+    outline-offset: $offset;
+  }
+}
+
+// ── Button reset ─────────────────────────────────────────────────────────────
+// Strip browser button defaults before applying custom styles.
+@mixin button-reset {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+// ── Truncate ─────────────────────────────────────────────────────────────────
+@mixin truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+// ── Visually hidden (screen-reader only) ─────────────────────────────────────
+@mixin sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// ── Card surface ─────────────────────────────────────────────────────────────
+@mixin card($radius: $radius-lg) {
+  background: $color-surface;
+  border: 1px solid $color-border;
+  border-radius: $radius;
+}
+
+// ── Input base ───────────────────────────────────────────────────────────────
+@mixin input-base {
+  box-sizing: border-box;
+  height: 38px;
+  padding: 8px 12px;
+  border: 1px solid $color-border;
+  border-radius: $radius-md;
+  background: $color-surface;
+  font-family: inherit;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  line-height: 1.5;
+  outline: none;
+  box-shadow: none;
+  transition: border-color $transition-fast;
+
+  &:focus { border-color: $color-border-focus; }
+  &::placeholder { color: $color-text-faint; }
+}
+
+// ── Flex row ─────────────────────────────────────────────────────────────────
+@mixin flex-row($gap: 8px, $align: center) {
+  display: flex;
+  align-items: $align;
+  gap: $gap;
+}

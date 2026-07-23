@@ -1,0 +1,5 @@
+.wse-toast-enter-active,
+.wse-toast-leave-active { transition: all 0.18s ease; }
+
+.wse-toast-enter-from { opacity: 0; transform: translateY(8px); }
+.wse-toast-leave-to   { opacity: 0; transform: translateX(40px); }

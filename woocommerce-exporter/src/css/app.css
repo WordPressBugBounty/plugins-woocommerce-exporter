@@ -1,0 +1,54 @@
+/**
+ * Admin SPA — CSS entry point.
+ *
+ * Layer declaration order determines cascade priority among our own layers.
+ * Higher = wins. Order: reset < base < components < utilities.
+ *
+ * CRITICAL: this @layer declaration must appear before any @import that uses
+ * these layer names, so the order is established before content arrives.
+ *
+ * WordPress admin CSS is unlayered (pre-dates layers) and always beats any
+ * @layer block from any stylesheet. Our unlayered WP-compat rules in
+ * wp-compat.css load after WP admin, so source-order gives us the win for
+ * same-specificity selectors.
+ *
+ * Utilities are configured with important: true (see tailwind.config.js)
+ * so that they beat WP admin's and wp-compat.css's own unlayered rules via
+ * the reversed !important cascade order (layered !important > unlayered).
+ *
+ * @since 5.8.1
+ */
+
+/* 1. Tailwind JS config — options without a CSS-native equivalent ─────── */
+/* important: true makes utilities !important so they beat the unlayered    */
+/* wp-compat.css rules that are required to override WP admin's own         */
+/* unlayered heading / element styles. Without this flag every Tailwind      */
+/* margin / padding / spacing utility loses to those unlayered compat rules. */
+@config "../../tailwind.config.js";
+
+/* 2. Explicit layer order ─────────────────────────────────────────────── */
+@layer reset, base, components, utilities;
+
+/* 3. Tailwind v4 — theme tokens + utility classes (both layered) ──────── */
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+/* 4. Design tokens (@theme block) ─────────────────────────────────────── */
+@import "./theme.css";
+
+/* 5. Scoped preflight (@layer reset) ──────────────────────────────────── */
+@import "./reset.css";
+
+/* 6. WordPress admin compatibility (unlayered — must beat WP admin) ───── */
+@import "./wp-compat.css";
+
+/* 7. Keyframes (not layered — CSS spec keeps @keyframes out of layers) ── */
+@import "./animations.css";
+
+/* 8. Component classes (@layer components) ────────────────────────────── */
+@import "./components/layout.css";
+@import "./components/typography.css";
+@import "./components/button.css";
+@import "./components/card.css";
+@import "./components/tooltip.css";
+@import "./components/feedback.css";

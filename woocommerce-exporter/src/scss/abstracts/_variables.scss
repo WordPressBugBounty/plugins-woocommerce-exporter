@@ -1,0 +1,87 @@
+// Design token variables — mirrors the @theme {} block in src/css/theme.css.
+//
+// These SCSS variables compile to exact values at build time, enabling
+// sass:color arithmetic and cross-file token consistency without runtime var().
+// Use these in .scss sidecar files; prefer Tailwind utilities for in-template styling.
+
+// ── Colors — primary (indigo) ────────────────────────────────────────────────
+$color-primary-50:  #EFF1FF;
+$color-primary-100: #E1E5FF;
+$color-primary-300: #A7B0FF;
+$color-primary-500: #7986FF;
+$color-primary-600: #6C7BFF;
+$color-primary-700: #5462E6;
+
+// ── Colors — danger (red) ────────────────────────────────────────────────────
+$color-danger-50:  #fef2f2;
+$color-danger-200: #fecaca;
+$color-danger-600: #dc2626;
+
+// ── Colors — success (green) ─────────────────────────────────────────────────
+$color-success-50:  #f0fdf4;
+$color-success-600: #16a34a;
+
+// ── Colors — warning (amber) ─────────────────────────────────────────────────
+$color-warning-50:  #fffbeb;
+$color-warning-600: #d97706;
+
+// ── Semantic surface ─────────────────────────────────────────────────────────
+$color-surface:      #ffffff;
+$color-bg:           #f9fafb;
+$color-border:       #e5e7eb;
+$color-border-focus: $color-primary-600;
+
+// ── Semantic text ────────────────────────────────────────────────────────────
+$color-text-primary:   #111827;
+$color-text-secondary: #374151;
+$color-text-muted:     #6b7280;
+$color-text-faint:     #9ca3af;
+
+// ── Gray scale (Tailwind-aligned) ────────────────────────────────────────────
+$gray-50:  #f9fafb;
+$gray-100: #f3f4f6;
+$gray-200: #e5e7eb;
+$gray-300: #d1d5db;
+$gray-400: #9ca3af;
+$gray-500: #6b7280;
+$gray-600: #4b5563;
+$gray-700: #374151;
+$gray-800: #1f2937;
+$gray-900: #111827;
+
+// ── Border radius ────────────────────────────────────────────────────────────
+$radius-sm:  6px;
+$radius-md:  8px;
+$radius-lg:  10px;
+$radius-xl:  12px;
+$radius-pill: 9999px;
+
+// ── Shadows ──────────────────────────────────────────────────────────────────
+$shadow-card:    0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+$shadow-modal:   0 20px 60px -10px rgb(0 0 0 / 0.18);
+$shadow-tooltip: 0 4px 12px rgb(0 0 0 / 0.18);
+
+// ── Spacing ──────────────────────────────────────────────────────────────────
+$spacing-page:    28px;
+$spacing-card:    20px;
+$spacing-section: 18px;
+$spacing-field:   16px;
+
+// ── Typography ───────────────────────────────────────────────────────────────
+$font-size-xs:   12px;
+$font-size-sm:   13px;
+$font-size-base: 14px;
+$font-size-lg:   16px;
+$font-size-xl:   20px;
+$font-size-2xl:  22px;
+
+// ── Z-index ──────────────────────────────────────────────────────────────────
+$z-dropdown: 100;
+$z-sticky:   150;
+$z-modal:    200;
+$z-toast:    300;
+$z-tooltip:  400;
+
+// ── Transitions ──────────────────────────────────────────────────────────────
+$transition-fast: 120ms ease;
+$transition-base: 180ms ease;

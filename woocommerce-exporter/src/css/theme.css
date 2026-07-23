@@ -1,0 +1,98 @@
+/**
+ * Design tokens — Tailwind v4 @theme block.
+ *
+ * Every variable defined here is automatically available as a Tailwind utility:
+ * --color-primary-600 → bg-primary-600, text-primary-600, border-primary-600, etc.
+ *
+ * Keep raw hex/px values out of component files — consume these tokens instead.
+ *
+ * @since 5.8.1
+ */
+
+@theme {
+  /* ── Primary (periwinkle) ────────────────────────────────────────────── */
+  --color-primary-50:  #EFF1FF;
+  --color-primary-100: #E1E5FF;
+  --color-primary-300: #A7B0FF;
+  --color-primary-500: #7986FF;
+  --color-primary-600: #6C7BFF;
+  --color-primary-700: #5462E6;
+
+  /* ── Indigo override ─────────────────────────────────────────────────────
+   * Re-points Tailwind's built-in `indigo-*` palette to the plugin's brand
+   * ramp so every `bg-indigo-*` / `text-indigo-*` / `border-indigo-*` utility
+   * inherits the #6C7BFF core color without per-component edits.
+   * ──────────────────────────────────────────────────────────────────────── */
+  --color-indigo-50:  #EFF1FF;
+  --color-indigo-100: #E1E5FF;
+  --color-indigo-200: #C8CFFF;
+  --color-indigo-300: #A7B0FF;
+  --color-indigo-400: #8893FF;
+  --color-indigo-500: #7986FF;
+  --color-indigo-600: #6C7BFF;
+  --color-indigo-700: #5462E6;
+  --color-indigo-800: #3F4DCC;
+
+  /* ── Danger (red) ────────────────────────────────────────────────────── */
+  --color-danger-50:  #fef2f2;
+  --color-danger-200: #fecaca;
+  --color-danger-600: #dc2626;
+
+  /* ── Success (green) ─────────────────────────────────────────────────── */
+  --color-success-50:  #f0fdf4;
+  --color-success-600: #16a34a;
+
+  /* ── Warning (amber) ─────────────────────────────────────────────────── */
+  --color-warning-50:  #fffbeb;
+  --color-warning-600: #d97706;
+
+  /* ── Semantic surface ────────────────────────────────────────────────── */
+  --color-surface:    #ffffff;
+  --color-bg:         #f9fafb;
+  --color-border:     #e5e7eb;
+  --color-border-focus: #7986FF;
+
+  /* ── Semantic text ───────────────────────────────────────────────────── */
+  --color-text-primary:   #111827;
+  --color-text-secondary: #374151;
+  --color-text-muted:     #6b7280;
+  --color-text-faint:     #9ca3af;
+
+  /* ── Border radius ───────────────────────────────────────────────────── */
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  10px;
+  --radius-xl:  12px;
+  --radius-pill: 9999px;
+
+  /* ── Shadows ─────────────────────────────────────────────────────────── */
+  --shadow-card:    0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --shadow-modal:   0 20px 60px -10px rgb(0 0 0 / 0.18);
+  --shadow-tooltip: 0 4px 12px rgb(0 0 0 / 0.18);
+  --shadow-focus:   0 0 0 3px rgb(108 123 255 / 0.15);
+
+  /* ── Spacing ─────────────────────────────────────────────────────────── */
+  --spacing-page:    28px;
+  --spacing-card:    20px;
+  --spacing-section: 18px;
+  --spacing-field:   16px;
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --font-size-xs:   12px;
+  --font-size-sm:   13px;
+  --font-size-base: 14px;
+  --font-size-lg:   16px;
+  --font-size-xl:   20px;
+  --font-size-2xl:  22px;
+
+  /* ── Z-index scale ───────────────────────────────────────────────────── */
+  --z-dropdown: 100;
+  --z-sticky:   150;
+  --z-modal:    200;
+  --z-toast:    300;
+  --z-tooltip:  400;
+
+  /* ── Transitions ─────────────────────────────────────────────────────── */
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+}

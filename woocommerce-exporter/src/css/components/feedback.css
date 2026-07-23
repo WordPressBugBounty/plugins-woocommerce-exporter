@@ -1,0 +1,31 @@
+/**
+ * Feedback component classes — spinner, loading, empty state, error.
+ *
+ * Inside @layer components so Tailwind utilities always take precedence.
+ * All selectors scoped under .wse-app.
+ *
+ * @since 5.8.1
+ */
+
+@layer components {
+  /* ── Spinner ──────────────────────────────────────────────────────────── */
+  .wse-app .wse-spinner {
+    @apply w-[18px] h-[18px] border-2 border-gray-200 border-t-indigo-600 rounded-full flex-shrink-0;
+    animation: wse-spin 0.65s linear infinite;
+  }
+
+  /* ── Loading state ────────────────────────────────────────────────────── */
+  .wse-app .wse-loading {
+    @apply flex items-center gap-2.5 text-gray-500 text-[13px] justify-center py-12;
+  }
+
+  /* ── Empty state ──────────────────────────────────────────────────────── */
+  .wse-app .wse-empty {
+    @apply text-[13px] text-gray-400 text-center py-2 pb-3.5 m-0;
+  }
+
+  /* ── Error state ──────────────────────────────────────────────────────── */
+  .wse-app .wse-error {
+    @apply flex items-center gap-2 py-3.5 px-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-[13px];
+  }
+}

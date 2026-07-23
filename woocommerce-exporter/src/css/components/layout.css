@@ -1,0 +1,40 @@
+/**
+ * Layout component classes.
+ *
+ * Inside @layer components so Tailwind utilities always take precedence.
+ * All selectors scoped under .wse-app.
+ *
+ * @since 5.8.1
+ */
+
+@layer components {
+  /* ── Sidebar ──────────────────────────────────────────────────────────── */
+  .wse-app .wse-sidebar {
+    transition: width var(--transition-base, 0.18s ease),
+                min-width var(--transition-base, 0.18s ease);
+  }
+
+  /* ── Main content area ────────────────────────────────────────────────── */
+  .wse-app .wse-main {
+    @apply flex-1 p-7 flex flex-col gap-[18px] min-w-0;
+  }
+
+  /* ── Page header ──────────────────────────────────────────────────────── */
+  .wse-app .wse-header {
+    @apply flex items-start justify-between;
+  }
+
+  /* ── Section header ───────────────────────────────────────────────────── */
+  .wse-app .wse-section-header {
+    @apply flex items-center justify-between mb-[14px];
+  }
+
+  /* ── Two-column grid ──────────────────────────────────────────────────── */
+  .wse-app .wse-two-col {
+    @apply grid grid-cols-2 gap-[18px] items-stretch;
+  }
+
+  .wse-app .wse-two-col > * {
+    @apply h-full;
+  }
+}

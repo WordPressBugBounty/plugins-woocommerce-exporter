@@ -5,7 +5,7 @@ Tags: woocommerce export, export products, export orders, export subscriptions, 
 Requires at least: 2.9.2
 Tested up to: 7.0
 Requires PHP: 5.6
-Stable tag: 2.7.9
+Stable tag: 2.8.0
 License: GPLv2 or later
 
 Export WooCommerce products, orders, customers, categories, tags, subscriptions & more into formatted files like CSV, XML, Excel 2007, XLS, XLSX.
@@ -164,6 +164,12 @@ You can report security bugs through the Patchstack Vulnerability Disclosure Pro
 6. Manage Plugin options from the Settings screen.
 
 == Changelog ==
+
+= 2.8.0 =
+* Feature: Admin SPA modernization — new Vue 3 admin interface backed by a REST API
+* Bug Fix: Order export filters (customer, billing/shipping country, user role, order ID, payment gateway) silently ignored when HPOS is disabled
+* Bug Fix: Subscription export shows a stale coupon after a recurring coupon is removed from the subscription
+* Bug Fix: Fatal error crashing the whole site when the plugin bootstrap loads in a bad state (stale OPcache or incomplete update)
 
 = 2.7.9 =
 * Bug Fix: Brands are not being exported

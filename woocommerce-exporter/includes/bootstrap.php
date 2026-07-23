@@ -93,7 +93,7 @@ if ( is_admin() ) {
             }
 
             // Check that we are on the Store Exporter screen.
-            $page = ( isset( $_GET['page'] ) ? sanitize_text_field( $_GET['page'] ) : false ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $page = ( isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : false ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
             if ( strtolower( WOO_CE_PREFIX ) !== $page ) {
                 return;
             }
@@ -226,11 +226,14 @@ if ( is_admin() ) {
      */
     function woo_cd_manage_form() {
 
-        $tab = ( isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : false ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        // If Skip Overview is set then jump to Export screen.
-        if ( false === $tab && woo_ce_get_option( 'skip_overview', false ) ) {
-            $tab = 'export';
-        }
+        // Shared resolver (also used by woo_cd_template_header and the SPA
+        // enqueue) so the wrapper, assets and body all agree on the active tab
+        // — including the skip_overview default, which now lands on the SPA
+        // Quick Export rather than the legacy Export screen.
+        $tab = function_exists( 'woo_ce_resolve_current_tab' )
+            ? woo_ce_resolve_current_tab()
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            : ( isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'overview' );
 
         // Check that WC() is available.
         if ( ! function_exists( 'WC' ) ) {
@@ -241,6 +244,19 @@ if ( is_admin() ) {
 
         woo_ce_load_export_types();
         woo_ce_admin_fail_notices();
+
+        // The Vue admin SPA owns its own navigation and views. For SPA tabs,
+        // mount the app and skip the legacy tab navigation and per-tab
+        // templates entirely.
+        $spa_tabs = function_exists( 'woo_ce_spa_tabs' ) ? woo_ce_spa_tabs() : array();
+        $tab_base = strstr( $tab, '/', true );
+        if ( false === $tab_base ) {
+            $tab_base = $tab;
+        }
+        if ( in_array( $tab_base, $spa_tabs, true ) ) {
+            echo '<div id="wse-admin-app"></div>';
+            return;
+        }
 
         include_once WOO_CE_PATH . 'templates/admin/tabs.php';
     }
