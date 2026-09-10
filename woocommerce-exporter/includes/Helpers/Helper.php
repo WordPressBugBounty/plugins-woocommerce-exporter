@@ -117,4 +117,35 @@ class Helper {
         $path = $path ? $path : WOO_CE_PATH . 'templates/';
         wc_get_template( $template, $args, '', $path );
     }
+
+    /**
+     * Build the capability map for the plugin's private export post types.
+     *
+     * The Export Template post type registers with `map_meta_cap => false`, so every
+     * primitive capability WordPress resolves must be listed explicitly. Supplying a
+     * capabilities array is itself what turns meta-capability mapping off, and any
+     * key left to fall back would name a `*_export_template` capability that nothing
+     * in this plugin grants.
+     *
+     * @since 2.8.1
+     *
+     * @param string $export_capability Capability every key maps to.
+     * @return array Capability map for register_post_type()'s `capabilities` arg.
+     */
+    public static function export_post_type_capabilities( $export_capability ) {
+        return array_fill_keys(
+            array(
+                'edit_post',
+                'read_post',
+                'delete_post',
+                'edit_posts',
+                'edit_others_posts',
+                'delete_posts',
+                'publish_posts',
+                'read_private_posts',
+                'create_posts',
+            ),
+            $export_capability
+        );
+    }
 }

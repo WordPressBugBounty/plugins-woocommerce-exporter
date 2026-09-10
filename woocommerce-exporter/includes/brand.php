@@ -436,3 +436,79 @@ function woo_ce_detect_product_brands() {
 	}
 
 }
+
+/**
+ * Return every Product Brand taxonomy registered on this store.
+ *
+ * A store can run more than one Brands implementation at a time - WooCommerce
+ * core Brands ( 9.4+ ) registers product_brand, Perfect WooCommerce Brands
+ * registers pwb-brand, YITH registers yith_product_brand - but the
+ * woo_ce_brand_term_taxonomy filter can only ever name one of them. Filter
+ * dropdowns that offer brands to pick from use this list instead so brands from
+ * the other taxonomies are not hidden. The single-taxonomy filter is still
+ * seeded in first so a store that repoints it at a custom taxonomy keeps working.
+ *
+ * @since 2.8.1
+ *
+ * @return array List of brand taxonomy names that exist on this store.
+ */
+function woo_ce_get_brand_term_taxonomies() {
+
+    $taxonomies = array(
+        apply_filters( 'woo_ce_brand_term_taxonomy', 'product_brand' ),
+        'product_brand',
+        'pwb-brand',
+        'pa_brand',
+        'yith_product_brand',
+    );
+
+    $taxonomies = array_unique( (array) apply_filters( 'woo_ce_brand_term_taxonomies', $taxonomies ) );
+
+    return array_values( array_filter( $taxonomies, 'taxonomy_exists' ) );
+}
+
+/**
+ * Return Product Brand terms from every brand taxonomy on the store.
+ *
+ * Unlike woo_ce_get_product_brands(), which reads a single taxonomy because the
+ * Brand export type exports one taxonomy's terms as its records, this returns
+ * the union for use in filter dropdowns. Each term is given the parent_name
+ * property that woo_ce_format_product_category_label() expects.
+ *
+ * @since 2.8.1
+ *
+ * @param array $args Optional. get_terms() arguments; the taxonomy is always overridden.
+ * @return array List of WP_Term objects, empty when the store has no brand terms.
+ */
+function woo_ce_get_brand_filter_terms( $args = array() ) {
+
+    $taxonomies = woo_ce_get_brand_term_taxonomies();
+    if ( empty( $taxonomies ) ) {
+        return array();
+    }
+
+    $defaults         = array(
+        'orderby'    => 'name',
+        'order'      => 'ASC',
+        'hide_empty' => false,
+    );
+    $args             = wp_parse_args( $args, $defaults );
+    $args['taxonomy'] = $taxonomies;
+
+    $terms = get_terms( $args );
+    if ( is_wp_error( $terms ) || empty( $terms ) ) {
+        return array();
+    }
+
+    foreach ( $terms as $term ) {
+        $term->parent_name = '';
+        if ( ! empty( $term->parent ) ) {
+            $parent_term = get_term( $term->parent, $term->taxonomy );
+            if ( ! empty( $parent_term ) && ! is_wp_error( $parent_term ) ) {
+                $term->parent_name = $parent_term->name;
+            }
+        }
+    }
+
+    return $terms;
+}

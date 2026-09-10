@@ -160,7 +160,7 @@ class App {
     /**
      * Method that houses codes to be executed on init hook.
      *
-     * @since 13.3.5.1
+     * @since 2.7.3
      * @access public
      */
     public function initialize() {
@@ -328,7 +328,7 @@ class App {
     /**
      * Declare compatibility with WooCommerce HPOS.
      *
-     * @since 5.3.2
+     * @since 2.7.3
      */
     public function declare_hpos_compatibility() {
         if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {

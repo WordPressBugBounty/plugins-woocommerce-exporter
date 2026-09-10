@@ -579,6 +579,18 @@ function woo_ce_get_users( $export_args = array(), $export = array() ) {
 				}
 				break;
 
+			case 'specific':
+				// SPA quick export submits ISO (Y-m-d) bounds. WP_User_Query's date_query
+				// takes full-day Y-m-d H:i:s strings directly (unlike Product/Subscription,
+				// whose readers explode a d-m-Y string into a date_query array).
+				list( $user_dates_from, $user_dates_to ) = \VisserLabs\WSE\Helpers\Export::parse_iso_range(
+					$export_args['user_dates_from'] ?? '',
+					$export_args['user_dates_to'] ?? '',
+					'Y-m-d 00:00:00',
+					'Y-m-d 23:59:59'
+				);
+				break;
+
 			default:
 				$user_dates_from = false;
 				$user_dates_to = false;
@@ -661,6 +673,16 @@ function woo_ce_get_users( $export_args = array(), $export = array() ) {
 						unset( $user_filter_modified_date_variable, $user_filter_modified_date_variable_length, $timestamp );
 					}
 					break;
+
+			case 'specific':
+				// SPA quick export submits ISO (Y-m-d) bounds for a custom range.
+				list( $user_modified_dates_from, $user_modified_dates_to ) = \VisserLabs\WSE\Helpers\Export::parse_iso_range(
+					$export_args['user_modified_dates_from'] ?? '',
+					$export_args['user_modified_dates_to'] ?? '',
+					'Y-m-d 00:00:00',
+					'Y-m-d 23:59:59'
+				);
+				break;
 	
 				default:
 					$user_modified_dates_from = false;

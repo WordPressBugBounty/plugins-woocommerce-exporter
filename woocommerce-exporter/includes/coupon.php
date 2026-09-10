@@ -53,11 +53,17 @@ if( is_admin() ) {
 		if( $export_type <> 'coupon' )
 			return $args;
 
+		// Date Created filter is gated by its enable toggle.
+		$coupon_dates_filter_enabled = ! empty( $form_data['coupon_dates_filter_enabled'] );
+
 		// Merge in the form data for this dataset
 		$defaults = array(
 			'coupon_discount_type' => ( isset( $form_data['coupon_filter_discount_type'] ) ? woo_ce_format_product_filters( array_map( 'sanitize_text_field', (array)$form_data['coupon_filter_discount_type'] ) ) : false ),
 			'coupon_orderby' => ( isset( $form_data['coupon_orderby'] ) ? sanitize_text_field( $form_data['coupon_orderby'] ) : false ),
 			'coupon_order' => ( isset( $form_data['coupon_order'] ) ? sanitize_text_field( $form_data['coupon_order'] ) : false ),
+			'coupon_dates_filter' => ( $coupon_dates_filter_enabled && isset( $form_data['coupon_dates_filter'] ) ? sanitize_text_field( $form_data['coupon_dates_filter'] ) : false ),
+			'coupon_dates_from' => ( $coupon_dates_filter_enabled && isset( $form_data['coupon_dates_from'] ) ? woo_ce_format_order_date( sanitize_text_field( $form_data['coupon_dates_from'] ) ) : '' ),
+			'coupon_dates_to' => ( $coupon_dates_filter_enabled && isset( $form_data['coupon_dates_to'] ) ? woo_ce_format_order_date( sanitize_text_field( $form_data['coupon_dates_to'] ) ) : '' ),
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -361,6 +367,8 @@ function woo_ce_get_coupons( $args = array(), $export = array() ) {
 	$limit_volume = -1;
 	$offset = 0;
 	$discount_types = false;
+	$coupon_dates_from = false;
+	$coupon_dates_to = false;
 
 	if( $args ) {
 		$limit_volume = ( isset( $args['limit_volume'] ) ? $args['limit_volume'] : $limit_volume );
@@ -369,6 +377,18 @@ function woo_ce_get_coupons( $args = array(), $export = array() ) {
 		$order = ( isset( $args['coupon_order'] ) ? $args['coupon_order'] : 'ASC' );
 		if( !empty( $args['coupon_discount_type'] ) )
 			$discount_types = $args['coupon_discount_type'];
+
+		// Date Created range. SPA quick export submits ISO (Y-m-d) bounds under the 'specific'
+		// preset. WP_Query's date_query takes full-day Y-m-d H:i:s strings directly (unlike
+		// Product/Subscription, whose readers explode a d-m-Y string into a date_query array).
+		if ( ! empty( $args['coupon_dates_filter'] ) && 'specific' === $args['coupon_dates_filter'] ) {
+			list( $coupon_dates_from, $coupon_dates_to ) = \VisserLabs\WSE\Helpers\Export::parse_iso_range(
+				$args['coupon_dates_from'] ?? '',
+				$args['coupon_dates_to'] ?? '',
+				'Y-m-d 00:00:00',
+				'Y-m-d 23:59:59'
+			);
+		}
 	}
 
 	$post_type = 'shop_coupon';
@@ -382,6 +402,16 @@ function woo_ce_get_coupons( $args = array(), $export = array() ) {
 		'fields' => 'ids',
 		'suppress_filters' => false
 	);
+	if( ! empty( $coupon_dates_from ) && ! empty( $coupon_dates_to ) ) {
+		$args['date_query'] = array(
+			array(
+				'column' => 'post_date',
+				'after' => $coupon_dates_from,
+				'before' => $coupon_dates_to,
+				'inclusive' => true,
+			),
+		);
+	}
 	if( $discount_types ) {
 		$args['meta_query'] = array();
 		$args['meta_query'][] = array(

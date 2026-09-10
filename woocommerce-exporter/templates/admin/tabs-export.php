@@ -28,7 +28,18 @@
                 <h3 class="hndle"><?php esc_html_e( 'Loading...', 'woocommerce-exporter' ); ?></h3>
                 <div class="inside">
                     <p><strong><?php esc_html_e( 'The Quick Export screen is loading elements in the background.', 'woocommerce-exporter' ); ?></strong></p>
-                    <p><?php esc_html_e( 'If this notice does not dissapear once the browser has finished loading then something has gone wrong. This could be due to a <a href="http://www.visser.com.au/documentation/store-exporter-deluxe/usage/#The_Export_screen_loads_but_is_missing_fields_andor_elements_including_the_Export_button" target="_blank">JavaScript error</a> or <a href="http://www.visser.com.au/documentation/store-exporter-deluxe/usage/#Increasing_memory_allocated_to_PHP" target="_blank">memory/timeout limitation</a> whilst loading the Export screen, please open a <a href="http://www.visser.com.au/premium-support/" target="_blank">Support ticket</a> with us to look at this with you. :)', 'woocommerce-exporter' ); ?></p>
+                    <p>
+                    <?php
+                    printf(
+                        /* translators: %1$s: opening link tag to the knowledge base, %2$s: opening link tag to the knowledge base, %3$s: opening link tag to the support page, %4$s: closing link tag. */
+                        wp_kses_post( __( 'If this notice does not disappear once the browser has finished loading then something has gone wrong. This could be due to a %1$sJavaScript error%4$s or %2$smemory/timeout limitation%4$s whilst loading the Export screen, please open a %3$sSupport ticket%4$s with us to look at this with you. :)', 'woocommerce-exporter' ) ),
+                        '<a href="' . esc_url( woo_ce_get_kb_url() ) . '" target="_blank">',
+                        '<a href="' . esc_url( woo_ce_get_kb_url() ) . '" target="_blank">',
+                        '<a href="' . esc_url( 'https://visser.com.au/premium-support/' ) . '" target="_blank">',
+                        '</a>'
+                    );
+                    ?>
+                    </p>
                 </div>
             </div>
             <!-- .postbox -->

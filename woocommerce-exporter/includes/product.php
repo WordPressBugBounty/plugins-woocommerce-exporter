@@ -125,41 +125,78 @@ if ( is_admin() ) {
             return $args;
         }
 
+        // The Quick Export SPA names four filters differently to the classic UI:
+        // it submits 'product_filter_product_status', 'product_filter_product_type',
+        // 'product_filter_stock_status' and 'product_filter_stock_quantity' where
+        // this function - and the $defaults below - speak 'product_filter_status',
+        // '_type', '_stock' and '_quantity'. Without this mapping the submitted
+        // value never reaches $defaults, so the filter is dropped even when its
+        // gate passes. Canonical keys win, so a caller that already speaks them
+        // is never overwritten.
+        $spa_filter_aliases = array(
+            'product_filter_product_status'          => 'product_filter_status',
+            'product_filter_product_status_enabled'  => 'product_filter_status_enabled',
+            'product_filter_product_type'            => 'product_filter_type',
+            'product_filter_product_type_enabled'    => 'product_filter_type_enabled',
+            'product_filter_stock_status'            => 'product_filter_stock',
+            'product_filter_stock_status_enabled'    => 'product_filter_stock_enabled',
+            'product_filter_stock_quantity'          => 'product_filter_quantity',
+            'product_filter_stock_quantity_operator' => 'product_filter_quantity_operator',
+            'product_filter_stock_quantity_enabled'  => 'product_filter_quantity_enabled',
+        );
+        foreach ( $spa_filter_aliases as $spa_key => $canonical_key ) {
+            if ( isset( $form_data[ $spa_key ] ) && ! isset( $form_data[ $canonical_key ] ) ) {
+                $form_data[ $canonical_key ] = $form_data[ $spa_key ];
+            }
+        }
+
         // Check the state of Filter tick boxes.
-        if ( ! isset( $form_data['product_filter_category_include'] ) ) {
+        // The classic UI submitted a '{filter}_include' checkbox, but the current
+        // Quick Export SPA submits '{filter}_enabled' instead. Accept either so a
+        // filter's value survives when the SPA has it toggled on. Both keys
+        // are validated with FILTER_VALIDATE_BOOLEAN so an explicitly-off toggle
+        // ('0', '', 'false', 'off', 'no') is treated the same as an absent one;
+        // a checked box submits '1'/'on'/'true'. Toggles must be scalar: a
+        // non-scalar value (e.g. an array-shaped '{filter}_enabled[]') validates
+        // to false, so callers such as a REST API or CLI would see the filter
+        // silently treated as off.
+        if ( ! filter_var( $form_data['product_filter_category_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_category_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_category'] );
             unset( $form_data['product_filter_category_exclude'] );
         }
-        if ( ! isset( $form_data['product_filter_status_include'] ) ) {
+        if ( ! filter_var( $form_data['product_filter_status_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_status_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_status'] );
         }
-        if ( ! isset( $form_data['product_filter_tag_include'] ) ) {
+        if ( ! filter_var( $form_data['product_filter_tag_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_tag_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_tag'] );
             unset( $form_data['product_filter_tag_exclude'] );
         }
-        if ( ! isset( $form_data['product_filter_brand_include'] ) ) {
-            unset( $form_data['product_brand'] );
+        // These two gates unset 'product_brand'/'product_vendor', keys nothing ever
+        // reads - $defaults below reads 'product_filter_brand'/'product_filter_vendor'
+        // - so both gates were no-ops in either direction.
+        if ( ! filter_var( $form_data['product_filter_brand_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_brand_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
+            unset( $form_data['product_filter_brand'] );
         }
-        if ( ! isset( $form_data['product_filter_vendor_include'] ) ) {
-            unset( $form_data['product_vendor'] );
+        if ( ! filter_var( $form_data['product_filter_vendor_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_vendor_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
+            unset( $form_data['product_filter_vendor'] );
         }
-        if ( ! isset( $form_data['product_filter_type_include'] ) ) {
+        if ( ! filter_var( $form_data['product_filter_type_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_type_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_type'] );
         }
         if ( ! isset( $form_data['product_filter_sku_include'] ) ) {
             unset( $form_data['product_filter_sku'] );
             unset( $form_data['product_filter_sku_exclude'] );
         }
-        if ( ! isset( $form_data['product_filter_user_role_include'] ) ) {
+        if ( ! filter_var( $form_data['product_filter_user_role_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_user_role_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_user_role'] );
         }
-        if ( ! isset( $form_data['product_filter_stock_include'] ) ) {
+        if ( ! filter_var( $form_data['product_filter_stock_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_stock_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_stock'] );
         }
-        if ( ! isset( $form_data['product_filter_quantity_include'] ) ) {
+        if ( ! filter_var( $form_data['product_filter_quantity_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_quantity_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_quantity'], $form_data['product_filter_quantity_operator'] );
         }
-        if ( ! isset( $form_data['product_filter_shipping_class_include'] ) ) {
+        if ( ! filter_var( $form_data['product_filter_shipping_class_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_shipping_class_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_shipping_class'] );
         }
         if ( ! isset( $form_data['product_filter_featured_image_include'] ) ) {
@@ -171,7 +208,10 @@ if ( is_admin() ) {
         if ( ! isset( $form_data['product_filter_language_include'] ) ) {
             unset( $form_data['product_filter_language'] );
         }
-        if ( ! isset( $form_data['product_filter_dates_include'] ) ) {
+        // The SPA's Modified Date toggle is named after its own control
+        // ('product_modified_dates_filter_enabled'), not derived from the legacy
+        // 'product_filter_dates_include' key, so it has to be named explicitly here.
+        if ( ! filter_var( $form_data['product_filter_dates_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_modified_dates_filter_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_dates'], $form_data['product_filter_dates_from'], $form_data['product_filter_dates_to'] );
         }
 
@@ -190,7 +230,7 @@ if ( is_admin() ) {
             'product_user_role'                      => ( isset( $form_data['product_filter_user_role'] ) ? woo_ce_format_user_role_filters( array_map( 'sanitize_text_field', (array) $form_data['product_filter_user_role'] ) ) : false ),
             'product_stock'                          => ( isset( $form_data['product_filter_stock'] ) ? sanitize_text_field( $form_data['product_filter_stock'] ) : false ),
             'product_featured'                       => ( isset( $form_data['product_filter_featured'] ) ? sanitize_text_field( $form_data['product_filter_featured'] ) : false ),
-            'product_shipping_class'                 => ( isset( $form_data['product_filter_shipping_class'] ) ? woo_ce_format_product_filters( $form_data['product_filter_shipping_class'] ) : false ),
+            'product_shipping_class'                 => ( isset( $form_data['product_filter_shipping_class'] ) ? woo_ce_format_product_filters( array_map( 'absint', (array) $form_data['product_filter_shipping_class'] ) ) : false ),
             'product_featured_image'                 => ( isset( $form_data['product_filter_featured_image'] ) ? sanitize_text_field( $form_data['product_filter_featured_image'] ) : false ),
             'product_gallery'                        => ( isset( $form_data['product_filter_product_gallery'] ) ? sanitize_text_field( $form_data['product_filter_product_gallery'] ) : false ),
             'product_language'                       => ( isset( $form_data['product_filter_language'] ) ? array_map( 'sanitize_text_field', (array) $form_data['product_filter_language'] ) : false ),
@@ -1268,6 +1308,15 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
                 }
                 break;
 
+            case 'specific':
+                // SPA quick export submits ISO (Y-m-d) bounds; downstream explode expects d-m-Y.
+                list( $product_dates_from, $product_dates_to ) = \VisserLabs\WSE\Helpers\Export::parse_iso_range(
+                    $args['product_dates_from'] ?? '',
+                    $args['product_dates_to'] ?? '',
+                    'd-m-Y'
+                );
+                break;
+
             default:
                 $product_dates_from = false;
                 $product_dates_to   = false;
@@ -1396,6 +1445,15 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
                     $product_published_dates_to   = woo_ce_get_order_date_filter( 'today', 'to' );
                     unset( $published_filter_date_variable, $published_filter_date_variable_length, $timestamp );
                 }
+                break;
+
+            case 'specific':
+                // SPA quick export submits ISO (Y-m-d) bounds; downstream explode expects d-m-Y.
+                list( $product_published_dates_from, $product_published_dates_to ) = \VisserLabs\WSE\Helpers\Export::parse_iso_range(
+                    $args['product_published_dates_from'] ?? '',
+                    $args['product_published_dates_to'] ?? '',
+                    'd-m-Y'
+                );
                 break;
 
             default:
@@ -1717,7 +1775,16 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
         if ( empty( $operator ) ) {
             $operator = '=';
         }
-        if ( ! empty( $quantity ) ) {
+        // A zero threshold is meaningful - "greater than 0" is how a store owner
+        // asks for in-stock products and "exactly 0" for sold-out ones - but
+        // empty( '0' ) is true, so ! empty() dropped the meta_query entirely and
+        // returned an unfiltered export while the form reported a filter.
+        // Only a genuinely absent value (operator picked, number left blank)
+        // should skip the query. Note this admits any non-empty string, not just
+        // digits: both the Quick Export number input and the classic UI submit
+        // numeric values, and 'type' => 'NUMERIC' below casts anything else to 0.
+        // Tighten this to is_numeric() if a non-form caller is ever supported.
+        if ( '' !== $quantity ) {
             $args['meta_query'][] = array(
                 'key'     => '_stock',
                 'value'   => $quantity,

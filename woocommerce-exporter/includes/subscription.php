@@ -906,6 +906,15 @@ function woo_ce_get_subscriptions( $args = array(), $export_settings = null ) {
             }
             break;
 
+        case 'specific':
+            // SPA quick export submits ISO (Y-m-d) bounds; downstream explode expects d-m-Y.
+            list( $subscription_dates_from, $subscription_dates_to ) = \VisserLabs\WSE\Helpers\Export::parse_iso_range(
+                $args['subscription_dates_from'] ?? '',
+                $args['subscription_dates_to'] ?? '',
+                'd-m-Y'
+            );
+            break;
+
         default:
             $subscription_dates_from = false;
             $subscription_dates_to   = false;

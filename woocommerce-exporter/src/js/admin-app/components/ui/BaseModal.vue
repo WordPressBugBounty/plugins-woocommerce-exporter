@@ -46,6 +46,7 @@ watch(() => props.modelValue, (open) => {
     >
       <div
         class="wse-ui-modal bg-white rounded-xl shadow-lg w-full max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden"
+        data-testid="modal"
         :class="SIZE_CLASSES[size] ?? SIZE_CLASSES.md"
       >
         <header v-if="title || $slots.header" class="px-5 py-5 border-b border-gray-200 flex items-center justify-between gap-3">

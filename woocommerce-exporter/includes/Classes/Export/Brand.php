@@ -104,12 +104,15 @@ class Brand extends Abstract_Class {
      * @since 2.7.3
      * @access public
      *
-     * @param array       $object_ids The object IDs.
+     * @param array       $object_ids This batch's slice of hydrated term objects from get_object_ids().
      * @param null|object $export The export settings.
      */
     public function get_dataset( $object_ids, $export = null ) {
-        $dataset = woo_ce_get_product_brands( $export->args, $export );
-        return Export_Helper::parse_dataset( $dataset, $export->columns );
+        // $object_ids is this batch's slice of the fully-hydrated objects returned
+        // by get_object_ids(). Parse that slice directly instead of re-fetching the
+        // entire term set, which duplicated every row once per batch on stores
+        // with more than one batch of terms.
+        return Export_Helper::parse_dataset( $object_ids, $export->columns );
     }
 
     /**

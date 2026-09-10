@@ -35,6 +35,7 @@ function isActive (...names) {
   <aside
     class="wse-sidebar flex flex-col bg-white border-r border-gray-200 pb-0 sticky top-[32px] h-[calc(100vh-32px)] overflow-y-auto self-start"
     :class="collapsed ? 'w-16 min-w-[64px]' : 'w-60 min-w-[240px]'"
+    data-testid="sidebar"
   >
 
     <!-- Logo -->
@@ -92,7 +93,7 @@ function isActive (...names) {
       >
         <Clock :size="16" :stroke-width="1.75" />
         <span v-if="!collapsed" class="flex-1">Scheduled Exports</span>
-        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" />
+        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
       <a
@@ -103,7 +104,7 @@ function isActive (...names) {
       >
         <FileText :size="16" :stroke-width="1.75" />
         <span v-if="!collapsed" class="flex-1">Export Templates</span>
-        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" />
+        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
       <a
@@ -114,7 +115,7 @@ function isActive (...names) {
       >
         <Archive :size="16" :stroke-width="1.75" />
         <span v-if="!collapsed" class="flex-1">Archives</span>
-        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" />
+        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
       <!-- TOOLS group -->
@@ -159,7 +160,7 @@ function isActive (...names) {
       >
         <ScrollText :size="16" :stroke-width="1.75" />
         <span v-if="!collapsed" class="flex-1">Audit Log</span>
-        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" />
+        <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
       <a

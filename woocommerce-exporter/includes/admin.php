@@ -137,6 +137,26 @@ function woo_ce_spa_tabs() {
 }
 
 /**
+ * Whether the Store Export tab of the current request is owned by the Vue SPA.
+ *
+ * Shared by the body renderer (woo_cd_manage_form) and the debug-mode admin
+ * notice (woo_ce_admin_fail_notices), which suppresses its static banner on
+ * SPA tabs because the app renders its own reactive one there.
+ *
+ * @since 2.8.0
+ * @return bool
+ */
+function woo_ce_is_spa_tab() {
+	$tab      = woo_ce_resolve_current_tab();
+	$tab_base = strstr( $tab, '/', true );
+	if ( false === $tab_base ) {
+		$tab_base = $tab;
+	}
+
+	return in_array( $tab_base, woo_ce_spa_tabs(), true );
+}
+
+/**
  * Resolve the effective Store Export tab for the current request.
  *
  * Single source of truth shared by the page wrapper (woo_cd_template_header),
@@ -187,7 +207,7 @@ function woo_ce_quick_export_in_process() {
 	woo_cd_admin_notice_html( $message, 'notice has-spinner', false, 'quick_export' );
 
 	if ( ! woo_ce_get_option( 'dismiss_max_input_vars_prompt', 0 ) ) {
-		$troubleshooting_url = 'https://www.visser.com.au/documentation/store-exporter-deluxe/troubleshooting/';
+		$troubleshooting_url = woo_ce_get_kb_url();
 
 		$dismiss_url = esc_url(
             add_query_arg(
@@ -199,7 +219,7 @@ function woo_ce_quick_export_in_process() {
         );
 		$message     = '<span style="float:right;"><a href="' . $dismiss_url . '" class="woocommerce-message-close notice-dismiss">' . __( 'Dismiss', 'woocommerce-exporter' ) . '</a></span>';
 		$message    .= '<strong>It looks like you have more HTML FORM fields on this screen than your hosting server can process.</strong><br /><br />Just a heads up this PHP configration option <code>max_input_vars</code> limitation may affect export generation and/or saving changes to Scheduled Exports and Export Templates.';
-		$message    .= sprintf( ' <a href="%s" target="_blank">%s</a>', $troubleshooting_url . '#unable-to-edit-or-save-export-field-changes-on-the-edit-export-template-screen-or-the-quick-export-screen-just-refreshes', __( 'Need help?', 'woocommerce-exporter' ) );
+		$message    .= sprintf( ' <a href="%s" target="_blank">%s</a>', $troubleshooting_url, __( 'Need help?', 'woocommerce-exporter' ) );
 		woo_cd_admin_notice_html( $message, 'error', false, 'max_input_vars' );
 	}
 
@@ -682,7 +702,7 @@ function woo_ce_admin_current_screen() {
 	switch ( $screen->id ) {
 
 		case 'woocommerce_page_woo_ce':
-			$troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+			$troubleshooting_url = woo_ce_get_kb_url();
 
 			$screen->add_help_tab(
                 array(
@@ -1274,6 +1294,17 @@ function woo_ce_extend_woo_st_user_data_actions( $user_id, $meta_key = '' ) {
 
 function woo_ce_extend_woocommerce_system_status_report() {
 
+	// Both toggles, in both states, deep-link to the SPA Settings > Advanced
+	// screen where they live, instead of firing the legacy one-click nonced
+	// actions. One URL therefore serves every row in the status template.
+	$advanced_settings_url = add_query_arg(
+		array(
+			'page' => 'woo_ce',
+			'tab'  => 'settings/advanced',
+		),
+		'admin.php'
+	);
+
 	// WOO_CE_DEBUG
 	$debug_mode = false;
 	if ( defined( 'WOO_CE_DEBUG' ) ) {
@@ -1281,27 +1312,6 @@ function woo_ce_extend_woocommerce_system_status_report() {
 			$debug_mode = true;
         }
 	}
-	if ( $debug_mode ) {
-		$debug_mode_url = add_query_arg(
-            array(
-				'page'     => 'woo_ce',
-				'tab'      => 'settings',
-				'action'   => 'disable_debug_mode',
-				'_wpnonce' => wp_create_nonce( 'woo_ce_disable_debug_mode' ),
-            ),
-            'admin.php'
-        );
-	} else {
-		$debug_mode_url = add_query_arg(
-			array(
-				'page'     => 'woo_ce',
-				'tab'      => 'settings',
-				'action'   => 'enable_debug_mode',
-				'_wpnonce' => wp_create_nonce( 'woo_ce_enable_debug_mode' ),
-			),
-			'admin.php'
-		);
-    }
 
 	// WOO_CE_LOGGING
 	$logging_mode = false;
@@ -1310,27 +1320,6 @@ function woo_ce_extend_woocommerce_system_status_report() {
 			$logging_mode = true;
         }
 	}
-	if ( $logging_mode ) {
-		$logging_mode_url = add_query_arg(
-            array(
-				'page'     => 'woo_ce',
-				'tab'      => 'settings',
-				'action'   => 'disable_logging_mode',
-				'_wpnonce' => wp_create_nonce( 'woo_ce_disable_logging_mode' ),
-            ),
-            'admin.php'
-        );
-	} else {
-		$logging_mode_url = add_query_arg(
-			array(
-				'page'     => 'woo_ce',
-				'tab'      => 'settings',
-				'action'   => 'enable_logging_mode',
-				'_wpnonce' => wp_create_nonce( 'woo_ce_enable_logging_mode' ),
-			),
-			'admin.php'
-		);
-    }
 
 	// Export to FTP
 	$required_ftp_functions = array(
@@ -1406,7 +1395,7 @@ function woo_ce_wc_help_tip( $tip, $allow_html = false ) {
 
 function woo_ce_admin_plugin_row() {
 
-	$troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+	$troubleshooting_url = woo_ce_get_kb_url();
 
 	// Detect if another e-Commerce platform is activated
 	if (
@@ -1510,7 +1499,7 @@ function woo_cd_tab_template( $tab = '' ) {
 		$tab = 'overview';
     }
 
-	$troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+	$troubleshooting_url = woo_ce_get_kb_url();
 
 	switch ( $tab ) {
 
@@ -2099,12 +2088,8 @@ function woo_cd_tab_template( $tab = '' ) {
 			break;
 
 		case 'archive':
-			if ( isset( $_POST['archive'] ) || isset( $_GET['trashed'] ) ) {
-				if ( isset( $_POST['archive'] ) ) {
-					$post_ID = count( $_POST['archive'] );
-				} elseif ( isset( $_GET['trashed'] ) ) {
-					$post_ID = $_GET['trashed'];
-				}
+			if ( isset( $_GET['trashed'] ) ) {
+				$post_ID = absint( $_GET['trashed'] );
 				$message = _n( 'Archived export has been deleted.', 'Archived exports has been deleted.', $post_ID, 'woocommerce-exporter' );
 				woo_cd_admin_notice_html( $message );
 			}
@@ -2146,7 +2131,7 @@ function woo_cd_tab_template( $tab = '' ) {
 
 		case 'tools':
 			// Product Importer Deluxe
-			$woo_pd_url    = 'http://www.visser.com.au/woocommerce/plugins/product-importer-deluxe/';
+			$woo_pd_url    = 'https://visser.com.au/how-to-import-woocommerce-products/';
 			$woo_pd_target = ' target="_blank"';
 			if ( function_exists( 'woo_pd_init' ) ) {
 				$woo_pd_url    = esc_url(
@@ -2161,7 +2146,7 @@ function woo_cd_tab_template( $tab = '' ) {
 			}
 
 			// Store Toolkit
-			$woo_st_url    = 'http://www.visser.com.au/woocommerce/plugins/store-toolkit/';
+			$woo_st_url    = 'https://wordpress.org/plugins/woocommerce-store-toolkit/';
 			$woo_st_target = ' target="_blank"';
 			if ( function_exists( 'woo_st_admin_init' ) ) {
 				$woo_st_url    = esc_url(

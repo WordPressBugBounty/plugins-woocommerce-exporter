@@ -3552,13 +3552,13 @@ function woo_ce_extend_order_dataset_args( $args, $export_type = '', $form_data 
 		$args['order_customer'] = ( isset( $form_data['order_filter_customer'] ) ? sanitize_text_field( wp_unslash( $form_data['order_filter_customer'] ) ) : false );
     }
 
-	$coupon_count = woo_ce_get_export_type_count( 'coupon' );
-	$list_limit   = apply_filters( 'woo_ce_order_filter_coupon_list_limit', 500, $coupon_count );
-	if ( $coupon_count < $list_limit ) {
-		$args['order_coupon'] = ( isset( $form_data['order_filter_coupon'] ) ? array_map( 'absint', (array) wp_unslash( $form_data['order_filter_coupon'] ) ) : false );
-	} else {
-		$args['order_coupon'] = ( isset( $form_data['order_filter_coupon'] ) ? sanitize_text_field( wp_unslash( $form_data['order_filter_coupon'] ) ) : false );
-    }
+	// Both classic coupon controls are ID controls — the multiselect below the coupon-list
+	// threshold and the comma-separated ID list above it — so a single ID-first resolve covers
+	// them. Each ID becomes that coupon's current code, which is what get_object_ids() matches
+	// against woocommerce_order_items.order_item_name.
+	$args['order_coupon'] = ( ! empty( $form_data['order_filter_coupon'] )
+		? \VisserLabs\WSE\Helpers\Export::resolve_coupon_codes( wp_unslash( $form_data['order_filter_coupon'] ), true, 'id' )
+		: false );
 
 	// WPML - https://wpml.org/
 	// WooCommerce Multilingual - https://wordpress.org/plugins/woocommerce-multilingual/

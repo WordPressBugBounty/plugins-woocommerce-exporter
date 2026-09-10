@@ -14,7 +14,7 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 // Audit Log are Deluxe-only. They keep their nav slot but resolve to a shared
 // UpsellView instead of the feature — no store, no controller, no data. The
 // route's meta.upsell object is the sole source of that view's copy and CTA.
-const HELP_KB = 'https://www.visser.com.au/documentation/store-exporter-deluxe/'
+const HELP_KB = 'https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/'
 
 const routes = [
   { path: '/', name: 'overview', meta: { helpUrl: HELP_KB }, component: () => import('./views/OverviewView.vue') },

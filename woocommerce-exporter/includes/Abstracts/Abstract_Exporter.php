@@ -48,6 +48,92 @@ abstract class Abstract_Exporter {
     const EXPORT_DIR = WP_CONTENT_DIR . self::EXPORT_DIR_NAME . '/';
 
     /**
+     * Option storing the random slug appended to the archive sub-directory name.
+     *
+     * @since 2.8.1
+     * @var string
+     */
+    const ARCHIVE_DIR_SLUG_OPTION = 'wse_archive_dir_slug';
+
+    /**
+     * Get the path to the archived export sub-directory (with a trailing slash).
+     *
+     * Archives live in their own sub-directory of the export directory so they
+     * never collide with, or get unlinked alongside, the short-lived temp files
+     * that {@see get_file_path()} writes directly into EXPORT_DIR.
+     *
+     * The directory name carries a random, per-site slug. EXPORT_DIR sits inside
+     * the document root, and nginx, Caddy and OpenLiteSpeed ignore the deny-all
+     * guard files {@see ensure_export_dir()} writes. On those servers a
+     * predictable path is a credential-free download link; the slug makes
+     * containment independent of server configuration.
+     *
+     * @since 2.8.1
+     * @access public
+     *
+     * @return string
+     */
+    public static function get_archive_dir(): string {
+        return self::EXPORT_DIR . 'archives-' . self::get_archive_dir_slug() . '/';
+    }
+
+    /**
+     * Read the per-site archive directory slug, seeding it on first use.
+     *
+     * Uses add_option() instead of update_option() so two concurrent first
+     * calls cannot each persist a different slug: the INSERT against the unique
+     * option_name index lets only one row survive, and both callers re-read it.
+     *
+     * @since 2.8.1
+     * @access private
+     *
+     * @return string A 32-character hexadecimal slug.
+     */
+    private static function get_archive_dir_slug(): string {
+        $slug = get_option( self::ARCHIVE_DIR_SLUG_OPTION, '' );
+        if ( self::is_archive_dir_slug( $slug ) ) {
+            return $slug;
+        }
+
+        $candidate = md5( wp_generate_password( 64, false, false ) );
+        add_option( self::ARCHIVE_DIR_SLUG_OPTION, $candidate, '', true );
+
+        wp_cache_delete( self::ARCHIVE_DIR_SLUG_OPTION, 'options' );
+        wp_cache_delete( 'alloptions', 'options' );
+
+        $stored = get_option( self::ARCHIVE_DIR_SLUG_OPTION, '' );
+
+        return self::is_archive_dir_slug( $stored ) ? $stored : $candidate;
+    }
+
+    /**
+     * Whether a stored value is a well-formed archive directory slug.
+     *
+     * @since 2.8.1
+     * @access private
+     *
+     * @param mixed $slug The stored option value.
+     * @return bool
+     */
+    private static function is_archive_dir_slug( $slug ): bool {
+        return is_string( $slug ) && (bool) preg_match( '/^[a-f0-9]{32}$/', $slug );
+    }
+
+    /**
+     * The only stored Header formatting values that suppress the column-header row.
+     *
+     * Anything else, including an unrecognised value, writes the header, which is
+     * the safe default. Both directions run through this list:
+     * normalize_header_formatting() reads it, and the Settings REST write path
+     * canonicalises through that same normaliser, so the stored value and the
+     * engine's reading of it cannot drift apart.
+     *
+     * @since 2.8.1
+     * @var array
+     */
+    const HEADER_FORMATTING_EXCLUDED = array( '0', 'exclude' );
+
+    /**
      * The exporter.
      *
      * @var object
@@ -160,6 +246,7 @@ abstract class Abstract_Exporter {
      *       Because background processes doens't have a timeout issue.
      *
      * @since 2.7.3
+     * @since 2.8.1 Header formatting is honoured for CSV and TSV; formula-triggering cells are neutralised.
      * @access public
      *
      * @throws Exception If the file cannot be opened for writing.
@@ -174,13 +261,27 @@ abstract class Abstract_Exporter {
                 throw new Exception( sprintf( esc_html__( 'Failed to open file %s for writing.', 'woocommerce-exporter' ), esc_html( $this->file_path ) ) );
             }
 
-            // Write the headers to the file.
-            $headers = array_values( $this->export_settings->columns );
+            // Write the headers to the file, honouring the Header formatting setting.
+            if ( $this->export_settings->header_formatting ) {
+                $headers = array_values( $this->export_settings->columns );
 
-            $write = fputcsv( $this->file, $headers, $this->_get_delimiter() );
-            if ( false === $write ) {
-                // translators: %s: file path.
-                throw new Exception( sprintf( esc_html__( 'Failed to write headers to file %s.', 'woocommerce-exporter' ), esc_html( $this->file_path ) ) );
+                // Neutralise the header row on the same terms as the data rows: column
+                // labels can carry store-controlled text (Export Template overrides and
+                // custom-meta labels), so row 1 is as capable of injecting a formula as
+                // any other.
+                if ( $this->escapes_delimited_formulas() ) {
+                    $headers = array_map( array( $this, 'escape_formula_value' ), $headers );
+                }
+
+                // PHP 8.4 deprecates calling fputcsv() without $escape. The
+                // historical default is a backslash, so it is passed explicitly to
+                // keep the written file byte-identical on every supported version.
+                // Passing "" instead would silently change the escaping rules.
+                $write = fputcsv( $this->file, $headers, $this->_get_delimiter(), '"', '\\' );
+                if ( false === $write ) {
+                    // translators: %s: file path.
+                    throw new Exception( sprintf( esc_html__( 'Failed to write headers to file %s.', 'woocommerce-exporter' ), esc_html( $this->file_path ) ) );
+                }
             }
 
             // Close the file if quick export.
@@ -217,9 +318,18 @@ abstract class Abstract_Exporter {
                 $this->file = fopen( $this->file_path, 'a' );
             }
 
+            // Neutralise spreadsheet formula injection unless Excel-formula
+            // export is explicitly enabled.
+            $escape_formulas = $this->escapes_delimited_formulas();
+
             // Write the data to the file.
             foreach ( $dataset as $data ) {
-                $write = fputcsv( $this->file, $data, $this->_get_delimiter() );
+                if ( $escape_formulas ) {
+                    $data = array_map( array( $this, 'escape_formula_value' ), $data );
+                }
+                // $escape is passed explicitly for the same reason as in
+                // prepare_file(): PHP 8.4 deprecates omitting it.
+                $write = fputcsv( $this->file, $data, $this->_get_delimiter(), '"', '\\' );
             }
 
             // Close the file.
@@ -464,47 +574,70 @@ abstract class Abstract_Exporter {
      * @access public
      */
     public function save_file_to_archive() {
-        $post_type = 'woo-export';
-        $args      = array(
+        // The protected export directory and its deny-all guard files must exist
+        // before customer data is written into it.
+        self::ensure_export_dir();
+
+        // Resolve the archive name against the archive sub-directory, not
+        // EXPORT_DIR: the export's temp file still sits there at this point and
+        // would force a "-1" suffix onto every archive.
+        $archive_dir     = self::get_archive_dir();
+        $unique_filename = wp_unique_filename( $archive_dir, $this->filename );
+        $file_path       = $archive_dir . $unique_filename;
+
+        // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+        $bytes_written = file_put_contents( $file_path, $this->file_contents );
+        // phpcs:enable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+        if ( false === $bytes_written ) {
+            return 0;
+        }
+
+        $args = array(
             'post_status'    => 'private',
             'post_title'     => $this->filename,
-            'post_type'      => 'woo-export',
+            'post_type'      => 'attachment',
             'post_mime_type' => $this->get_post_mime_type( $this->export_format ),
         );
 
-        $post_id = wp_insert_attachment( $args, $this->filename );
-        if ( ! is_wp_error( $post_id ) ) {
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-
-            $upload = \wp_upload_bits( $this->filename, null, $this->file_contents );
-
-            // Check if the file was uploaded successfully.
-            if ( ! empty( $upload['error'] ) ) {
-                return;
-            }
-
-            $attach_data = \wp_generate_attachment_metadata( $post_id, $upload['file'] );
-            // Update the attachment metadata.
-            \wp_update_attachment_metadata( $post_id, $attach_data );
-            \update_attached_file( $post_id, $upload['file'] );
-
-            add_post_meta( $post_id, '_woo_export_type', $this->export_type );
-            if ( ! empty( $upload['url'] ) ) {
-                $args = array(
-                    'ID'   => $post_id,
-                    'guid' => $upload['url'],
-                );
-                wp_update_post( $args );
-            }
-
-            add_post_meta( $post_id, '_woo_start_time', $this->export_settings->start_time );
-            add_post_meta( $post_id, '_woo_end_time', microtime( true ) );
-            add_post_meta( $post_id, '_woo_idle_memory_start', $this->export_settings->idle_memory_start );
-            add_post_meta( $post_id, '_woo_data_memory_start', $this->export_settings->data_memory_start );
-            add_post_meta( $post_id, '_woo_idle_memory_end', Helper::get_current_memory_usage() - $this->export_settings->idle_memory_start );
-            add_post_meta( $post_id, '_woo_columns', $this->export_settings->total_columns );
-            add_post_meta( $post_id, '_woo_rows', $this->total_rows );
+        $post_id = wp_insert_attachment( $args, $file_path );
+        if ( is_wp_error( $post_id ) || ! $post_id ) {
+            wp_delete_file( $file_path );
+            return 0;
         }
+
+        \update_attached_file( $post_id, $file_path );
+
+        // Never expose a public URL for an archived export. wp_insert_post()
+        // backfills an empty guid with get_permalink(), and wp_get_attachment_url()
+        // falls back to the guid, so clear it after the insert.
+        self::clear_attachment_guid( (int) $post_id );
+
+        add_post_meta( $post_id, '_woo_export_type', $this->export_type );
+        add_post_meta( $post_id, '_woo_start_time', $this->export_settings->start_time );
+        add_post_meta( $post_id, '_woo_end_time', microtime( true ) );
+        add_post_meta( $post_id, '_woo_idle_memory_start', $this->export_settings->idle_memory_start );
+        add_post_meta( $post_id, '_woo_data_memory_start', $this->export_settings->data_memory_start );
+        add_post_meta( $post_id, '_woo_idle_memory_end', Helper::get_current_memory_usage() - $this->export_settings->idle_memory_start );
+        add_post_meta( $post_id, '_woo_columns', $this->export_settings->total_columns );
+        add_post_meta( $post_id, '_woo_rows', $this->total_rows );
+
+        return (int) $post_id;
+    }
+
+    /**
+     * Clear an archive attachment's guid so no public URL can resolve to it.
+     *
+     * @since 2.8.1
+     * @access public
+     *
+     * @param int $attachment_id The archive attachment post ID.
+     * @return void
+     */
+    public static function clear_attachment_guid( int $attachment_id ) {
+        global $wpdb;
+
+        $wpdb->update( $wpdb->posts, array( 'guid' => '' ), array( 'ID' => $attachment_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        clean_post_cache( $attachment_id );
     }
 
     /**
@@ -615,10 +748,151 @@ abstract class Abstract_Exporter {
     }
 
     /**
+     * Resolve the Header formatting setting to a boolean.
+     *
+     * The stored value has two historical shapes and both are still in the wild:
+     * the Settings SPA saves the slugs `include`/`exclude`, while the legacy
+     * pre-SPA radios save `1`/`0`. Resolving it once here means every export
+     * format shares one interpretation of the setting.
+     *
+     * @since 2.8.1
+     * @access public
+     *
+     * @param mixed $value The per-export value, or an empty string to fall back to the global option.
+     * @return bool True to write the column-header row, false to omit it.
+     */
+    public static function normalize_header_formatting( $value ) {
+        // Idempotent: an already-normalised boolean passes straight through.
+        // Without this, `(string) false` is `''`, which is not an excluded value
+        // and would silently turn the header row back on when a caller re-feeds
+        // its own result.
+        if ( is_bool( $value ) ) {
+            return $value;
+        }
+
+        // A non-scalar (a stray `header_formatting[]` in the posted form data) or
+        // an empty value means "not specified": fall back to the global option.
+        if ( ! is_scalar( $value ) || '' === $value ) {
+            $value = woo_ce_get_option( 'header_formatting', 1 );
+        }
+
+        // `self::` deliberately: the constant is the single source of truth for
+        // every surface, and the external callers (Settings_Controller) name
+        // Abstract_Exporter explicitly, so a subclass override could never apply
+        // consistently. Extend the constant instead.
+        return ! in_array( (string) $value, self::HEADER_FORMATTING_EXCLUDED, true );
+    }
+
+    /**
+     * Whether the stored global Header formatting setting means "write the column-header row".
+     *
+     * A named wrapper over `normalize_header_formatting( '' )`, whose bare empty
+     * string reads as a placeholder at the call site rather than as "no per-export
+     * value, so fall back to the global option".
+     *
+     * @since 2.8.1
+     * @access public
+     *
+     * @return bool True to write the column-header row, false to omit it.
+     */
+    public static function stored_header_formatting_includes_headers() {
+        return self::normalize_header_formatting( '' );
+    }
+
+    /**
+     * Neutralise a cell value that a spreadsheet application would interpret as a
+     * formula.
+     *
+     * Prefixes any string whose first character can trigger formula evaluation
+     * (`=`, `+`, `-`, `@`, TAB or CR) with a single quote, mitigating CSV/TSV
+     * formula injection when Excel-formula export is disabled. Non-string values
+     * and strings that cannot trigger a formula are returned untouched.
+     *
+     * @since 2.8.1
+     * @access private
+     *
+     * @param mixed $value Cell value.
+     * @return mixed Neutralised value, or the original value when it cannot trigger a formula.
+     */
+    private function escape_formula_value( $value ) {
+        if ( ! is_string( $value ) || '' === $value ) {
+            return $value;
+        }
+
+        // Only these characters can initiate formula evaluation.
+        if ( ! preg_match( '/^[=\-+@\t\r]/', $value ) ) {
+            return $value;
+        }
+
+        // Inert: a +/- leading value made only of number and phone punctuation
+        // cannot carry a DDE payload. That needs letters, `|` and `!`, none of
+        // which the permitted class admits, so `HYPERLINK`, `WEBSERVICE`, `DDE`
+        // and `cmd|` are all unreachable here. Sparing these matters because the
+        // naive trigger set would put an apostrophe on every negative amount
+        // ( -25.00, -1 ) and every international phone number ( +61412345678,
+        // +1 555 123 4567, +44 (0)20 7946 0018 ) in the file.
+        //
+        // The residue is arithmetic evaluation, never code execution. Because the
+        // class permits a further `-`, a value made only of digits and hyphens
+        // passes through raw and Excel does evaluate it on open ( +1-1 renders 0,
+        // -1-1 renders -2 ). Accepted deliberately: widening the class would put
+        // the apostrophe back on the phone numbers this narrowing exists to spare.
+        // Anything carrying `+`, `=`, `@` or a letter past the first character
+        // ( -2+3 ) does not match and still escapes.
+        if ( preg_match( '/^[+\-][0-9 ().,\-]*$/', $value ) ) {
+            return $value;
+        }
+
+        return "'" . $value;
+    }
+
+    /**
+     * Whether this export may emit live spreadsheet formulas.
+     *
+     * SECURITY: the preference is matched against an allow-list so that only an
+     * explicit "yes" enables live formulas; any other stored shape denies them.
+     *
+     * @since 2.8.1
+     * @access protected
+     *
+     * @return bool True when live formulas are allowed, false to neutralise them.
+     */
+    protected function allows_excel_formulas() {
+        $preference = apply_filters( 'woo_ce_phpexcel_export_formulas', $this->export_settings->excel_formulas ?? '' );
+        return in_array( $preference, array( 1, '1', true, 'allow' ), true );
+    }
+
+    /**
+     * Whether CSV/TSV cells should be neutralised in this export.
+     *
+     * Two conditions, both required. The export must be denying formulas, AND
+     * the store must not have opted out via Settings > General > Escape formulas
+     * in CSV/TSV. The opt-out exists because neutralising is lossy for delimited
+     * output: the apostrophe becomes part of the exported bytes, so a store whose
+     * downstream importer cannot tolerate it needs a way off.
+     *
+     * @since 2.8.1
+     * @access protected
+     *
+     * @return bool True when delimited cells should be neutralised.
+     */
+    protected function escapes_delimited_formulas() {
+        return ! $this->allows_excel_formulas() && (bool) woo_ce_get_option( 'csv_formula_escaping', 1 );
+    }
+
+    /**
      * Setup export settings.
      *
      * @since 2.7.3
      * @access public
+     *
+     * The resulting object is passed through the `wsed_export_settings` filter,
+     * so its property types are public API.
+     *
+     * @since 2.8.1 `$export->header_formatting` is now a bool, resolved through
+     *              normalize_header_formatting(). It previously carried the raw
+     *              stored value (the `include`/`exclude` slug or the legacy
+     *              `1`/`0`), so integrations comparing it strictly need updating.
      *
      * @param array $settings The settings to be exported.
      *                        Obtained from the form data via quick export or the post data and meta via scheduled export.
@@ -634,10 +908,10 @@ abstract class Abstract_Exporter {
         $export->cron               = $settings['cron'] ?? false;
         $export->scheduled_export   = $settings['scheduled_export'] ?? false;
         $export->post_id            = $settings['post_id'] ?? false;
-        $export->export_format      = $settings['export_format'] ?? get_option( WOO_CE_PREFIX . '_export_format', 'csv' );
+        $export->export_format      = woo_ce_resolve_export_format( $settings['export_format'] ?? '' );
         $export->bom                = $settings['bom'] ?? get_option( WOO_CE_PREFIX . '_bom', 1 );
         $export->excel_formulas     = $settings['excel_formulas'] ?? get_option( WOO_CE_PREFIX . '_excel_formulas' );
-        $export->header_formatting  = $settings['header_formatting'] ?? get_option( WOO_CE_PREFIX . '_header_formatting', 1 );
+        $export->header_formatting  = self::normalize_header_formatting( $settings['header_formatting'] ?? '' );
         $export->delimiter          = $settings['delimiter'] ?? get_option( WOO_CE_PREFIX . '_delimiter', ',' );
         $export->category_separator = $settings['category_separator'] ?? get_option( WOO_CE_PREFIX . '_category_separator', '|' );
         $export->escape_formatting  = $settings['escape_formatting'] ?? get_option( WOO_CE_PREFIX . '_escape_formatting', 'all' );
@@ -779,7 +1053,8 @@ abstract class Abstract_Exporter {
             $time_limit = ini_get( 'max_execution_time' );
         }
 
-        $timeout   = get_option( WOO_CE_PREFIX . '_timeout', 0 );
+        // absint(): the stored option can be '' (saved by the settings screen), which set_time_limit() rejects on PHP 8.
+        $timeout   = absint( get_option( WOO_CE_PREFIX . '_timeout', 0 ) );
         $safe_mode = ( function_exists( 'safe_mode' ) ? ini_get( 'safe_mode' ) : false );
 
         if ( ! $safe_mode ) {
@@ -960,7 +1235,7 @@ abstract class Abstract_Exporter {
     /**
      * Serve the file and remove once sent to the client.
      *
-     * @since 3.1.0
+     * @since 2.7.3
      */
     public function export() {
         // Check if we are printing file headers.
@@ -984,31 +1259,68 @@ abstract class Abstract_Exporter {
      * @throws Exception If the export directory could not be created.
      */
     public function get_file_path( $filename = null ) {
-        // phpcs:disable WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions
         if ( ! $filename ) {
             $filename = $this->filename;
         }
 
-        if ( ! is_dir( self::EXPORT_DIR ) ) {
-            if ( ! mkdir( self::EXPORT_DIR, 0700 ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
+        self::ensure_export_dir();
+
+        return self::EXPORT_DIR . '/' . $filename;
+    }
+
+    /**
+     * Ensure the export directory exists and is protected from direct web access.
+     *
+     * The export directory and the archive sub-directory are seeded with a
+     * deny-all `.htaccess` (Apache), a `web.config` (IIS) and an `index.php`
+     * (no directory listing). nginx ignores all three, so nginx operators must
+     * deny the directory themselves; the random archive directory slug keeps
+     * archives unguessable regardless.
+     *
+     * @since 2.8.1
+     * @access public
+     *
+     * @return void
+     * @throws Exception If the export directory or its guard files could not be created.
+     */
+    public static function ensure_export_dir() {
+        // phpcs:disable WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions
+        $files_to_create = array(
+            '.htaccess'  => "# Apache 2.4\n<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+                . "# Apache 2.2\n<IfModule !mod_authz_core.c>\n    Order deny,allow\n    Deny from all\n</IfModule>\n",
+            'index.php'  => '<?php // Silence is golden',
+            'web.config' => '<?xml version="1.0" encoding="UTF-8"?><configuration><system.webServer>'
+                . '<authorization><deny users="*" /></authorization>'
+                . '</system.webServer></configuration>',
+        );
+
+        foreach ( array( self::EXPORT_DIR, self::get_archive_dir() ) as $dir ) {
+            if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
                 throw new Exception( esc_html__( 'Could not create export directory.', 'woocommerce-exporter' ) );
-            } else {
-                $files_to_create = array(
-                    '.htaccess' => 'deny from all',
-                    'index.php' => '<?php // Silence is golden',
-                );
-                foreach ( $files_to_create as $file => $file_content ) {
-                    if ( ! file_exists( self::EXPORT_DIR . '/' . $file ) ) {
-                        $fh = @fopen( self::EXPORT_DIR . '/' . $file, 'w' );
-                        if ( is_resource( $fh ) ) {
-                            fwrite( $fh, $file_content );
-                            fclose( $fh );
-                        }
-                    }
+            }
+
+            // Applied on every run: wp_mkdir_p() inherits the parent mode (usually
+            // 0755) and an export directory created by an older version would
+            // otherwise never be tightened. Idempotent.
+            @chmod( $dir, 0700 );
+
+            foreach ( $files_to_create as $file => $file_content ) {
+                $path = $dir . $file;
+
+                // Compare contents, not only existence, so an outdated guard file
+                // (the old Apache-2.2-only "deny from all") gets the hardened version.
+                if ( file_exists( $path ) && @file_get_contents( $path ) === $file_content ) {
+                    continue;
                 }
+
+                $fh = @fopen( $path, 'w' );
+                if ( ! is_resource( $fh ) ) {
+                    throw new Exception( esc_html__( 'Could not protect the export directory.', 'woocommerce-exporter' ) );
+                }
+                fwrite( $fh, $file_content );
+                fclose( $fh );
             }
         }
-        return self::EXPORT_DIR . '/' . $filename;
         // phpcs:enable WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions
     }
 

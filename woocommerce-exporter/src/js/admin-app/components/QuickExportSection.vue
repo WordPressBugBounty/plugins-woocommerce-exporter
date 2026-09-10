@@ -37,7 +37,7 @@ function goToQuickExport (slug) {
 </script>
 
 <template>
-  <section class="wse-card p-5">
+  <section class="wse-card p-5" data-testid="overview-quick-export-card">
     <div class="flex items-center justify-between gap-3 mb-[18px]">
       <div>
         <div class="flex items-center gap-1.5 mb-[3px]">

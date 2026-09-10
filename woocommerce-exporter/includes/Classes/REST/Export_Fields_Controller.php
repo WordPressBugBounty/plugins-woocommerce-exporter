@@ -2,7 +2,7 @@
 /**
  * Export Fields REST Controller.
  *
- * @since   5.9.0
+ * @since   2.8.0
  * @package VisserLabs\WSE\Classes\REST
  */
 
@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  * Provides available export field definitions for a given export type.
  * Used by the Export Template form to populate the Add Export Fields picker.
  *
- * @since 5.9.0
+ * @since 2.8.0
  */
 class Export_Fields_Controller extends Abstract_Class {
 
@@ -29,7 +29,7 @@ class Export_Fields_Controller extends Abstract_Class {
     /**
      * Register hooks.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return void
      */
     public function run() {
@@ -39,7 +39,7 @@ class Export_Fields_Controller extends Abstract_Class {
     /**
      * Register REST routes.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return void
      */
     public function register_routes() {
@@ -72,7 +72,7 @@ class Export_Fields_Controller extends Abstract_Class {
      *
      * @param \WP_REST_Request $request The REST request.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return \WP_REST_Response|\WP_Error
      */
     public function get_fields( $request ) {
@@ -144,7 +144,7 @@ class Export_Fields_Controller extends Abstract_Class {
      *
      * @param string $name Field name/slug.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return string 'Number' or 'Text'.
      */
     private function infer_data_type( string $name ): string {
@@ -183,7 +183,7 @@ class Export_Fields_Controller extends Abstract_Class {
     /**
      * Permission callback - requires view_woocommerce_reports (or filtered capability).
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return bool|\WP_Error
      */
     public function check_permission() {

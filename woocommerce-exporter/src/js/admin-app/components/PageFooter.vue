@@ -10,7 +10,7 @@ const memoryPercent = (used, limit) => {
 </script>
 
 <template>
-  <footer class="flex items-center gap-1.5 text-xs text-gray-400 pt-4 pb-1 border-t border-gray-200 flex-wrap">
+  <footer class="flex items-center gap-1.5 text-xs text-gray-400 pt-4 pb-1 border-t border-gray-200 flex-wrap" data-testid="page-footer">
     <span v-if="plugin.version">Version {{ plugin.version }}</span>
     <span v-if="plugin.version" class="text-gray-300">&middot;</span>
     <span v-if="plugin.memory_limit">

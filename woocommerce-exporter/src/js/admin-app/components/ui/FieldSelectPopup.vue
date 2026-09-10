@@ -270,6 +270,7 @@ function onListDragLeave (e) {
                     <li
                       v-for="field in group.fields"
                       :key="field.name"
+                      :data-testid="`field-row-${field.name}`"
                       class="flex items-center gap-[10px] py-[7px] pr-4 pl-[38px] cursor-pointer transition-colors hover:bg-gray-50"
                       @click="emit('toggle', field.name)"
                     >

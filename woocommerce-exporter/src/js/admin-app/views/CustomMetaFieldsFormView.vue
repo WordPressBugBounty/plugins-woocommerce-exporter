@@ -104,7 +104,7 @@ function handleCancel () {
 </script>
 
 <template>
-  <main class="wse-main">
+  <main class="wse-main" data-testid="app-main">
 
     <!-- Page header -->
     <div class="flex items-start justify-between gap-4 mb-6">

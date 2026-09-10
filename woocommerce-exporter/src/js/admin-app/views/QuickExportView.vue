@@ -122,7 +122,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="wse-main wse-quick-export">
+  <main class="wse-main wse-quick-export" data-testid="app-main">
     <!-- Page header -->
     <div class="wse-header">
       <div>
@@ -137,7 +137,7 @@ onMounted(async () => {
         <button class="wse-qe-cancel bg-transparent border-[1.5px] border-gray-200 rounded-lg text-[12.5px] font-medium text-gray-700 py-[6px] px-3.5 cursor-pointer hover:bg-gray-100" @click="store.reset(); router.push('/')">
           Cancel
         </button>
-        <BaseButton class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
+        <BaseButton data-testid="quick-export-run" class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
           <template #icon><Zap :size="13" color="#fff" fill="#fff" :stroke-width="1.75" /></template>
           Run Export
         </BaseButton>
@@ -317,7 +317,7 @@ onMounted(async () => {
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button class="wse-qe-cancel inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100" @click="store.reset(); router.push('/')">Cancel</button>
-          <BaseButton class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
+          <BaseButton data-testid="quick-export-run" class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
             <template #icon><Zap :size="13" color="#fff" fill="#fff" :stroke-width="1.75" /></template>
             Run Export
           </BaseButton>

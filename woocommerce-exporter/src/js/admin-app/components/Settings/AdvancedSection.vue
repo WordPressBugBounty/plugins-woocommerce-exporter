@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { EyeOff, Bug, FileSearch, RotateCcw, BellOff, Trash2 } from 'lucide-vue-next'
+import { Bug, FileSearch, RotateCcw, BellOff, Trash2 } from 'lucide-vue-next'
 import { useSettingsStore } from '../../stores/settings'
 import { useToastsStore } from '../../stores/toasts'
 
@@ -32,70 +32,6 @@ async function runAction (action) {
     </div>
 
     <div class="divide-y divide-gray-100">
-
-      <!-- Hide Archives Tab -->
-      <div class="py-5 px-6">
-        <div class="flex items-center gap-4">
-          <div class="flex items-start gap-3 flex-1 min-w-0">
-            <span class="flex-shrink-0 w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-              <EyeOff :size="15" :stroke-width="1.75" color="#6C7BFF" />
-            </span>
-            <div class="min-w-0">
-              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Hide Archives Tab</p>
-              <p class="text-[12px] text-gray-400 m-0">Remove the Archives tab from the main navigation.</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2.5 flex-shrink-0">
-            <button
-              type="button"
-              class="relative w-11 h-6 rounded-full border-none p-0 cursor-pointer flex-shrink-0 transition-colors"
-              :class="settings.hide_archives_tab ? 'bg-indigo-600' : 'bg-gray-300'"
-              :aria-pressed="settings.hide_archives_tab"
-              @click="settings.hide_archives_tab = !settings.hide_archives_tab"
-            >
-              <span
-                class="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-transform"
-                :class="settings.hide_archives_tab && 'translate-x-[20px]'"
-              />
-            </button>
-            <span class="text-[13px] font-semibold" :class="settings.hide_archives_tab ? 'text-indigo-600' : 'text-gray-400'">
-              {{ settings.hide_archives_tab ? 'Hidden' : 'Visible' }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Hide Scheduled Exports Tab -->
-      <div class="py-5 px-6">
-        <div class="flex items-center gap-4">
-          <div class="flex items-start gap-3 flex-1 min-w-0">
-            <span class="flex-shrink-0 w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-              <EyeOff :size="15" :stroke-width="1.75" color="#6C7BFF" />
-            </span>
-            <div class="min-w-0">
-              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Hide Scheduled Exports Tab</p>
-              <p class="text-[12px] text-gray-400 m-0">Remove the Scheduled Exports tab from the main navigation.</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2.5 flex-shrink-0">
-            <button
-              type="button"
-              class="relative w-11 h-6 rounded-full border-none p-0 cursor-pointer flex-shrink-0 transition-colors"
-              :class="settings.hide_scheduled_exports_tab ? 'bg-indigo-600' : 'bg-gray-300'"
-              :aria-pressed="settings.hide_scheduled_exports_tab"
-              @click="settings.hide_scheduled_exports_tab = !settings.hide_scheduled_exports_tab"
-            >
-              <span
-                class="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-transform"
-                :class="settings.hide_scheduled_exports_tab && 'translate-x-[20px]'"
-              />
-            </button>
-            <span class="text-[13px] font-semibold" :class="settings.hide_scheduled_exports_tab ? 'text-indigo-600' : 'text-gray-400'">
-              {{ settings.hide_scheduled_exports_tab ? 'Hidden' : 'Visible' }}
-            </span>
-          </div>
-        </div>
-      </div>
 
       <!-- Enable Debugging Mode -->
       <div class="py-5 px-6">

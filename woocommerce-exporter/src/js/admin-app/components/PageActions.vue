@@ -11,7 +11,7 @@ import { HelpCircle } from 'lucide-vue-next'
 
 const route = useRoute()
 
-const helpUrl = computed(() => route.meta?.helpUrl ?? 'https://www.visser.com.au/documentation/store-exporter-deluxe/')
+const helpUrl = computed(() => route.meta?.helpUrl ?? 'https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/')
 </script>
 
 <template>

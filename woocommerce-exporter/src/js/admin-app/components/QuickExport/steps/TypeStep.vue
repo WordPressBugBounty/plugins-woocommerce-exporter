@@ -56,6 +56,7 @@ async function refreshCounts () {
       <button
         v-for="type in visibleTypes"
         :key="type.slug"
+        :data-testid="`export-type-card-${type.slug}`"
         class="wse-qe-type-tile relative flex flex-col items-center gap-1.5 py-3 px-2 pb-[10px] border-[1.5px] rounded-[10px] bg-white cursor-pointer text-center transition-[border-color,box-shadow]"
         :class="[
           `wse-qe-type--${type.slug}`,

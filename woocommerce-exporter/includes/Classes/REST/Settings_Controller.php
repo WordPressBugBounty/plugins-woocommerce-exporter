@@ -9,6 +9,7 @@
 namespace VisserLabs\WSE\Classes\REST;
 
 use VisserLabs\WSE\Abstracts\Abstract_Class;
+use VisserLabs\WSE\Abstracts\Abstract_Exporter;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -20,7 +21,10 @@ defined( 'ABSPATH' ) || exit;
  * Store Exporter (free) only exposes the General, Export Formats and
  * Advanced sections — Archives, Scheduling, CRON Exports, Orders Screen,
  * Export Triggers and Audit Log are premium-only (Store Exporter Deluxe)
- * concepts and are intentionally not surfaced here.
+ * concepts and are intentionally not surfaced here. Within Export Formats,
+ * only the CSV settings are readable/writable here; the XML/RSS attribute
+ * options are Deluxe-only and are intentionally excluded from both the read
+ * payload and the save allowlist.
  *
  * @since 2.7.10
  */
@@ -118,45 +122,75 @@ class Settings_Controller extends Abstract_Class {
      * @return \WP_REST_Response
      */
     public function get_settings( $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInImplementedInterface
+        $debug_option = (bool) woo_ce_get_option( 'debug_mode', 0 );
+
+        // A store upgraded from the pre-SPA screen may still hold the legacy 1/0.
+        // Returned verbatim it matches neither radio and renders both unselected,
+        // so map it to the slug the export engine resolves it to. Delegated rather
+        // than re-tested here so the engine and the screen cannot disagree about
+        // what a stored value means, including what an unset option defaults to.
+        $header_formatting = Abstract_Exporter::stored_header_formatting_includes_headers() ? 'include' : 'exclude';
+
         return rest_ensure_response(
             array(
                 // General.
-                'filename'                   => woo_ce_get_option( 'filename', 'export-{type}-{store}-{date}-{time}' ),
-                'encoding'                   => woo_ce_get_option( 'encoding', 'UTF-8' ),
-                'date_format'                => woo_ce_get_option( 'date_format', 'F j, Y' ),
-                'field_escape'               => woo_ce_get_option( 'field_escape', 'all' ),
-                'header_formatting'          => woo_ce_get_option( 'header_formatting', 'include' ),
-                'bom'                        => (bool) woo_ce_get_option( 'bom', 1 ),
-                'flush_cache'                => woo_ce_get_option( 'flush_cache', 'flush' ),
-                'excel_formulas'             => (bool) woo_ce_get_option( 'excel_formulas', 0 ),
-                'timeout'                    => (int) woo_ce_get_option( 'timeout', 0 ),
+                'filename'               => woo_ce_get_option( 'filename', 'export-{type}-{store}-{date}-{time}' ),
+                'encoding'               => woo_ce_get_option( 'encoding', 'UTF-8' ),
+                'date_format'            => woo_ce_get_option( 'date_format', 'F j, Y' ),
+                'field_escape'           => woo_ce_get_option( 'field_escape', 'all' ),
+                'header_formatting'      => $header_formatting,
+                'bom'                    => (bool) woo_ce_get_option( 'bom', 1 ),
+                'flush_cache'            => woo_ce_get_option( 'flush_cache', 'flush' ),
+                'excel_formulas'         => (bool) woo_ce_get_option( 'excel_formulas', 0 ),
+                'csv_formula_escaping'   => (bool) woo_ce_get_option( 'csv_formula_escaping', 1 ),
+                'timeout'                => (int) woo_ce_get_option( 'timeout', 0 ),
                 // Export Formats — CSV.
-                'delimiter'                  => woo_ce_get_option( 'delimiter', ',' ),
-                'category_separator'         => woo_ce_get_option( 'category_separator', '|' ),
-                'line_ending_formatting'     => woo_ce_get_option( 'line_ending_formatting', 'windows' ),
-                // Export Formats — XML.
-                'xml_attribute_url'          => (bool) woo_ce_get_option( 'xml_attribute_url', 1 ),
-                'xml_attribute_title'        => (bool) woo_ce_get_option( 'xml_attribute_title', 1 ),
-                'xml_attribute_date'         => (bool) woo_ce_get_option( 'xml_attribute_date', 1 ),
-                'xml_attribute_time'         => (bool) woo_ce_get_option( 'xml_attribute_time', 0 ),
-                'xml_attribute_export'       => (bool) woo_ce_get_option( 'xml_attribute_export', 1 ),
-                'xml_attribute_orderby'      => (bool) woo_ce_get_option( 'xml_attribute_orderby', 0 ),
-                'xml_attribute_order'        => (bool) woo_ce_get_option( 'xml_attribute_order', 0 ),
-                'xml_attribute_limit'        => (bool) woo_ce_get_option( 'xml_attribute_limit', 0 ),
-                'xml_attribute_offset'       => (bool) woo_ce_get_option( 'xml_attribute_offset', 0 ),
-                // Export Formats — RSS.
-                'rss_title'                  => woo_ce_get_option( 'rss_title', '' ),
-                'rss_link'                   => woo_ce_get_option( 'rss_link', '' ),
-                'rss_description'            => woo_ce_get_option( 'rss_description', '' ),
+                'delimiter'              => woo_ce_get_option( 'delimiter', ',' ),
+                'category_separator'     => woo_ce_get_option( 'category_separator', '|' ),
+                'line_ending_formatting' => woo_ce_get_option( 'line_ending_formatting', 'windows' ),
                 // Advanced.
-                'hide_archives_tab'          => (bool) woo_ce_get_option( 'hide_archives_tab', 0 ),
-                'hide_scheduled_exports_tab' => (bool) woo_ce_get_option( 'hide_scheduled_exports_tab', 0 ),
-                'debug_mode'                 => (bool) woo_ce_get_option( 'debug_mode', 0 ),
-                'logging_mode'               => (bool) woo_ce_get_option( 'logging_mode', 0 ),
+                // debug_mode is the raw option, which is what the Advanced
+                // toggle edits. The banner must instead follow the constant —
+                // see get_debug_mode_state().
+                'debug_mode'             => $debug_option,
+                'debug_mode_active'      => $this->is_debug_constant_on(),
+                'debug_mode_overridden'  => $this->is_debug_constant_overridden( $debug_option ),
+                'logging_mode'           => (bool) woo_ce_get_option( 'logging_mode', 0 ),
                 // Meta.
-                'categories'                 => $this->get_categories(),
+                'categories'             => $this->get_categories(),
+                'premium_formats'        => $this->get_premium_format_definitions(),
             )
         );
+    }
+
+    /**
+     * Whether the WOO_CE_DEBUG constant is on.
+     *
+     * The constant, not the option, is what every server-side export gate
+     * tests, so it is the only honest source for the SPA's debug banner.
+     *
+     * @since 2.8.0
+     * @return bool
+     */
+    private function is_debug_constant_on() {
+        return defined( 'WOO_CE_DEBUG' ) && WOO_CE_DEBUG;
+    }
+
+    /**
+     * Whether WOO_CE_DEBUG is forced from outside the plugin's own option.
+     *
+     * The bootstrap defines WOO_CE_DEBUG from the debug_mode option only when
+     * the constant is not already set, so a wp-config.php define() wins and the
+     * two legitimately disagree. When they disagree, the option cannot change
+     * the gate, and the SPA must keep reporting the constant.
+     *
+     * @since 2.8.0
+     * @param bool $debug_option The debug_mode option as stored at the start of
+     *                           this request, before any save in this request.
+     * @return bool
+     */
+    private function is_debug_constant_overridden( $debug_option ) {
+        return $this->is_debug_constant_on() !== (bool) $debug_option;
     }
 
     /**
@@ -168,40 +202,41 @@ class Settings_Controller extends Abstract_Class {
      * @return \WP_REST_Response
      */
     public function save_settings( $request ) {
+        // Read BEFORE the write. WOO_CE_DEBUG was frozen at `init`, earlier in
+        // this same request, so it cannot reflect a value saved below. Only the
+        // pre-save option can tell us whether the constant was already forced
+        // from outside (wp-config.php) or merely mirrors the option.
+        $debug_option_before = (bool) woo_ce_get_option( 'debug_mode', 0 );
+
         $allowed = array(
             // General.
-            'filename'                   => 'sanitize_text_field',
-            'encoding'                   => 'sanitize_text_field',
-            'date_format'                => 'sanitize_text_field',
-            'field_escape'               => 'sanitize_text_field',
-            'header_formatting'          => 'sanitize_text_field',
-            'bom'                        => 'boolval',
-            'flush_cache'                => 'sanitize_text_field',
-            'excel_formulas'             => 'boolval',
-            'timeout'                    => 'absint',
+            'filename'               => 'sanitize_text_field',
+            'encoding'               => 'sanitize_text_field',
+            'date_format'            => 'sanitize_text_field',
+            'field_escape'           => 'sanitize_text_field',
+            // Canonicalise through the engine's own normaliser rather than a second
+            // hardcoded allowlist: `sanitize_text_field()` alone would let a bad
+            // client store `yes` or `includ`, which no radio matches. Routing the
+            // write through normalize_header_formatting() keeps the set of "omit
+            // headers" values in Abstract_Exporter::HEADER_FORMATTING_EXCLUDED alone.
+            // It also accepts the legacy `1`/`0` shapes, resolves an unknown value
+            // to `include` (the engine's own default) and leaves an empty one on
+            // the currently stored setting instead of silently flipping it.
+            'header_formatting'      => static function ( $value ) {
+                return Abstract_Exporter::normalize_header_formatting( $value ) ? 'include' : 'exclude';
+            },
+            'bom'                    => 'boolval',
+            'flush_cache'            => 'sanitize_text_field',
+            'excel_formulas'         => 'boolval',
+            'csv_formula_escaping'   => array( __CLASS__, 'sanitize_bool_to_int' ),
+            'timeout'                => 'absint',
             // Export Formats — CSV.
-            'delimiter'                  => 'sanitize_text_field',
-            'category_separator'         => 'sanitize_text_field',
-            'line_ending_formatting'     => 'sanitize_text_field',
-            // Export Formats — XML.
-            'xml_attribute_url'          => 'boolval',
-            'xml_attribute_title'        => 'boolval',
-            'xml_attribute_date'         => 'boolval',
-            'xml_attribute_time'         => 'boolval',
-            'xml_attribute_export'       => 'boolval',
-            'xml_attribute_orderby'      => 'boolval',
-            'xml_attribute_order'        => 'boolval',
-            'xml_attribute_limit'        => 'boolval',
-            'xml_attribute_offset'       => 'boolval',
-            // Export Formats — RSS.
-            'rss_title'                  => 'sanitize_text_field',
-            'rss_link'                   => 'esc_url_raw',
-            'rss_description'            => 'sanitize_text_field',
+            'delimiter'              => 'sanitize_text_field',
+            'category_separator'     => 'sanitize_text_field',
+            'line_ending_formatting' => 'sanitize_text_field',
             // Advanced.
-            'hide_archives_tab'          => 'boolval',
-            'hide_scheduled_exports_tab' => 'boolval',
-            'debug_mode'                 => 'boolval',
-            'logging_mode'               => 'boolval',
+            'debug_mode'             => 'boolval',
+            'logging_mode'           => 'boolval',
         );
 
         $saved = array();
@@ -214,7 +249,33 @@ class Settings_Controller extends Abstract_Class {
             }
         }
 
-        return rest_ensure_response( array_merge( array( 'saved' => true ), $saved ) );
+        // The client resolves the banner as: overridden ? constant : saved
+        // option. Without the override flag the client would have to choose
+        // between a constant that is one request stale and an option that a
+        // wp-config.php define() makes irrelevant — the A25 defect.
+        return rest_ensure_response(
+            array_merge(
+                array( 'saved' => true ),
+                $saved,
+                array(
+                    'debug_mode_active'     => $this->is_debug_constant_on(),
+                    'debug_mode_overridden' => $this->is_debug_constant_overridden( $debug_option_before ),
+                )
+            )
+        );
+    }
+
+    /**
+     * Coerce a request value to the integer 1/0 the legacy settings screen and
+     * the export engine read back with woo_ce_get_option().
+     *
+     * @since 2.8.1
+     *
+     * @param mixed $value Raw request value.
+     * @return int 1 when truthy, 0 otherwise.
+     */
+    private static function sanitize_bool_to_int( $value ) {
+        return $value ? 1 : 0;
     }
 
     /**
@@ -287,7 +348,7 @@ class Settings_Controller extends Abstract_Class {
             array(
                 'key'         => 'formats',
                 'label'       => __( 'Export Formats', 'woocommerce-exporter' ),
-                'description' => __( 'Configure CSV, XML and RSS formats', 'woocommerce-exporter' ),
+                'description' => __( 'Configure CSV export formatting. XML and RSS require Store Exporter Deluxe.', 'woocommerce-exporter' ),
             ),
             array(
                 'key'         => 'advanced',
@@ -295,5 +356,27 @@ class Settings_Controller extends Abstract_Class {
                 'description' => __( 'System, performance and debug options', 'woocommerce-exporter' ),
             ),
         );
+    }
+
+    /**
+     * Build the Deluxe-gated format definitions rendered by the Export
+     * Formats settings screen (XML/RSS cards), sourced from the same
+     * allowlist/upsell helpers as the Quick Export format tiles.
+     *
+     * @since 2.8.0
+     * @return array<array{key:string,upsell_url:string}>
+     */
+    private function get_premium_format_definitions() {
+        $formats = array();
+        foreach ( array( 'xml', 'rss' ) as $format ) {
+            if ( ! woo_ce_is_premium_export_format( $format ) ) {
+                continue;
+            }
+            $formats[] = array(
+                'key'        => $format,
+                'upsell_url' => woo_ce_get_export_format_upsell_url( $format ),
+            );
+        }
+        return $formats;
     }
 }

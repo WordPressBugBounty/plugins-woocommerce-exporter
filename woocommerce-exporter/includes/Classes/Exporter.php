@@ -101,6 +101,15 @@ class Exporter extends Abstract_Exporter {
 
             $this->prepare_server();
 
+            // Defensively ensure the export-type field definition helpers are
+            // loaded before building the default field list. Without the
+            // definitions woo_ce_get_product_fields() and friends resolve to an
+            // empty list and the export aborts with "No export fields were
+            // selected".
+            if ( function_exists( 'woo_ce_load_export_types' ) ) {
+                woo_ce_load_export_types();
+            }
+
             // Get default fields.
             $this->default_fields = $this->_exporter->get_default_fields();
 

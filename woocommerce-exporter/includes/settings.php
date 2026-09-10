@@ -63,7 +63,7 @@ function woo_ce_export_settings_multisite() {
  */
 function woo_ce_export_settings_general() {
 
-    $troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+    $troubleshooting_url = woo_ce_get_kb_url();
 
     $export_filename = woo_ce_get_option( 'export_filename', '' );
     // Strip file extension from export filename.
@@ -88,12 +88,13 @@ function woo_ce_export_settings_general() {
     if ( '1' === $date_format || '' === $date_format || false === $date_format ) {
     $date_format = 'd/m/Y';
     }
-    $escape_formatting = woo_ce_get_option( 'escape_formatting', 'all' );
-    $excel_formulas    = woo_ce_get_option( 'excel_formulas', 0 );
-    $timeout           = woo_ce_get_option( 'timeout', 0 );
-    $header_formatting = woo_ce_get_option( 'header_formatting', 1 );
-    $flush_cache       = woo_ce_get_option( 'flush_cache', 0 );
-    $bom               = woo_ce_get_option( 'bom', 1 );
+    $escape_formatting    = woo_ce_get_option( 'escape_formatting', 'all' );
+    $excel_formulas       = woo_ce_get_option( 'excel_formulas', 0 );
+    $csv_formula_escaping = woo_ce_get_option( 'csv_formula_escaping', 1 );
+    $timeout              = woo_ce_get_option( 'timeout', 0 );
+    $header_formatting    = woo_ce_get_option( 'header_formatting', 1 );
+    $flush_cache          = woo_ce_get_option( 'flush_cache', 0 );
+    $bom                  = woo_ce_get_option( 'bom', 1 );
 
     ob_start();
     ?>
@@ -192,6 +193,24 @@ function woo_ce_export_settings_general() {
             echo ' - ' . wp_kses_post( sprintf( __( 'available in %s', 'woocommerce-exporter' ), woo_ce_upsell_link( '?utm_source=wse&utm_medium=settings&utm_campaign=lineendingformattinglink' ) ) );
         	?>
 				</p>
+    </td>
+    </tr>
+
+    <tr>
+    <th>
+        <label for="csv_formula_escaping"><?php esc_html_e( 'Escape formulas in CSV/TSV', 'woocommerce-exporter' ); ?></label>
+    </th>
+    <td>
+        <select id="csv_formula_escaping" name="csv_formula_escaping" <?php disabled( (bool) $excel_formulas, true ); ?>>
+        <option value="1" <?php selected( $csv_formula_escaping, 1 ); ?>><?php esc_html_e( 'Yes', 'woocommerce-exporter' ); ?></option>
+        <option value="0" <?php selected( $csv_formula_escaping, 0 ); ?>><?php esc_html_e( 'No', 'woocommerce-exporter' ); ?></option>
+        </select>
+        <p class="description">
+        <?php esc_html_e( 'When Excel formulas is set to No, prefix any CSV or TSV cell that a spreadsheet would execute as a formula with a single quote. Negative amounts and international phone numbers are left untouched. The apostrophe becomes part of the exported value, so turn this off only if a downstream system consuming your CSV exports cannot tolerate the extra character.', 'woocommerce-exporter' ); ?>
+        <?php if ( $excel_formulas ) { ?>
+            <br /><em><?php esc_html_e( 'Only applies while Excel formulas is set to No.', 'woocommerce-exporter' ); ?></em>
+        <?php } ?>
+        </p>
     </td>
     </tr>
 
@@ -420,7 +439,7 @@ function woo_ce_export_settings_extend() {
     $trigger_new_order_items_formatting = woo_ce_get_option( 'trigger_new_order_items_formatting', 'unique' );
     $trigger_new_order_fields           = woo_ce_get_option( 'trigger_new_order_fields', 'all' );
 
-    $troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+    $troubleshooting_url = woo_ce_get_kb_url();
 
     ob_start();
     ?>
@@ -933,33 +952,38 @@ function woo_ce_export_settings_extend() {
  */
 function woo_ce_export_settings_save() {
     // Verify nonce for security.
-    if ( ! wp_verify_nonce( $_REQUEST['_wpnonce'] ?? '', 'woo_ce_save_settings' ) ) {
+    if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_REQUEST['_wpnonce'] ?? '' ) ), 'woo_ce_save_settings' ) ) {
         wp_die( 'Security check failed.' );
     }
 
-    $export_filename = sanitize_file_name( $_POST['export_filename'] );
+    $export_filename = sanitize_file_name( wp_unslash( $_POST['export_filename'] ?? '' ) );
     // Strip file extension from export filename.
     $export_filename = preg_replace( '/\.(csv|tsv|xml|xls|xlsx)$/', '', $export_filename );
     woo_ce_update_option( 'export_filename', $export_filename );
 
     woo_ce_update_option( 'delete_file', isset( $_POST['delete_file'] ) ? absint( $_POST['delete_file'] ) : '' );
-    woo_ce_update_option( 'encoding', isset( $_POST['encoding'] ) ? sanitize_text_field( $_POST['encoding'] ) : '' );
-    woo_ce_update_option( 'delimiter', isset( $_POST['delimiter'] ) ? sanitize_text_field( $_POST['delimiter'] ) : '' );
-    woo_ce_update_option( 'category_separator', isset( $_POST['category_separator'] ) ? sanitize_text_field( $_POST['category_separator'] ) : '' );
-    woo_ce_update_option( 'line_ending_formatting', isset( $_POST['line_ending'] ) ? sanitize_text_field( $_POST['line_ending'] ) : '' );
+    woo_ce_update_option( 'encoding', isset( $_POST['encoding'] ) ? sanitize_text_field( wp_unslash( $_POST['encoding'] ) ) : '' );
+    woo_ce_update_option( 'delimiter', isset( $_POST['delimiter'] ) ? sanitize_text_field( wp_unslash( $_POST['delimiter'] ) ) : '' );
+    woo_ce_update_option( 'category_separator', isset( $_POST['category_separator'] ) ? sanitize_text_field( wp_unslash( $_POST['category_separator'] ) ) : '' );
+    woo_ce_update_option( 'line_ending_formatting', isset( $_POST['line_ending'] ) ? sanitize_text_field( wp_unslash( $_POST['line_ending'] ) ) : '' );
     woo_ce_update_option( 'bom', isset( $_POST['bom'] ) ? absint( $_POST['bom'] ) : '' );
-    woo_ce_update_option( 'escape_formatting', isset( $_POST['escape_formatting'] ) ? sanitize_text_field( $_POST['escape_formatting'] ) : '' );
+    woo_ce_update_option( 'escape_formatting', isset( $_POST['escape_formatting'] ) ? sanitize_text_field( wp_unslash( $_POST['escape_formatting'] ) ) : '' );
     woo_ce_update_option( 'excel_formulas', isset( $_POST['excel_formulas'] ) ? absint( $_POST['excel_formulas'] ) : '' );
+    // Falls back to the stored value rather than '' when absent: the control is
+    // disabled while Excel formulas is Yes, and a disabled select submits nothing,
+    // so treating "absent" as "off" would silently clear the store's choice.
+    woo_ce_update_option( 'csv_formula_escaping', isset( $_POST['csv_formula_escaping'] ) ? absint( $_POST['csv_formula_escaping'] ) : woo_ce_get_option( 'csv_formula_escaping', 1 ) );
     woo_ce_update_option( 'header_formatting', isset( $_POST['header_formatting'] ) ? absint( $_POST['header_formatting'] ) : '' );
     woo_ce_update_option( 'flush_cache', isset( $_POST['flush_cache'] ) ? absint( $_POST['flush_cache'] ) : '' );
     woo_ce_update_option( 'timeout', isset( $_POST['timeout'] ) ? absint( $_POST['timeout'] ) : '' );
 
-    $date_format = woo_ce_get_option( 'date_format', 'd/m/Y' );
-    if ( 'custom' === $_POST['date_format'] && ! empty( $_POST['date_format_custom'] ) ) {
-        if ( $_POST['date_format'] !== $date_format ) {
-            woo_ce_update_option( 'date_format', sanitize_text_field( $_POST['date_format_custom'] ) );
+    $date_format        = woo_ce_get_option( 'date_format', 'd/m/Y' );
+    $posted_date_format = isset( $_POST['date_format'] ) ? sanitize_text_field( wp_unslash( $_POST['date_format'] ) ) : '';
+    if ( 'custom' === $posted_date_format && ! empty( $_POST['date_format_custom'] ) ) {
+        if ( $posted_date_format !== $date_format ) {
+            woo_ce_update_option( 'date_format', sanitize_text_field( wp_unslash( $_POST['date_format_custom'] ) ) );
         }
-    } elseif ( $_POST['date_format'] !== $date_format ) {
+    } elseif ( $posted_date_format !== $date_format ) {
         // Update the date format on scheduled exports.
         $scheduled_exports = woo_ce_get_scheduled_exports();
         if ( ! empty( $scheduled_exports ) ) {
@@ -968,14 +992,14 @@ function woo_ce_export_settings_save() {
                 $order_dates_to   = get_post_meta( $scheduled_export, '_filter_order_dates_to', true );
                 // Format date to new format.
                 if ( ! empty( $order_dates_from ) ) {
-                    update_post_meta( $scheduled_export, '_filter_order_dates_from', gmdate( sanitize_text_field( $_POST['date_format'] ), strtotime( $order_dates_from ) ) );
+                    update_post_meta( $scheduled_export, '_filter_order_dates_from', gmdate( $posted_date_format, strtotime( $order_dates_from ) ) );
                 }
                 if ( ! empty( $order_dates_to ) ) {
-                    update_post_meta( $scheduled_export, '_filter_order_dates_to', gmdate( sanitize_text_field( $_POST['date_format'] ), strtotime( $order_dates_to ) ) );
+                    update_post_meta( $scheduled_export, '_filter_order_dates_to', gmdate( $posted_date_format, strtotime( $order_dates_to ) ) );
                 }
             }
         }
-        woo_ce_update_option( 'date_format', sanitize_text_field( $_POST['date_format'] ) );
+        woo_ce_update_option( 'date_format', $posted_date_format );
     }
 
     // XML settings.
@@ -997,9 +1021,9 @@ function woo_ce_export_settings_save() {
     // RSS settings.
     $rss_options = array( 'rss_title', 'rss_description' );
     foreach ( $rss_options as $option ) {
-        woo_ce_update_option( $option, isset( $_POST[ $option ] ) ? sanitize_text_field( $_POST[ $option ] ) : '' );
+        woo_ce_update_option( $option, isset( $_POST[ $option ] ) ? sanitize_text_field( wp_unslash( $_POST[ $option ] ) ) : '' );
     }
-    woo_ce_update_option( 'rss_link', isset( $_POST['rss_link'] ) ? esc_url_raw( $_POST['rss_link'] ) : '' );
+    woo_ce_update_option( 'rss_link', isset( $_POST['rss_link'] ) ? esc_url_raw( wp_unslash( $_POST['rss_link'] ) ) : '' );
 
     // Scheduled export settings.
     $enable_auto = isset( $_POST['enable_auto'] ) ? absint( $_POST['enable_auto'] ) : 0;
@@ -1008,7 +1032,7 @@ function woo_ce_export_settings_save() {
     }
 
     // CRON settings.
-    $enable_cron = isset( $_POST['enable_cron'] ) ? $_POST['enable_cron'] : '0';
+    $enable_cron = isset( $_POST['enable_cron'] ) ? sanitize_text_field( wp_unslash( $_POST['enable_cron'] ) ) : '0';
     if ( woo_ce_get_option( 'enable_cron', '0' ) !== $enable_cron ) {
         $message = sprintf(
             /* translators: %s: enabled or disabled */
@@ -1018,37 +1042,37 @@ function woo_ce_export_settings_save() {
         woo_cd_admin_notice( $message );
         woo_ce_update_option( 'enable_cron', absint( $enable_cron ) );
     }
-    woo_ce_update_option( 'secret_key', isset( $_POST['secret_key'] ) ? sanitize_text_field( $_POST['secret_key'] ) : '' );
-    woo_ce_update_option( 'cron_fields', isset( $_POST['cron_fields'] ) ? sanitize_text_field( $_POST['cron_fields'] ) : '' );
-    woo_ce_update_option( 'cron_export_template', isset( $_POST['cron_export_template'] ) ? sanitize_text_field( $_POST['cron_export_template'] ) : '' );
+    woo_ce_update_option( 'secret_key', isset( $_POST['secret_key'] ) ? sanitize_text_field( wp_unslash( $_POST['secret_key'] ) ) : '' );
+    woo_ce_update_option( 'cron_fields', isset( $_POST['cron_fields'] ) ? sanitize_text_field( wp_unslash( $_POST['cron_fields'] ) ) : '' );
+    woo_ce_update_option( 'cron_export_template', isset( $_POST['cron_export_template'] ) ? sanitize_text_field( wp_unslash( $_POST['cron_export_template'] ) ) : '' );
 
     // Orders Screen.
     $order_actions = array( 'csv', 'tsv', 'xls', 'xlsx', 'xml' );
     foreach ( $order_actions as $action ) {
         woo_ce_update_option( "order_actions_$action", isset( $_POST[ "order_actions_$action" ] ) ? absint( $_POST[ "order_actions_$action" ] ) : 0 );
     }
-    woo_ce_update_option( 'order_actions_fields', isset( $_POST['order_actions_fields'] ) ? sanitize_text_field( $_POST['order_actions_fields'] ) : '' );
-    woo_ce_update_option( 'order_actions_order_items_formatting', isset( $_POST['order_actions_order_items'] ) ? sanitize_text_field( $_POST['order_actions_order_items'] ) : '' );
-    woo_ce_update_option( 'order_actions_export_template', isset( $_POST['order_actions_export_template'] ) ? sanitize_text_field( $_POST['order_actions_export_template'] ) : '' );
+    woo_ce_update_option( 'order_actions_fields', isset( $_POST['order_actions_fields'] ) ? sanitize_text_field( wp_unslash( $_POST['order_actions_fields'] ) ) : '' );
+    woo_ce_update_option( 'order_actions_order_items_formatting', isset( $_POST['order_actions_order_items'] ) ? sanitize_text_field( wp_unslash( $_POST['order_actions_order_items'] ) ) : '' );
+    woo_ce_update_option( 'order_actions_export_template', isset( $_POST['order_actions_export_template'] ) ? sanitize_text_field( wp_unslash( $_POST['order_actions_export_template'] ) ) : '' );
 
     // Export Triggers.
     woo_ce_update_option( 'enable_trigger_new_order', isset( $_POST['enable_trigger_new_order'] ) ? absint( $_POST['enable_trigger_new_order'] ) : 0 );
-    woo_ce_update_option( 'trigger_new_order_status', isset( $_POST['trigger_new_order_status'] ) ? sanitize_text_field( $_POST['trigger_new_order_status'] ) : '' );
-    woo_ce_update_option( 'trigger_new_order_format', isset( $_POST['trigger_new_order_format'] ) ? sanitize_text_field( $_POST['trigger_new_order_format'] ) : '' );
-    woo_ce_update_option( 'trigger_new_order_method', isset( $_POST['trigger_new_order_method'] ) ? sanitize_text_field( $_POST['trigger_new_order_method'] ) : '' );
-    woo_ce_update_option( 'trigger_new_order_method_save_file_path', isset( $_POST['trigger_new_method_save_file_path'] ) ? sanitize_text_field( $_POST['trigger_new_method_save_file_path'] ) : '' );
-    woo_ce_update_option( 'trigger_new_order_method_save_filename', isset( $_POST['trigger_new_method_save_filename'] ) ? sanitize_file_name( $_POST['trigger_new_method_save_filename'] ) : '' );
+    woo_ce_update_option( 'trigger_new_order_status', isset( $_POST['trigger_new_order_status'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_order_status'] ) ) : '' );
+    woo_ce_update_option( 'trigger_new_order_format', isset( $_POST['trigger_new_order_format'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_order_format'] ) ) : '' );
+    woo_ce_update_option( 'trigger_new_order_method', isset( $_POST['trigger_new_order_method'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_order_method'] ) ) : '' );
+    woo_ce_update_option( 'trigger_new_order_method_save_file_path', isset( $_POST['trigger_new_method_save_file_path'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_method_save_file_path'] ) ) : '' );
+    woo_ce_update_option( 'trigger_new_order_method_save_filename', isset( $_POST['trigger_new_method_save_filename'] ) ? sanitize_file_name( wp_unslash( $_POST['trigger_new_method_save_filename'] ) ) : '' );
 
-    $email_to = isset( $_POST['trigger_new_order_method'] ) ? sanitize_text_field( $_POST['trigger_new_method_email_to'] ) : '';
+    $email_to = isset( $_POST['trigger_new_order_method'], $_POST['trigger_new_method_email_to'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_method_email_to'] ) ) : '';
     $email_to = str_replace( ';', ',', $email_to );
     woo_ce_update_option( 'trigger_new_order_method_email_to', $email_to );
 
-    woo_ce_update_option( 'trigger_new_order_method_email_subject', isset( $_POST['trigger_new_method_email_subject'] ) ? sanitize_text_field( $_POST['trigger_new_method_email_subject'] ) : '' );
-    woo_ce_update_option( 'trigger_new_order_method_email_contents', isset( $_POST['trigger_new_method_email_contents'] ) ? wp_kses( $_POST['trigger_new_method_email_contents'], woo_ce_format_email_contents_allowed_html(), woo_ce_format_email_contents_allowed_protocols() ) : '' );
-    woo_ce_update_option( 'trigger_new_order_method_post_to', isset( $_POST['trigger_new_method_post_to'] ) ? esc_url_raw( $_POST['trigger_new_method_post_to'] ) : '' );
-    woo_ce_update_option( 'trigger_new_order_method_scheduled_export', isset( $_POST['trigger_new_method_scheduled_export'] ) ? sanitize_text_field( $_POST['trigger_new_method_scheduled_export'] ) : '' );
-    woo_ce_update_option( 'trigger_new_order_items_formatting', isset( $_POST['trigger_new_order_order_items'] ) ? sanitize_text_field( $_POST['trigger_new_order_order_items'] ) : false );
-    woo_ce_update_option( 'trigger_new_order_fields', isset( $_POST['trigger_new_order_fields'] ) ? sanitize_text_field( $_POST['trigger_new_order_fields'] ) : '' );
+    woo_ce_update_option( 'trigger_new_order_method_email_subject', isset( $_POST['trigger_new_method_email_subject'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_method_email_subject'] ) ) : '' );
+    woo_ce_update_option( 'trigger_new_order_method_email_contents', isset( $_POST['trigger_new_method_email_contents'] ) ? wp_kses( wp_unslash( $_POST['trigger_new_method_email_contents'] ), woo_ce_format_email_contents_allowed_html(), woo_ce_format_email_contents_allowed_protocols() ) : '' );
+    woo_ce_update_option( 'trigger_new_order_method_post_to', isset( $_POST['trigger_new_method_post_to'] ) ? esc_url_raw( wp_unslash( $_POST['trigger_new_method_post_to'] ) ) : '' );
+    woo_ce_update_option( 'trigger_new_order_method_scheduled_export', isset( $_POST['trigger_new_method_scheduled_export'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_method_scheduled_export'] ) ) : '' );
+    woo_ce_update_option( 'trigger_new_order_items_formatting', isset( $_POST['trigger_new_order_order_items'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_order_order_items'] ) ) : false );
+    woo_ce_update_option( 'trigger_new_order_fields', isset( $_POST['trigger_new_order_fields'] ) ? sanitize_text_field( wp_unslash( $_POST['trigger_new_order_fields'] ) ) : '' );
 
     // Allow Plugin/Theme authors to save custom Setting options.
     do_action( 'woo_ce_extend_export_settings_save' );

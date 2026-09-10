@@ -3,9 +3,9 @@
 Contributors: jkohlbach, RymeraWebCo, visser.labs, smub
 Tags: woocommerce export, export products, export orders, export subscriptions, csv excel export
 Requires at least: 2.9.2
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 5.6
-Stable tag: 2.8.0
+Stable tag: 2.8.1
 License: GPLv2 or later
 
 Export WooCommerce products, orders, customers, categories, tags, subscriptions & more into formatted files like CSV, XML, Excel 2007, XLS, XLSX.
@@ -14,7 +14,7 @@ Export WooCommerce products, orders, customers, categories, tags, subscriptions 
 
 = The Best WooCommerce Export Plugin – Products, Orders, Subscriptions, Users, and More! =
 
-[Get Premium](https://visser.com.au/) (Scheduled exports + more features) | [Documentation](https://visser.com.au/documentation/store-exporter-deluxe/)
+[Get Premium](https://visser.com.au/) (Scheduled exports + more features) | [Documentation](https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/)
 
 **Export WooCommerce Products, Orders, Categories, Tags, Users and other store details into Excel spreadsheets that suit your store requirements.**
 
@@ -155,15 +155,42 @@ You can report security bugs through the Patchstack Vulnerability Disclosure Pro
 
 == Screenshots ==
 
-1. Each export type contains its own fields, filters and options.
-2. Select the Product fields to be included in the export, selections are remembered.
-3. Filters are available for each export type.
-3. Adjust options to suit different languages, file formats and column formatting.
-4. Native export integration with 100+ WooCommerce and WordPress Plugins.
-5. Use the Field Editor to label export columns
-6. Manage Plugin options from the Settings screen.
+1. The Overview screen is the central hub for managing your export operations.
+2. Each export type contains its own fields, filters and options.
+3. Select the Product fields to be included in the export, selections are remembered.
+4. Filters are available for each export type.
+5. Adjust options to suit different languages, file formats and column formatting.
+6. Native export integration with 100+ WooCommerce and WordPress Plugins.
+7. Use the Field Editor to label export columns
+8. Manage Plugin options from the Settings screen.
 
 == Changelog ==
+
+= 2.8.1 =
+* Bug Fix: Free plugin exposed Deluxe-only export formats (XLS/XLSX/XML) and their settings; they are now gated with an upgrade prompt
+* Bug Fix: Removed the inert Deluxe-only Hide Archives Tab and Hide Scheduled Exports Tab toggles from Advanced settings
+* Bug Fix: Debugging Mode did not block exports in the admin app; also fixed Deluxe branding and invalid markup on the debug banner
+* Bug Fix: Export Modules buttons and the Help button linked to dead visser.com.au URLs
+* Bug Fix: Quick Export: all Order filters silently ignored (toggle value and date key mismatch between the admin app and the exporter)
+* Bug Fix: Quick Export: all Product filters silently ignored (key mismatch), including status, type, stock status and stock quantity
+* Bug Fix: Quick Export date-range filters silently ignored for Product, Order, User, Coupon and Subscription exports
+* Bug Fix: Quick Export: Customer, Coupon code and Product ID text filters rendered with an empty body
+* Bug Fix: Quick Export: Custom meta value filter missing for Product and Order exports
+* Bug Fix: Order filters: Product Brand never applied, and Customer-by-email matched only guest orders
+* Bug Fix: Order filters silently drop matching orders when the Analytics lookup tables are stale
+* Bug Fix: Digital Products order filter silently fails when the order_product_lookup table is missing or the table prefix differs
+* Bug Fix: Order export fails with a fatal error when the order items formatting setting is missing or invalid
+* Bug Fix: Coupon export: Coupon Code not selected by default
+* Bug Fix: Customer export leaks the previous customer's identity and spend totals onto guest-order rows
+* Bug Fix: Taxonomy exports (Category, Tag, Brand, Attribute, Shipping Class) duplicate every row past 100 terms
+* Bug Fix: CSV/TSV exports ignore the Header formatting option (header row always written)
+* Bug Fix: CSV/TSV formula injection unmitigated; new "Escape formulas in CSV/TSV" setting, on by default
+* Bug Fix: Quick Export could start before the field list finished loading and export extra options as defaults
+* Bug Fix: Export fails with a fatal error on PHP 8 when the Timeout setting is saved empty
+* Security: Download endpoint allowed path traversal and skipped the capability check
+* Security: Export Template post type used the generic post capabilities, so Contributors could create templates
+* Security: Archives bulk-delete had no nonce or capability check
+* Security: Archived export files were written to the public uploads folder; they now live in a protected export sub-directory and are removed when the attachment is deleted
 
 = 2.8.0 =
 * Feature: Admin SPA modernization — new Vue 3 admin interface backed by a REST API

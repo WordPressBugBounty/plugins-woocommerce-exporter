@@ -15,7 +15,7 @@ onMounted(store.fetchData)
 </script>
 
 <template>
-  <main class="wse-main">
+  <main class="wse-main" data-testid="app-main">
     <!-- Page header -->
     <div class="wse-header">
       <div>

@@ -36,7 +36,7 @@ const tellMeMoreUrl = computed(() => upgradeUrl('upselltellmemorebutton'))
       </template>
     </PageHeader>
 
-    <div class="relative rounded-2xl border border-gray-200 overflow-hidden min-h-[560px] bg-gray-50">
+    <div class="relative rounded-2xl border border-gray-200 overflow-hidden min-h-[560px] bg-gray-50" data-testid="upsell-view">
       <!-- Facsimile of the Deluxe screen (decorative only). Shown fully clear
            on load, then blurs in sync with the overlay fade-in below. -->
       <div class="wse-upsell-preview-layer absolute inset-0 pointer-events-none select-none opacity-95" aria-hidden="true">

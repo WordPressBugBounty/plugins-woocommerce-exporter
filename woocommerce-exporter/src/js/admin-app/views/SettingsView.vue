@@ -25,7 +25,7 @@ const { isLoading, isSaving, error, activeCategory, categories, settings, isDirt
 
 const categoryMeta = {
   general: { icon: Settings, description: 'Export behavior and preferences' },
-  formats: { icon: FileText, description: 'Configure CSV, XML and RSS formats' },
+  formats: { icon: FileText, description: 'Configure CSV export formatting. XML and RSS require Store Exporter Deluxe.' },
   advanced: { icon: SlidersHorizontal, description: 'System, performance and debug options' }
 }
 
@@ -88,6 +88,7 @@ const delimiterDisplay = computed(() => {
   <main
     class="wse-main wse-settings"
     style="height: calc(100vh - 32px); overflow: hidden; padding: 0; gap: 0"
+    data-testid="app-main"
   >
 
     <!-- Page header -->
@@ -262,7 +263,7 @@ const delimiterDisplay = computed(() => {
               </li>
             </ul>
             <a
-              href="https://visser.com.au/documentation/store-exporter-deluxe/"
+              href="https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/"
               target="_blank"
               rel="noopener noreferrer"
               class="text-[12px] text-indigo-600 no-underline hover:underline inline-flex items-center gap-1"

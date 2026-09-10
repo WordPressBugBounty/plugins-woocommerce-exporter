@@ -203,14 +203,38 @@ class WOO_CE_Archives_List_Table extends WP_List_Table {
 
 	function process_bulk_action() {
 
-		//Detect when a bulk action is being triggered...
-		if( 'delete' === $this->current_action() ) {
-			$items = ( isset( $_POST['archive'] ) ? array_map( 'absint', (array)$_POST['archive'] ) : false );
-			if( !empty( $items ) ) {
-				foreach( $items as $id ) {
-					wp_delete_attachment( $id, true );
-				}
+		// Detect when a bulk action is being triggered.
+		if ( 'delete' !== $this->current_action() ) {
+			return;
+		}
+
+		// WP_List_Table renders this nonce within its own bulk action form.
+		check_admin_referer( 'bulk-' . $this->_args['plural'] );
+
+		if ( ! current_user_can( apply_filters( 'woo_ce_admin_user_capability', 'view_woocommerce_reports' ) ) ) {
+			return;
+		}
+
+		$items = array();
+		if ( isset( $_POST['archive'] ) ) {
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitised on the next line; the sniff does not follow absint() through array_filter().
+			$raw = (array) wp_unslash( $_POST['archive'] );
+			// Drop non-scalars before absint(), otherwise a nested archive[][]
+			// payload resolves to the attachment with ID 1.
+			$items = array_unique( array_map( 'absint', array_filter( $raw, 'is_scalar' ) ) );
+		}
+		$items = array_filter( $items );
+
+		foreach ( $items as $id ) {
+			// Only ever delete genuine export archives. The meta value can
+			// legitimately be empty ('Unassigned'), so this must not be an empty() test.
+			if ( 'attachment' !== get_post_type( $id ) || ! metadata_exists( 'post', $id, '_woo_export_type' ) ) {
+				continue;
 			}
+			if ( ! current_user_can( 'delete_post', $id ) ) {
+				continue;
+			}
+			wp_delete_attachment( $id, true );
 		}
 
 	}

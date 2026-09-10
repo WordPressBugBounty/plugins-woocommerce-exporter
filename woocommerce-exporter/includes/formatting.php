@@ -435,6 +435,13 @@ function woo_ce_format_product_filters( $product_filters = array() ) {
 		$size = count( $product_filters );
 		if ( $size == 1 ) {
 			// Check if we are dealing with an empty array or zero key.
+            // NOTE: this zero-key guard relies on the loose comparison 0 == '' and therefore
+            // only fires on PHP 7.x - on PHP 8 that comparison is false, so a single zero is
+            // returned as array( 0 ) instead of null. Callers that run non-numeric input
+            // through absint() before getting here (an email address or a coupon code becomes
+            // 0) must clear their own residue rather than relying on this guard; see the
+            // Coupon and Customer branches in Classes/Export/Order.php. Not changed here
+            // because this helper is shared by several order filters and export types.
 			if (
 				isset( $product_filters[0] ) &&
 				$product_filters[0] == ''

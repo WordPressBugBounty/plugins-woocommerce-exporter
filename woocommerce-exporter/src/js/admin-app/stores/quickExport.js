@@ -2,11 +2,14 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../lib/api'
 import { prepareExport, processBatch, getExportNonce } from '../lib/exportApi'
+import { useUpsellStore } from './upsell'
 
 // Steps: type → fields → filters → options
 export const STEPS = ['type', 'fields', 'filters', 'options']
 
 export const useQuickExportStore = defineStore('quickExport', () => {
+  const upsell = useUpsellStore()
+
   // ─── Config (loaded once) ────────────────────────────────────────────────
   const config = ref(null)
   const configLoading = ref(false)
@@ -22,6 +25,12 @@ export const useQuickExportStore = defineStore('quickExport', () => {
   // ─── Fields ──────────────────────────────────────────────────────────────
   // { [type]: { groups: [...], loading: bool, error: str|null } }
   const fieldsCache = ref({})
+  // In-flight fetch promises per type so callers can await an already-running
+  // load instead of racing it (the cache holds a { loading: true } placeholder
+  // the instant a fetch starts, so a plain cache check can't tell "loaded" from
+  // "still loading").
+  const fieldsLoading = {}
+  const filtersLoading = {}
   // { [type]: { [fieldName]: bool } } – overrides the defaults from fieldsCache
   const fieldSelections = ref({})
   // { [type]: string[] } – ordered list of enabled field names
@@ -56,6 +65,9 @@ export const useQuickExportStore = defineStore('quickExport', () => {
   // ─── Export progress (modal) ─────────────────────────────────────────────
   const showExportProgress = ref(false)
   const exportState = ref('idle') // idle | preparing | exporting | done | error
+  // Label/value rows returned by the server's debugging-mode gate, rendered in
+  // the progress dialog so the refusal explains which request was refused.
+  const exportDiagnostics = ref([])
   const exportProgress = ref(0)
   const exportTotal = ref(0)
   const exportProcessed = ref(0)
@@ -127,6 +139,13 @@ export const useQuickExportStore = defineStore('quickExport', () => {
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
+  // The first non-premium format in the server-provided list, falling back to
+  // 'csv' — used to seed exportFormat so reordering that list server-side can
+  // never default a free site onto a gated (Deluxe-only) format.
+  function firstFreeFormat () {
+    return config.value?.formats?.find(f => !f.premium)?.value ?? 'csv'
+  }
+
   async function loadConfig () {
     if (config.value) return
     configLoading.value = true
@@ -134,7 +153,7 @@ export const useQuickExportStore = defineStore('quickExport', () => {
     try {
       config.value = await api.get('quick-export/config')
       if (config.value?.formats?.length) {
-        exportFormat.value = config.value.formats[0].value
+        exportFormat.value = firstFreeFormat()
       }
     } catch (err) {
       configError.value = err instanceof Error ? err.message : 'Failed to load export types.'
@@ -152,50 +171,64 @@ export const useQuickExportStore = defineStore('quickExport', () => {
   }
 
   async function loadFields (type) {
-    if (fieldsCache.value[type]) return
+    const cached = fieldsCache.value[type]
+    if (cached && !cached.loading) return
+    if (fieldsLoading[type]) return fieldsLoading[type]
     fieldsCache.value[type] = { groups: [], loading: true, error: null }
-    try {
-      const data = await api.get(`quick-export/fields?type=${encodeURIComponent(type)}`)
-      fieldsCache.value[type] = { groups: data.groups, loading: false, error: null }
-    } catch (err) {
-      fieldsCache.value[type] = { groups: [], loading: false, error: err instanceof Error ? err.message : 'Failed to load fields.' }
-    }
+    fieldsLoading[type] = (async () => {
+      try {
+        const data = await api.get(`quick-export/fields?type=${encodeURIComponent(type)}`)
+        fieldsCache.value[type] = { groups: data.groups, loading: false, error: null }
+      } catch (err) {
+        fieldsCache.value[type] = { groups: [], loading: false, error: err instanceof Error ? err.message : 'Failed to load fields.' }
+      } finally {
+        delete fieldsLoading[type]
+      }
+    })()
+    return fieldsLoading[type]
   }
 
   async function loadFilters (type) {
-    if (filtersCache.value[type]) return
+    const cached = filtersCache.value[type]
+    if (cached && !cached.loading) return
+    if (filtersLoading[type]) return filtersLoading[type]
     filtersCache.value[type] = { filters: [], sort: null, customMeta: [], extraOptions: [], typeLabel: '', loading: true, error: null }
-    try {
-      const data = await api.get(`quick-export/filters?type=${encodeURIComponent(type)}`)
-      filtersCache.value[type] = {
-        filters: data.filters,
-        sort: data.sort,
-        customMeta: data.custom_meta ?? [],
-        extraOptions: data.extra_options ?? [],
-        typeLabel: data.type_label ?? type,
-        loading: false,
-        error: null
+    filtersLoading[type] = (async () => {
+      try {
+        const data = await api.get(`quick-export/filters?type=${encodeURIComponent(type)}`)
+        filtersCache.value[type] = {
+          filters: data.filters,
+          sort: data.sort,
+          customMeta: data.custom_meta ?? [],
+          extraOptions: data.extra_options ?? [],
+          typeLabel: data.type_label ?? type,
+          loading: false,
+          error: null
+        }
+        // Seed default extra-option / custom-meta values from server.
+        if (!extraOptionValues.value[type]) extraOptionValues.value[type] = {}
+        ;(data.extra_options ?? []).forEach((opt) => {
+          if (extraOptionValues.value[type][opt.key] === undefined) {
+            extraOptionValues.value[type][opt.key] = opt.value
+          }
+        })
+        if (!customMetaValues.value[type]) customMetaValues.value[type] = {}
+        ;(data.custom_meta ?? []).forEach((def) => {
+          if (customMetaValues.value[type][def.name] === undefined) {
+            // Seed as empty so no meta keys are pre-selected when the popup opens.
+            // The available keys come from the custom-meta-fields REST API loaded by
+            // ManageFieldsPopup; customMetaValues tracks only what the user explicitly
+            // selects for this export run.
+            customMetaValues.value[type][def.name] = ''
+          }
+        })
+      } catch (err) {
+        filtersCache.value[type] = { filters: [], sort: null, customMeta: [], extraOptions: [], typeLabel: type, loading: false, error: err instanceof Error ? err.message : 'Failed to load filters.' }
+      } finally {
+        delete filtersLoading[type]
       }
-      // Seed default extra-option / custom-meta values from server.
-      if (!extraOptionValues.value[type]) extraOptionValues.value[type] = {}
-      ;(data.extra_options ?? []).forEach((opt) => {
-        if (extraOptionValues.value[type][opt.key] === undefined) {
-          extraOptionValues.value[type][opt.key] = opt.value
-        }
-      })
-      if (!customMetaValues.value[type]) customMetaValues.value[type] = {}
-      ;(data.custom_meta ?? []).forEach((def) => {
-        if (customMetaValues.value[type][def.name] === undefined) {
-          // Seed as empty so no meta keys are pre-selected when the popup opens.
-          // The available keys come from the custom-meta-fields REST API loaded by
-          // ManageFieldsPopup; customMetaValues tracks only what the user explicitly
-          // selects for this export run.
-          customMetaValues.value[type][def.name] = ''
-        }
-      })
-    } catch (err) {
-      filtersCache.value[type] = { filters: [], sort: null, customMeta: [], extraOptions: [], typeLabel: type, loading: false, error: err instanceof Error ? err.message : 'Failed to load filters.' }
-    }
+    })()
+    return filtersLoading[type]
   }
 
   function selectType (slug) {
@@ -355,9 +388,18 @@ export const useQuickExportStore = defineStore('quickExport', () => {
     exportProcessed.value = 0
     exportError.value = null
     exportDownloadUrl.value = null
+    exportDiagnostics.value = []
 
     const nonce = getExportNonce()
     const type = selectedType.value
+
+    // selectType() kicks off loadFields()/loadFilters() fire-and-forget. If the
+    // export is triggered before those requests resolve, buildFormData() would
+    // omit the field selection and the extra-option values, and the server
+    // would fall back to defaults. Await both so the payload always reflects
+    // the loaded configuration.
+    await Promise.all([loadFields(type), loadFilters(type)])
+
     const formData = buildFormData(type)
 
     try {
@@ -385,6 +427,27 @@ export const useQuickExportStore = defineStore('quickExport', () => {
       exportState.value = 'done'
       exportProgress.value = 100
     } catch (err) {
+      // A premium format/type reaching the server gate surfaces the shared
+      // upsell modal instead of generic error text in the progress dialog.
+      // Either gate can fire, so name whichever one is actually premium.
+      if (err?.premium) {
+        const fmt = config.value?.formats?.find(f => f.value === exportFormat.value)
+        const type = config.value?.types?.find(t => t.slug === selectedType.value)
+        showExportProgress.value = false
+        exportState.value = 'idle'
+        upsell.open({
+          label: err.feature || (fmt?.premium ? fmt.label : (type?.label ?? '')),
+          description: err.message,
+          url: err.upsell,
+        })
+        return
+      }
+      // The debugging-mode gate refuses every export method. Keep its
+      // diagnostics so the dialog can show what was refused; the error state
+      // already suppresses the Download File button.
+      if (err?.debug) {
+        exportDiagnostics.value = Array.isArray(err.diagnostics) ? err.diagnostics : []
+      }
       exportState.value = 'error'
       exportError.value = err instanceof Error ? err.message : 'An unexpected error occurred.'
     }
@@ -398,6 +461,7 @@ export const useQuickExportStore = defineStore('quickExport', () => {
       } else {
         exportState.value = 'idle'
         exportError.value = null
+        exportDiagnostics.value = []
       }
     }
   }
@@ -406,6 +470,7 @@ export const useQuickExportStore = defineStore('quickExport', () => {
     showExportProgress.value = false
     exportState.value = 'idle'
     exportError.value = null
+    exportDiagnostics.value = []
   }
 
   /**
@@ -454,7 +519,7 @@ export const useQuickExportStore = defineStore('quickExport', () => {
 
   function reset () {
     selectedType.value = null
-    exportFormat.value = config.value?.formats?.[0]?.value ?? 'csv'
+    exportFormat.value = firstFreeFormat()
     exportTemplate.value = ''
     exportLimit.value = ''
     exportOffset.value = ''
@@ -544,8 +609,33 @@ export const useQuickExportStore = defineStore('quickExport', () => {
             if (v !== '' && v !== null && v !== undefined) params.append(ctrl.name, String(v))
           }
         } else if (ctrl.type === 'date_range' && typeof raw === 'object') {
-          if (raw.from) params.set(`${ctrl.name}_from`, String(raw.from))
-          if (raw.to)   params.set(`${ctrl.name}_to`,   String(raw.to))
+          // Legacy readers key the bounds off <type>_dates_from / _to and switch
+          // on a preset key (e.g. user_dates_filter) — the "specific" branch is
+          // the only one that consumes the submitted bounds. Some controls use
+          // non-derivable key names, so honour explicit keys when supplied.
+          if (raw.from || raw.to) {
+            // Fallback key derivation assumes the control name ends in `_filter`
+            // (e.g. user_dates_filter -> user_dates_from/_to). Any control whose
+            // name does not follow that convention MUST supply explicit
+            // from_key/to_key (and preset_key) from the controller, or the
+            // reader will never see the emitted bounds.
+            const presetKey = ctrl.preset_key ?? ctrl.name
+            const fromKey = ctrl.from_key ?? `${ctrl.name.replace(/_filter$/, '')}_from`
+            const toKey = ctrl.to_key ?? `${ctrl.name.replace(/_filter$/, '')}_to`
+            params.set(presetKey, 'specific')
+            if (raw.from) params.set(fromKey, String(raw.from))
+            if (raw.to)   params.set(toKey, String(raw.to))
+          }
+        } else if (ctrl.type === 'comparison_number') {
+          // Both halves or neither. `woo_ce_product_dataset_args()` builds
+          // product_quantity by concatenating the operator then the value and
+          // yields false without an operator, so posting a lone value would
+          // silently filter nothing.
+          const operator = subs[ctrl.operator_name]
+          if (raw !== '' && operator) {
+            params.set(ctrl.name, String(raw))
+            params.set(ctrl.operator_name, String(operator))
+          }
         } else if (typeof raw === 'string' && raw !== '') {
           params.set(ctrl.name, raw)
         }
@@ -570,7 +660,7 @@ export const useQuickExportStore = defineStore('quickExport', () => {
     exportFormat, exportTemplate, exportLimit, exportOffset, exportBatchSize,
     customMetaKeys, fieldLabels, extraOptionValues, customMetaValues,
     showExportProgress, exportState, exportProgress, exportTotal,
-    exportProcessed, exportError, exportDownloadUrl,
+    exportProcessed, exportError, exportDiagnostics, exportDownloadUrl,
     currentTypeConfig, currentFields, currentFilters, hasFiltersStep,
     enabledFieldNames, isExporting, canRunExport,
     loadConfig, refreshConfig, loadFields, loadFilters,

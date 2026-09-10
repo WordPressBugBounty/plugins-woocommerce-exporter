@@ -248,12 +248,7 @@ if ( is_admin() ) {
         // The Vue admin SPA owns its own navigation and views. For SPA tabs,
         // mount the app and skip the legacy tab navigation and per-tab
         // templates entirely.
-        $spa_tabs = function_exists( 'woo_ce_spa_tabs' ) ? woo_ce_spa_tabs() : array();
-        $tab_base = strstr( $tab, '/', true );
-        if ( false === $tab_base ) {
-            $tab_base = $tab;
-        }
-        if ( in_array( $tab_base, $spa_tabs, true ) ) {
+        if ( woo_ce_is_spa_tab() ) {
             echo '<div id="wse-admin-app"></div>';
             return;
         }

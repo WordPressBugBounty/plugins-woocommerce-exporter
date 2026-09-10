@@ -89,6 +89,13 @@ function setFilterActive (filter, active) {
     if (!active) {
       if (ctrl.type === 'multiselect') store.setFilterSubValue(selectedType.value, filter.key, ctrl.name, [])
       else if (ctrl.type === 'date_range') store.setFilterSubValue(selectedType.value, filter.key, ctrl.name, { from: '', to: '' })
+      else if (ctrl.type === 'text') store.setFilterSubValue(selectedType.value, filter.key, ctrl.name, '')
+      else if (ctrl.type === 'comparison_number') {
+        // Clear both halves — leaving the operator behind would make the next
+        // syncFilterEnabled() call treat the emptied filter as active again.
+        store.setFilterSubValue(selectedType.value, filter.key, ctrl.name, '')
+        store.setFilterSubValue(selectedType.value, filter.key, ctrl.operator_name, '')
+      }
     } else if (ctrl.type === 'multiselect') {
       const current = getSubMultiArray(filter.key, ctrl.name)
       if (current.length === 0) {
@@ -136,6 +143,52 @@ function setRadioValue (filterKey, controlName, value, defaultValue) {
   store.setFilterSubValue(selectedType.value, filterKey, controlName, value)
   const isDefault = value === (defaultValue ?? null)
   store.setFilterValue(selectedType.value, filterKey, !isDefault)
+}
+
+// ── Comparison-number sub-controls (Stock Quantity, …) ───────────────────────
+function getCompOp (filterKey, operatorName, firstOperatorValue) {
+  const v = store.getFilterSubValue(selectedType.value, filterKey, operatorName)
+  // `||`, not `??`: setCompNum stores '' to clear the operator, and `??` would
+  // return that empty string instead of falling back to the operator the
+  // select is displaying.
+  return v || firstOperatorValue || '>'
+}
+function setCompOp (filterKey, operatorName, value) {
+  // Deliberately does NOT sync the enabled state: an operator on its own filters
+  // nothing (PHP needs both halves — see setCompNum), so picking one must not
+  // light the card up as active.
+  store.setFilterSubValue(selectedType.value, filterKey, operatorName, value)
+}
+function getCompNum (filterKey, controlName) {
+  const v = store.getFilterSubValue(selectedType.value, filterKey, controlName)
+  return v === undefined || v === null ? '' : String(v)
+}
+function setCompNum (filterKey, ctrl, value) {
+  store.setFilterSubValue(selectedType.value, filterKey, ctrl.name, value)
+  // The operator select DISPLAYS operators[0] until the user picks another, but
+  // nothing is stored for it. `woo_ce_product_dataset_args()` builds
+  // product_quantity by concatenating the operator then the value and yields
+  // false when the operator is missing, so a value typed without ever touching
+  // the select would silently filter nothing. Persist the displayed default
+  // alongside a value, and drop it again when the value is cleared so a stray
+  // operator can't leave the filter looking active while filtering nothing.
+  store.setFilterSubValue(
+    selectedType.value,
+    filterKey,
+    ctrl.operator_name,
+    value === '' ? '' : getCompOp(filterKey, ctrl.operator_name, ctrl.operators?.[0]?.value)
+  )
+  syncFilterEnabled(filterKey)
+}
+
+// ── Text sub-controls (custom-meta value filters, customer/coupon, …) ────────
+function getTextValue (filterKey, controlName) {
+  const v = store.getFilterSubValue(selectedType.value, filterKey, controlName)
+  return typeof v === 'string' ? v : ''
+}
+function setTextValue (filterKey, controlName, value) {
+  store.setFilterSubValue(selectedType.value, filterKey, controlName, value)
+  syncFilterEnabled(filterKey)
 }
 
 const multiSearch = ref({})
@@ -343,6 +396,38 @@ const sortFieldLabel = computed(() => {
                         :model-value="getRadioValue(filter.key, ctrl.name, ctrl.default)"
                         @update:model-value="setRadioValue(filter.key, ctrl.name, $event, ctrl.default)"
                       />
+                    </template>
+
+                    <template v-else-if="ctrl.type === 'text'">
+                      <input
+                        type="text"
+                        class="wse-qe-filter-text w-full max-w-[400px] py-[9px] px-3 border-[1.5px] border-gray-200 rounded-lg text-[12.5px] text-gray-900 bg-white outline-none focus:border-indigo-400 focus:shadow-[0_0_0_3px_#EFF1FF]"
+                        :data-qe-filter-input="ctrl.name"
+                        :placeholder="ctrl.placeholder || ''"
+                        :value="getTextValue(filter.key, ctrl.name)"
+                        @input="setTextValue(filter.key, ctrl.name, $event.target.value)"
+                      />
+                    </template>
+
+                    <template v-else-if="ctrl.type === 'comparison_number'">
+                      <div class="flex items-center gap-2.5">
+                        <BaseSelect
+                          variant="form"
+                          :options="ctrl.operators"
+                          :model-value="getCompOp(filter.key, ctrl.operator_name, ctrl.operators?.[0]?.value)"
+                          :data-qe-filter-input="ctrl.operator_name"
+                          class="w-[170px] flex-shrink-0"
+                          @update:model-value="setCompOp(filter.key, ctrl.operator_name, $event)"
+                        />
+                        <input
+                          type="number"
+                          class="wse-qe-filter-number w-full max-w-[200px] py-[9px] px-3 border-[1.5px] border-gray-200 rounded-lg text-[12.5px] text-gray-900 bg-white outline-none focus:border-indigo-400 focus:shadow-[0_0_0_3px_#EFF1FF]"
+                          :data-qe-filter-input="ctrl.name"
+                          placeholder="0"
+                          :value="getCompNum(filter.key, ctrl.name)"
+                          @input="setCompNum(filter.key, ctrl, $event.target.value)"
+                        />
+                      </div>
                     </template>
 
                     <template v-else-if="ctrl.type === 'date_range'">

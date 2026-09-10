@@ -41,7 +41,7 @@ echo '<a href="' . esc_url(
             $total = ini_get( 'max_input_vars' );
         }
 
-        $troubleshooting_url = 'https://www.visser.com.au/documentation/store-exporter-deluxe/troubleshooting/';
+        $troubleshooting_url = woo_ce_get_kb_url();
 
         $dismiss_url = esc_url(
             add_query_arg(
@@ -55,7 +55,7 @@ echo '<a href="' . esc_url(
         );
         $message     = '<span style="float:right;"><a href="' . $dismiss_url . '" class="woocommerce-message-close notice-dismiss">' . esc_html__( 'Dismiss', 'woocommerce-exporter' ) . '</a></span>';
         $message    .= '<strong>It looks like you have more HTML FORM fields on this screen than your hosting server can process.</strong><br /><br />Just a heads up this PHP configration option <code>max_input_vars</code> limitation may affect export generation and/or saving changes to Scheduled Exports and Export Templates.';
-        $message    .= sprintf( ' <a href="%s" target="_blank">%s</a>', $troubleshooting_url . '#unable-to-edit-or-save-export-field-changes-on-the-edit-export-template-screen-or-the-quick-export-screen-just-refreshes', __( 'Need help?', 'woocommerce-exporter' ) );
+        $message    .= sprintf( ' <a href="%s" target="_blank">%s</a>', $troubleshooting_url, __( 'Need help?', 'woocommerce-exporter' ) );
         woo_cd_admin_notice_html( $message, 'error', false, 'max_input_vars' );
 
         // In-line javascript.
@@ -137,7 +137,7 @@ function woo_ce_export_template_options_meta_box() {
         add_action( 'woo_ce_before_export_template_fields_options', 'woo_ce_export_template_fields_booking' );
     }
 
-    $troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+    $troubleshooting_url = woo_ce_get_kb_url();
     ?>
     <div id="export_template_options" class="panel-wrap export_template_data">
         <div class="wc-tabs-back"></div>
@@ -228,11 +228,23 @@ function woo_ce_export_template_save( $post_ID = 0 ) {
         return;
     }
 
+    /*
+     * Authorisation, ahead of both the nonce check and the first meta write. The
+     * nonce proves the request came from our form, not that the sender is allowed
+     * to define which columns a privileged export will emit.
+     *
+     * Gating here as well as on the post type is deliberate: this handler is also
+     * reachable by anything else that fires `save_post_export_template`.
+     */
+    if ( ! current_user_can( apply_filters( 'woo_ce_admin_user_capability', 'view_woocommerce_reports' ) ) ) {
+        return;
+    }
+
     $post_type = 'export_template';
     check_admin_referer( $post_type, 'woo_ce_export' );
 
     // General.
-    $current_export_type = sanitize_text_field( $_POST['export_type'] );
+    $current_export_type = ( isset( $_POST['export_type'] ) ? sanitize_text_field( wp_unslash( $_POST['export_type'] ) ) : '' );
     update_post_meta( $post_ID, '_export_type', $current_export_type );
 
     // Fields.
@@ -240,9 +252,9 @@ function woo_ce_export_template_save( $post_ID = 0 ) {
     if ( ! empty( $export_types ) ) {
         $export_types = array_keys( $export_types );
         foreach ( $export_types as $export_type ) {
-            $fields  = ( isset( $_POST[ sprintf( '%s_fields', $export_type ) ] ) ? array_map( 'sanitize_text_field', (array) $_POST[ sprintf( '%s_fields', $export_type ) ] ) : false );
-            $sorting = ( isset( $_POST[ sprintf( '%s_fields_order', $export_type ) ] ) ? array_map( 'absint', (array) $_POST[ sprintf( '%s_fields_order', $export_type ) ] ) : false );
-            $labels  = ( isset( $_POST[ sprintf( '%s_fields_label', $export_type ) ] ) ? array_map( 'sanitize_text_field', (array) $_POST[ sprintf( '%s_fields_label', $export_type ) ] ) : false );
+            $fields  = ( isset( $_POST[ sprintf( '%s_fields', $export_type ) ] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST[ sprintf( '%s_fields', $export_type ) ] ) ) : false );
+            $sorting = ( isset( $_POST[ sprintf( '%s_fields_order', $export_type ) ] ) ? array_map( 'absint', (array) wp_unslash( $_POST[ sprintf( '%s_fields_order', $export_type ) ] ) ) : false );
+            $labels  = ( isset( $_POST[ sprintf( '%s_fields_label', $export_type ) ] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST[ sprintf( '%s_fields_label', $export_type ) ] ) ) : false );
             if ( ! empty( $labels ) ) {
                 $labels = array_filter( $labels );
             }

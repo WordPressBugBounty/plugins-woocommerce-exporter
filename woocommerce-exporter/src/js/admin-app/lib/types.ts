@@ -181,6 +181,13 @@ export interface WseAdminData {
   licenseUrl:       string
   exportTypes:      SelectOption[]
   licenseData:      LicenseData
+  /**
+   * Whether the plugin is in debugging mode, seeded from the WOO_CE_DEBUG
+   * constant (never the raw option — a site may define the constant in
+   * wp-config.php, so the two can disagree). wp_localize_script stringifies
+   * scalars, so this arrives as "1" / "" rather than a real boolean.
+   */
+  debugMode:        boolean | string
 }
 
 declare global {

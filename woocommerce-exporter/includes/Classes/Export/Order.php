@@ -33,6 +33,32 @@ class Order extends Abstract_Class {
     use Singleton_Trait;
 
     /**
+     * Allowed "Order items formatting" values.
+     *
+     * @since 2.8.1
+     * @var string[]
+     */
+    const ORDER_ITEMS_FORMATTING_FORMATS = array( 'combined', 'unique', 'individual' );
+
+    /**
+     * Default "Order items formatting" value, matching the admin screen.
+     *
+     * @since 2.8.1
+     * @var string
+     */
+    const ORDER_ITEMS_FORMATTING_DEFAULT = 'unique';
+
+    /**
+     * Billing e-mail matched when the Customer filter is enabled but the submitted
+     * value is not a usable address. The domain is reserved by RFC 2606 so no order
+     * can carry it, which keeps an enabled filter from widening the export.
+     *
+     * @since 2.8.1
+     * @var string
+     */
+    const UNMATCHABLE_CUSTOMER_EMAIL = 'no-matching-customer@invalid';
+
+    /**
      * The export type.
      *
      * @var string
@@ -1022,10 +1048,11 @@ class Order extends Abstract_Class {
             delete_option( WOO_CE_PREFIX . '_order_shipping_method' );
         }
 
-        // Order digital products filters.
-        if ( ! empty( $orders_filters['digital_products'] ) && 'on' === $orders_filters['digital_products'] ) {
-            if ( ! empty( $form_data['order_filter_digital_products'] ) ) {
-                update_option( WOO_CE_PREFIX . '_order_digital_products', $form_data['order_filter_digital_products'] );
+        // Order digital products filters. See resolve_digital_filter() for the SPA/legacy key handling.
+        $digital_filter = $this->resolve_digital_filter( $form_data );
+        if ( $digital_filter['enabled'] ) {
+            if ( ! empty( $digital_filter['value'] ) ) {
+                update_option( WOO_CE_PREFIX . '_order_digital_products', $digital_filter['value'] );
             }
         } else {
             delete_option( WOO_CE_PREFIX . '_order_digital_products' );
@@ -1064,6 +1091,146 @@ class Order extends Abstract_Class {
     }
 
     /**
+     * Normalise an "Order items formatting" value to one of the allowed formats.
+     *
+     * Returns $value unchanged when it is one of self::ORDER_ITEMS_FORMATTING_FORMATS;
+     * otherwise falls back to the configured `order_items_formatting` option, and
+     * finally to self::ORDER_ITEMS_FORMATTING_DEFAULT. This guarantees the return
+     * value is always a valid format, so downstream parser dispatch can never build
+     * an undefined `_parse_order_item_data_*` method name and fatal the export.
+     *
+     * @since 2.8.1
+     * @access private
+     *
+     * @param mixed $value The candidate "Order items formatting" value.
+     * @return string A value guaranteed to be one of self::ORDER_ITEMS_FORMATTING_FORMATS.
+     */
+    private static function normalize_order_items_format( $value ) {
+        if ( in_array( $value, self::ORDER_ITEMS_FORMATTING_FORMATS, true ) ) {
+            return $value;
+        }
+
+        $value = woo_ce_get_option( 'order_items_formatting', self::ORDER_ITEMS_FORMATTING_DEFAULT );
+
+        return in_array( $value, self::ORDER_ITEMS_FORMATTING_FORMATS, true )
+            ? $value
+            : self::ORDER_ITEMS_FORMATTING_DEFAULT;
+    }
+
+    /**
+     * Determine whether a Quick Export order filter card is enabled.
+     *
+     * The Vue Quick Export SPA submits each filter's enable toggle as the string '1'
+     * (not the classic UI's 'on'), and — for most order filters — under a flat
+     * '{filter}_enabled' key rather than inside the nested 'orders_filters[]' array the
+     * classic UI used. Accept the SPA's flat key, the nested key, and the classic 'on'
+     * value so an enabled filter's value survives regardless of payload shape.
+     *
+     * @since 2.8.1
+     *
+     * @param array  $settings       Parsed Quick Export form data.
+     * @param array  $orders_filters The nested 'orders_filters' sub-array from $settings.
+     * @param string $nested_key     Key within $orders_filters (e.g. 'status', 'date').
+     * @param string $spa_enable_key Flat enable key submitted by the SPA (e.g. 'order_filter_status_enabled'), or '' if none.
+     * @return bool
+     */
+    private function is_quick_filter_enabled( $settings, $orders_filters, $nested_key, $spa_enable_key = '' ) {
+        if ( '' !== $spa_enable_key && ! empty( $settings[ $spa_enable_key ] ) ) {
+            return true;
+        }
+
+        return ! empty( $orders_filters[ $nested_key ] );
+    }
+
+    /**
+     * Apply a Quick Export date range filter to the export dataset args.
+     *
+     * The Order Created Dates and Order Modified Dates filters are structurally identical —
+     * they differ only in the dataset arg key prefix and the SPA field names — so both route
+     * through here. The SPA date_range control submits ISO 'Y-m-d' values; the classic UI
+     * submitted a named filter ('manual', 'variable' or a preset) with its own companion fields.
+     *
+     * Both SPA bounds are required: get_date_filter()'s 'manual' mode only builds a range when
+     * from AND to are present, so a one-sided range falls through to the classic payload rather
+     * than setting a 'manual' filter it cannot satisfy.
+     *
+     * @since 2.8.1
+     *
+     * @param array  $args         The export dataset args.
+     * @param array  $settings     Parsed Quick Export form data.
+     * @param string $arg_prefix   Dataset arg key prefix (e.g. 'order_dates', 'order_modified_dates').
+     * @param string $spa_from_key SPA field name holding the range start (e.g. 'orders_filter_date_from').
+     * @param string $spa_to_key   SPA field name holding the range end (e.g. 'orders_filter_date_to').
+     * @return array The export dataset args.
+     */
+    private function apply_quick_date_filter( $args, $settings, $arg_prefix, $spa_from_key, $spa_to_key ) {
+        $spa_from = $settings[ $spa_from_key ] ?? '';
+        $spa_to   = $settings[ $spa_to_key ] ?? '';
+
+        if ( '' !== $spa_from && '' !== $spa_to ) {
+            // Native <input type="date"> always emits ISO dates, which WC_DateTime parses natively.
+            $args[ $arg_prefix . '_filter' ] = 'manual';
+            $args[ $arg_prefix . '_from' ]   = sanitize_text_field( $spa_from );
+            $args[ $arg_prefix . '_to' ]     = sanitize_text_field( $spa_to );
+
+            return $args;
+        }
+
+        if ( empty( $settings[ $arg_prefix . '_filter' ] ) ) {
+            return $args;
+        }
+
+        // Classic UI payload.
+        $date_filter                     = sanitize_text_field( $settings[ $arg_prefix . '_filter' ] );
+        $args[ $arg_prefix . '_filter' ] = $date_filter;
+
+        if ( 'manual' === $date_filter ) {
+            $args[ $arg_prefix . '_from' ] = isset( $settings[ $arg_prefix . '_from' ] ) ? Formatting::sanitize_date( $settings[ $arg_prefix . '_from' ] ) : '';
+            $args[ $arg_prefix . '_to' ]   = isset( $settings[ $arg_prefix . '_to' ] ) ? Formatting::sanitize_date( $settings[ $arg_prefix . '_to' ] ) : '';
+        } elseif ( 'specific' === $date_filter ) {
+            // The SPA date picker submits the preset key as 'specific' with ISO (Y-m-d) bounds
+            // under the reader-aligned from/to keys; Export_Helper::get_date_filter() parses them.
+            $args[ $arg_prefix . '_from' ] = isset( $settings[ $arg_prefix . '_from' ] ) ? sanitize_text_field( $settings[ $arg_prefix . '_from' ] ) : '';
+            $args[ $arg_prefix . '_to' ]   = isset( $settings[ $arg_prefix . '_to' ] ) ? sanitize_text_field( $settings[ $arg_prefix . '_to' ] ) : '';
+        } elseif ( 'variable' === $date_filter ) {
+            $args[ $arg_prefix . '_filter_variable' ]        = isset( $settings[ $arg_prefix . '_filter_variable' ] ) ? absint( $settings[ $arg_prefix . '_filter_variable' ] ) : false;
+            $args[ $arg_prefix . '_filter_variable_length' ] = isset( $settings[ $arg_prefix . '_filter_variable_length' ] ) ? sanitize_text_field( $settings[ $arg_prefix . '_filter_variable_length' ] ) : false;
+        }
+
+        return $args;
+    }
+
+    /**
+     * Resolve the Digital Products order filter from a submitted-settings array.
+     *
+     * Accepts both the Vue admin SPA keys (`order_filter_digital_enabled` toggle +
+     * `order_filter_digital` value) and the legacy form keys (`orders_filters[digital_products]`
+     * + `order_filter_digital_products`), so Quick Export applies the filter regardless of which
+     * UI submitted it. Without the SPA keys the value never reached the export and every order
+     * was returned regardless of the selection.
+     *
+     * @since 2.8.1
+     * @access private
+     *
+     * @param array $src Submitted settings (the saved `$form_data` or the export `$settings`).
+     * @return array {
+     *     @type bool   $enabled Whether the Digital Products filter is active.
+     *     @type string $value   The selected filter value (e.g. 'include_digital', 'exclude_digital'), or '' if none. Sanitized via sanitize_text_field().
+     * }
+     */
+    private function resolve_digital_filter( array $src ): array {
+        $orders_filters = $src['orders_filters'] ?? array();
+        $enabled        = ! empty( $src['order_filter_digital_enabled'] )
+            || ( ! empty( $orders_filters['digital_products'] ) && 'on' === $orders_filters['digital_products'] );
+        $value          = sanitize_text_field( $src['order_filter_digital'] ?? $src['order_filter_digital_products'] ?? '' );
+
+        return array(
+            'enabled' => $enabled,
+            'value'   => $value,
+        );
+    }
+
+    /**
      * Extend export dataset args.
      *
      * @since 2.7.3
@@ -1089,104 +1256,167 @@ class Order extends Abstract_Class {
             $args = apply_filters( 'woo_ce_extend_dataset_args', $args, $export->type, $settings );
         }
 
+        // Order filters (Quick Export).
+        //
+        // The Vue Quick Export SPA and the classic UI submit filter toggles/values under
+        // different key shapes. Each filter below is self-gated via is_quick_filter_enabled()
+        // (which accepts the SPA's flat '{filter}_enabled' key, the nested 'orders_filters[X]'
+        // key, and the classic 'on' value), then reads its value from the SPA field name with
+        // a fallback to the legacy name. This reconciles the frontend/backend contract mismatch
+        // that silently discarded every order filter during Quick Export.
         $orders_filters = $settings['orders_filters'] ?? array();
-        if ( ! empty( $orders_filters ) ) {
-            if ( isset( $orders_filters['date'] ) && 'on' === $orders_filters['date'] ) {
-                $order_dates_filter         = sanitize_text_field( $settings['order_dates_filter'] ) ?? false;
-                $args['order_dates_filter'] = $order_dates_filter;
 
-                if ( 'manual' === $order_dates_filter ) {
-                    $args['order_dates_from'] = isset( $settings['order_dates_from'] ) ? Formatting::sanitize_date( $settings['order_dates_from'] ) : '';
-                    $args['order_dates_to']   = isset( $settings['order_dates_to'] ) ? Formatting::sanitize_date( $settings['order_dates_to'] ) : '';
-                } elseif ( 'variable' === $order_dates_filter ) {
-                    $args['order_dates_filter_variable']        = isset( $settings['order_dates_filter_variable'] ) ? absint( $settings['order_dates_filter_variable'] ) : false;
-                    $args['order_dates_filter_variable_length'] = isset( $settings['order_dates_filter_variable_length'] ) ? sanitize_text_field( $settings['order_dates_filter_variable_length'] ) : false;
-                }
-            }
-            if ( isset( $orders_filters['modified_date'] ) && 'on' === $orders_filters['modified_date'] ) {
-                $order_modified_dates_filter         = sanitize_text_field( $settings['order_modified_dates_filter'] ) ?? false;
-                $args['order_modified_dates_filter'] = $order_modified_dates_filter;
+        // Order Created Dates.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'date' ) ) {
+            $args = $this->apply_quick_date_filter( $args, $settings, 'order_dates', 'orders_filter_date_from', 'orders_filter_date_to' );
+        }
 
-                if ( 'manual' === $order_modified_dates_filter ) {
-                    $args['order_modified_dates_from'] = isset( $settings['order_modified_dates_from'] ) ? Formatting::sanitize_date( $settings['order_modified_dates_from'] ) : '';
-                    $args['order_modified_dates_to']   = isset( $settings['order_modified_dates_to'] ) ? Formatting::sanitize_date( $settings['order_modified_dates_to'] ) : '';
-                } elseif ( 'variable' === $order_modified_dates_filter ) {
-                    $args['order_modified_dates_filter_variable']        = isset( $settings['order_modified_dates_filter_variable'] ) ? absint( $settings['order_modified_dates_filter_variable'] ) : false;
-                    $args['order_modified_dates_filter_variable_length'] = isset( $settings['order_modified_dates_filter_variable_length'] ) ? sanitize_text_field( $settings['order_modified_dates_filter_variable_length'] ) : false;
+        // Order Modified Dates.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'modified_date' ) ) {
+            $args = $this->apply_quick_date_filter( $args, $settings, 'order_modified_dates', 'orders_filter_modified_date_from', 'orders_filter_modified_date_to' );
+        }
+
+        // Order Status.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'status' ) ) {
+            $status               = $settings['orders_filter_status'] ?? $settings['order_filter_status'] ?? false;
+            $args['order_status'] = false !== $status ? array_map( 'sanitize_text_field', (array) $status ) : false;
+        }
+
+        // Order Customer. The SPA "Customer" control submits a single email address; the classic
+        // UI submitted an array of customer IDs. Match orders by billing email in the email case so
+        // both registered-customer and guest orders are found (resolved in get_object_ids()).
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'customer', 'order_filter_customer_enabled' ) ) {
+            $customer = $settings['order_filter_customer'] ?? '';
+            if ( is_array( $customer ) ) {
+                if ( in_array( '', $customer, true ) ) {
+                    $args['order_customer'] = 'all';
+                } elseif ( ! empty( $customer ) ) {
+                    $args['order_customer'] = array_map( 'absint', $customer );
                 }
-            }
-            if ( isset( $orders_filters['status'] ) && 'on' === $orders_filters['status'] ) {
-                $args['order_status'] = isset( $settings['order_filter_status'] ) ? array_map( 'sanitize_text_field', (array) $settings['order_filter_status'] ) : false;
-            }
-            if ( isset( $orders_filters['customer'] ) && 'on' === $orders_filters['customer'] ) {
-                if ( isset( $settings['order_filter_customer'] ) && is_array( $settings['order_filter_customer'] ) ) {
-                    // If the customer filter is empty, we want to include all customers.
-                    if ( in_array( '', $settings['order_filter_customer'], true ) ) {
-                        $args['order_customer'] = 'all';
-                    } else {
-                        $args['order_customer'] = array_map( 'absint', (array) $settings['order_filter_customer'] );
-                    }
-                }
-            }
-            if ( isset( $orders_filters['billing_country'] ) && 'on' === $orders_filters['billing_country'] ) {
-                if ( isset( $settings['order_filter_billing_country'] ) && is_array( $settings['order_filter_billing_country'] ) ) {
-                    // If the billing country filter has empty string, we want to include all customers.
-                    if ( in_array( '', $settings['order_filter_billing_country'], true ) ) {
-                        $args['order_billing_country'] = 'all';
-                    } else {
-                        $args['order_billing_country'] = array_map( 'sanitize_text_field', (array) $settings['order_filter_billing_country'] );
-                    }
-                }
-            }
-            if ( isset( $orders_filters['shipping_country'] ) && 'on' === $orders_filters['shipping_country'] ) {
-                if ( isset( $settings['order_filter_shipping_country'] ) && is_array( $settings['order_filter_shipping_country'] ) ) {
-                    // If the shipping country filter has empty string, we want to include all customers.
-                    if ( in_array( '', $settings['order_filter_shipping_country'], true ) ) {
-                        $args['order_shipping_country'] = 'all';
-                    } else {
-                        $args['order_shipping_country'] = array_map( 'sanitize_text_field', (array) $settings['order_filter_shipping_country'] );
-                    }
-                }
-            }
-            if ( isset( $orders_filters['user_role'] ) && 'on' === $orders_filters['user_role'] ) {
-                if ( isset( $settings['order_filter_user_role'] ) && ! empty( $settings['order_filter_user_role'] ) ) {
-                    $args['order_user_roles'] = array_map( 'sanitize_text_field', (array) $settings['order_filter_user_role'] );
-                }
-            }
-            if ( isset( $orders_filters['coupon'] ) && 'on' === $orders_filters['coupon'] ) {
-                if ( isset( $settings['order_filter_coupon'] ) && ! empty( $settings['order_filter_coupon'] ) ) {
-                    $args['order_coupon'] = array_map( 'sanitize_text_field', (array) $settings['order_filter_coupon'] );
-                }
-            }
-            if ( isset( $orders_filters['product'] ) && 'on' === $orders_filters['product'] ) {
-                if ( isset( $settings['order_filter_product'] ) && ! empty( $settings['order_filter_product'] ) ) {
-                    $args['order_product']         = array_map( 'absint', (array) $settings['order_filter_product'] );
-                    $args['order_product_exclude'] = isset( $settings['order_filter_product_exclude'] ) ? absint( $settings['order_filter_product_exclude'] ) : false;
-                }
-            }
-            if ( isset( $orders_filters['category'] ) && 'on' === $orders_filters['category'] ) {
-                $args['order_category'] = ! empty( $settings['order_filter_category'] ) ? array_map( 'absint', (array) $settings['order_filter_category'] ) : false;
-            }
-            if ( isset( $orders_filters['tag'] ) && 'on' === $orders_filters['tag'] ) {
-                $args['order_tag'] = ! empty( $settings['order_filter_tag'] ) ? array_map( 'absint', (array) $settings['order_filter_tag'] ) : false;
-            }
-            if ( isset( $orders_filters['id'] ) && 'on' === $orders_filters['id'] ) {
-                $args['order_ids'] = ! empty( $settings['order_filter_id'] ) ? Export_Helper::sanitize_multiple_id_input( $settings['order_filter_id'] ) : false;
-            }
-            if ( isset( $orders_filters['payment_gateway'] ) && 'on' === $orders_filters['payment_gateway'] ) {
-                $args['order_payment'] = ! empty( $settings['order_filter_payment_gateway'] ) ? array_map( 'sanitize_text_field', (array) $settings['order_filter_payment_gateway'] ) : false;
-            }
-            if ( isset( $orders_filters['shipping_method'] ) && 'on' === $orders_filters['shipping_method'] ) {
-                $args['order_shipping'] = ! empty( $settings['order_filter_shipping_method'] ) ? array_map( 'sanitize_text_field', (array) $settings['order_filter_shipping_method'] ) : false;
-            }
-            if ( isset( $orders_filters['digital_products'] ) && 'on' === $orders_filters['digital_products'] ) {
-                $args['order_items_digital'] = ! empty( $settings['order_filter_digital_products'] ) ? sanitize_text_field( $settings['order_filter_digital_products'] ) : false;
+            } elseif ( '' !== trim( (string) $customer ) ) {
+                // Always clear order_customer. woo_ce_order_dataset_args() runs first (via the
+                // legacy filter above) and sets it unconditionally through absint(), turning an
+                // email address into array( 0 ). On PHP 8 the zero-key guard in
+                // woo_ce_format_product_filters() no longer fires ( 0 == '' is false there ), so
+                // that residue survived into get_object_ids() as customer_id IN (0) and
+                // restricted the export to guest orders — a registered customer's email matched
+                // nothing at all. An email is never a customer ID, so the residue is always
+                // wrong here regardless of whether the address itself is valid.
+                $args['order_customer'] = false;
+
+                // An enabled filter must never widen the export. sanitize_email() returns '' for
+                // an unusable address, and leaving order_customer_email unset drops the customer
+                // filter entirely — with order_customer cleared above, get_object_ids() would then
+                // export every order. Fall back to an address no order can carry so the export
+                // comes back empty instead.
+                $customer_email               = sanitize_email( (string) $customer );
+                $args['order_customer_email'] = '' !== $customer_email ? $customer_email : self::UNMATCHABLE_CUSTOMER_EMAIL;
             }
         }
 
+        // Order Billing Country.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'billing_country', 'order_filter_billing_country_enabled' ) ) {
+            if ( isset( $settings['order_filter_billing_country'] ) && is_array( $settings['order_filter_billing_country'] ) ) {
+                // An empty selection means "all countries".
+                $args['order_billing_country'] = in_array( '', $settings['order_filter_billing_country'], true )
+                    ? 'all'
+                    : array_map( 'sanitize_text_field', $settings['order_filter_billing_country'] );
+            }
+        }
+
+        // Order Shipping Country.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'shipping_country', 'order_filter_shipping_country_enabled' ) ) {
+            if ( isset( $settings['order_filter_shipping_country'] ) && is_array( $settings['order_filter_shipping_country'] ) ) {
+                $args['order_shipping_country'] = in_array( '', $settings['order_filter_shipping_country'], true )
+                    ? 'all'
+                    : array_map( 'sanitize_text_field', $settings['order_filter_shipping_country'] );
+            }
+        }
+
+        // Order User Roles.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'user_role', 'order_filter_user_role_enabled' ) ) {
+            if ( ! empty( $settings['order_filter_user_role'] ) ) {
+                $args['order_user_roles'] = array_map( 'sanitize_text_field', (array) $settings['order_filter_user_role'] );
+            }
+        }
+
+        // Order Coupon. The SPA "Coupon code" control submits a coupon code string; the classic
+        // UI's select submitted numeric coupon IDs. Both are resolved to coupon codes because
+        // get_object_ids() matches against woocommerce_order_items.order_item_name.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'coupon', 'order_filter_coupon_enabled' ) ) {
+            if ( ! empty( $settings['order_filter_coupon'] ) ) {
+                // Always overwrite. woo_ce_extend_order_dataset_args() runs first (via the legacy
+                // filter above) and sets this key unconditionally through absint(), which turns a
+                // non-numeric code into array( 0 ). Leaving that residue in place produced a
+                // lookup on "0" and an empty export. The SPA text control submits a coupon *code*,
+                // so resolve it code-first ('code') — a coupon coded with a bare number ("25")
+                // must not be shadowed by coupon post 25.
+                $args['order_coupon'] = Export_Helper::resolve_coupon_codes( $settings['order_filter_coupon'], true, 'code' );
+            }
+        }
+
+        // Order Product. The SPA submits a comma-separated list of product IDs as a string.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'product', 'order_filter_product_enabled' ) ) {
+            $product_raw = $settings['order_filter_product'] ?? '';
+            $product_ids = array();
+            foreach ( is_array( $product_raw ) ? $product_raw : explode( ',', (string) $product_raw ) as $pid ) {
+                $pid = absint( trim( (string) $pid ) );
+                if ( $pid > 0 ) {
+                    $product_ids[] = $pid;
+                }
+            }
+            if ( ! empty( $product_ids ) ) {
+                $args['order_product']         = $product_ids;
+                $args['order_product_exclude'] = isset( $settings['order_filter_product_exclude'] ) ? absint( $settings['order_filter_product_exclude'] ) : false;
+            }
+        }
+
+        // Order Product Category.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'category', 'order_filter_category_enabled' ) ) {
+            $args['order_category'] = ! empty( $settings['order_filter_category'] ) ? array_map( 'absint', (array) $settings['order_filter_category'] ) : false;
+        }
+
+        // Order Product Tag.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'tag', 'order_filter_tag_enabled' ) ) {
+            $args['order_tag'] = ! empty( $settings['order_filter_tag'] ) ? array_map( 'absint', (array) $settings['order_filter_tag'] ) : false;
+        }
+
+        // Order Product Brand. Assign only inside the gate so a payload without the Brand keys
+        // leaves whatever the legacy woo_ce_extend_order_dataset_args() callback supplied.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'brand', 'order_filter_brand_enabled' ) ) {
+            $args['order_brand'] = ! empty( $settings['order_filter_brand'] ) ? array_map( 'absint', (array) $settings['order_filter_brand'] ) : false;
+        }
+
+        // Order IDs (classic UI only; no SPA control).
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'id' ) ) {
+            $args['order_ids'] = ! empty( $settings['order_filter_id'] ) ? Export_Helper::sanitize_multiple_id_input( $settings['order_filter_id'] ) : false;
+        }
+
+        // Order Payment Gateway. SPA nests the toggle under orders_filters[payment_method];
+        // the classic UI used orders_filters[payment_gateway].
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'payment_method' ) || ! empty( $orders_filters['payment_gateway'] ) ) {
+            $payment               = $settings['orders_filter_payment_method'] ?? $settings['order_filter_payment_gateway'] ?? false;
+            $args['order_payment'] = ! empty( $payment ) ? array_map( 'sanitize_text_field', (array) $payment ) : false;
+        }
+
+        // Order Shipping Method.
+        if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'shipping_method', 'order_filter_shipping_enabled' ) ) {
+            $shipping               = $settings['order_filter_shipping'] ?? $settings['order_filter_shipping_method'] ?? false;
+            $args['order_shipping'] = ! empty( $shipping ) ? array_map( 'sanitize_text_field', (array) $shipping ) : false;
+        }
+
+        // Digital Products. See resolve_digital_filter() for the SPA/legacy key handling.
+        $digital_filter = $this->resolve_digital_filter( $settings );
+        if ( $digital_filter['enabled'] ) {
+            $args['order_items_digital'] = ! empty( $digital_filter['value'] ) ? $digital_filter['value'] : false;
+        }
+
         // Order Export Options.
-        $order_items_format               = ! empty( $settings['order_items'] ) ? sanitize_text_field( $settings['order_items'] ) : get_option( WOO_CE_PREFIX . '_order_items_formatting', 'unique' );
-        $args['order_items']              = ! empty( $order_items_format ) ? $order_items_format : 'unique';
+        // Normalise the "Order items formatting" value to a guaranteed-valid format rather than boolean
+        // false when the setting is absent or empty — an empty or invalid value produces the undefined
+        // method name "_parse_order_item_data_<value>" downstream and fatals the export.
+        // Normalising here means every downstream consumer sees a valid format too.
+        $args['order_items']              = self::normalize_order_items_format( ! empty( $settings['order_items'] ) ? sanitize_text_field( $settings['order_items'] ) : '' );
         $args['order_items_types']        = isset( $settings['order_items_types'] ) ? array_map( 'sanitize_text_field', (array) $settings['order_items_types'] ) : false;
         $args['order_flag_notes']         = isset( $settings['order_flag_notes'] ) ? absint( $settings['order_flag_notes'] ) : false;
         $args['max_order_items']          = isset( $settings['max_order_items'] ) ? absint( $settings['max_order_items'] ) : 10;
@@ -1297,6 +1527,13 @@ class Order extends Abstract_Class {
             $this->add_order_field_filter( $args, $hpos_enabled, 'customer_id', $export_args['order_customer'] );
         }
 
+        // Order Customer Email (the Quick Export "Customer" filter submits an email address).
+        // 'billing_email' is a supported wc_get_orders query var on both HPOS and legacy stores,
+        // so it narrows to orders placed with that email — registered-customer and guest alike.
+        if ( ! empty( $export_args['order_customer_email'] ) ) {
+            $args['billing_email'] = $export_args['order_customer_email'];
+        }
+
         // Order Billing Country.
         if ( ! empty( $export_args['order_billing_country'] ) && 'all' !== $export_args['order_billing_country'] ) {
             $this->add_order_field_filter( $args, $hpos_enabled, 'billing_country', $export_args['order_billing_country'] );
@@ -1385,69 +1622,145 @@ class Order extends Abstract_Class {
             ! empty( $export_args['order_product'] ) ||
             ! empty( $export_args['order_category'] ) ||
             ! empty( $export_args['order_tag'] ) ||
+            ! empty( $export_args['order_brand'] ) ||
             ! empty( $export_args['order_shipping'] ) ||
             ! empty( $export_args['order_items_digital'] )
         ) {
             global $wpdb;
 
-            // Order Coupons.
-            if ( ! empty( $export_args['order_coupon'] ) ) {
-                $coupon_placeholders = $this->get_in_clause_placeholders( $export_args['order_coupon'] );
-                $object_ids          = array_intersect(
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+
+            // Order Coupons. Matched against the coupon code recorded on the order item rather
+            // than WooCommerce Analytics' wc_order_coupon_lookup, which is derived data: when it
+            // is stale or was never backfilled the intersect below silently drops orders that do
+            // match. woocommerce_order_items is written on every order regardless.
+            //
+            // The order_id bound is not optional — woocommerce_order_items carries no index on
+            // order_item_type or order_item_name, so without it MySQL scans the whole table.
+            if ( ! empty( $export_args['order_coupon'] ) && ! empty( $object_ids ) ) {
+                list( $placeholders, $order_bounds, $query_args ) = $this->get_bounded_in_clause_args( $export_args['order_coupon'], $object_ids );
+
+                $object_ids = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
-                            "SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_order_coupon_lookup WHERE coupon_id IN ({$coupon_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-                            $export_args['order_coupon']
+                            "SELECT DISTINCT oi.order_id
+                                FROM {$wpdb->prefix}woocommerce_order_items AS oi
+                                WHERE oi.order_item_type = 'coupon'
+                                AND oi.order_item_name IN ({$placeholders})
+                                AND oi.order_id IN ({$order_bounds})",
+                            $query_args
                         )
                     )
                 );
             }
 
-            // Order Products.
-            if ( ! empty( $export_args['order_product'] ) ) {
-                $excl_or_incl         = $export_args['order_product_exclude'] ? 'NOT IN' : 'IN';
-                $product_placeholders = $this->get_in_clause_placeholders( $export_args['order_product'] );
-                $object_ids           = array_intersect(
+            // Order Products. Resolved from the order items tables for the same reason as the
+            // coupon filter above. Exclusion is applied with array_diff() rather than a
+            // NOT IN clause: on a table holding one row per product, `product_id NOT IN (...)`
+            // selects orders carrying at least one *other* product, so an order containing both
+            // an excluded product and any other product survived the filter.
+            if ( ! empty( $export_args['order_product'] ) && ! empty( $object_ids ) ) {
+                list( $placeholders, $order_bounds, $query_args ) = $this->get_bounded_in_clause_args( $export_args['order_product'], $object_ids );
+
+                $matching_ids = $wpdb->get_col(
+                    $wpdb->prepare(
+                        "SELECT DISTINCT oi.order_id
+                            FROM {$wpdb->prefix}woocommerce_order_items AS oi
+                            INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
+                                ON oi.order_item_id = oim.order_item_id AND oim.meta_key = '_product_id'
+                            WHERE oi.order_item_type = 'line_item'
+                            AND oim.meta_value IN ({$placeholders})
+                            AND oi.order_id IN ({$order_bounds})",
+                        $query_args
+                    )
+                );
+
+                $object_ids = ! empty( $export_args['order_product_exclude'] )
+                    ? array_diff( $object_ids, $matching_ids )
+                    : array_intersect( $object_ids, $matching_ids );
+            }
+
+            // Order Categories. The order item's _product_id is the parent product for variations,
+            // matching how Analytics keyed wc_order_product_lookup.product_id, so the terms read
+            // here are the same ones the lookup join resolved.
+            //
+            // Both the Quick Export dropdown (Quick_Export_Controller::get_term_choices()) and
+            // the classic template submit term IDs, so match term_id rather than
+            // term_taxonomy_id — the two columns coincide on most stores but are not
+            // guaranteed to.
+            if ( ! empty( $export_args['order_category'] ) && ! empty( $object_ids ) ) {
+                list( $placeholders, $order_bounds, $query_args ) = $this->get_bounded_in_clause_args( $export_args['order_category'], $object_ids );
+
+                $object_ids = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
-                            "SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_order_product_lookup WHERE product_id {$excl_or_incl} ({$product_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-                            $export_args['order_product']
+                            "SELECT DISTINCT oi.order_id
+                                FROM {$wpdb->prefix}woocommerce_order_items AS oi
+                                INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
+                                    ON oi.order_item_id = oim.order_item_id AND oim.meta_key = '_product_id'
+                                INNER JOIN {$wpdb->prefix}term_relationships AS tr ON tr.object_id = oim.meta_value
+                                INNER JOIN {$wpdb->prefix}term_taxonomy AS tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+                                WHERE oi.order_item_type = 'line_item'
+                                AND tt.term_id IN ({$placeholders})
+                                AND oi.order_id IN ({$order_bounds})",
+                            $query_args
                         )
                     )
                 );
             }
 
-            // Order Categories.
-            if ( ! empty( $export_args['order_category'] ) ) {
-                $category_placeholders = $this->get_in_clause_placeholders( $export_args['order_category'] );
-                $object_ids            = array_intersect(
+            // Order Tags. Same resolution as the category filter above, term_id included.
+            if ( ! empty( $export_args['order_tag'] ) && ! empty( $object_ids ) ) {
+                list( $placeholders, $order_bounds, $query_args ) = $this->get_bounded_in_clause_args( $export_args['order_tag'], $object_ids );
+
+                $object_ids = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
-                            "SELECT DISTINCT order_id
-                                FROM {$wpdb->prefix}wc_order_product_lookup as wopl
-                                INNER JOIN {$wpdb->prefix}term_relationships as tr ON tr.object_id = wopl.product_id
-                                WHERE tr.term_taxonomy_id IN ({$category_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-                            $export_args['order_category']
+                            "SELECT DISTINCT oi.order_id
+                                FROM {$wpdb->prefix}woocommerce_order_items AS oi
+                                INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
+                                    ON oi.order_item_id = oim.order_item_id AND oim.meta_key = '_product_id'
+                                INNER JOIN {$wpdb->prefix}term_relationships AS tr ON tr.object_id = oim.meta_value
+                                INNER JOIN {$wpdb->prefix}term_taxonomy AS tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+                                WHERE oi.order_item_type = 'line_item'
+                                AND tt.term_id IN ({$placeholders})
+                                AND oi.order_id IN ({$order_bounds})",
+                            $query_args
                         )
                     )
                 );
             }
 
-            // Order Tags.
-            if ( ! empty( $export_args['order_tag'] ) ) {
-                $tag_placeholders = $this->get_in_clause_placeholders( $export_args['order_tag'] );
-                $object_ids       = array_intersect(
+            // Order Product Brands. The `order_brand` arg was previously built by
+            // woo_ce_extend_order_dataset_args() but never consumed here, so the Brand selection
+            // was silently discarded and every order was exported. Brand term IDs come from
+            // whichever brand taxonomy the filter dropdown offered (product_brand, pwb-brand,
+            // pa_brand, yith_product_brand), so match on term_id and let the taxonomy follow the
+            // submitted IDs rather than pinning it to one.
+            //
+            // Products are resolved from the order items tables for the same reason as the
+            // category filter above.
+            if ( ! empty( $export_args['order_brand'] ) && ! empty( $object_ids ) ) {
+                list( $placeholders, $order_bounds, $query_args ) = $this->get_bounded_in_clause_args( $export_args['order_brand'], $object_ids );
+
+                $object_ids = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
-                            "SELECT DISTINCT order_id
-                                FROM {$wpdb->prefix}wc_order_product_lookup as wopl
-                                INNER JOIN {$wpdb->prefix}term_relationships as tr ON tr.object_id = wopl.product_id
-                                WHERE tr.term_taxonomy_id IN ({$tag_placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-                            $export_args['order_tag']
+                            "SELECT DISTINCT oi.order_id
+                                FROM {$wpdb->prefix}woocommerce_order_items AS oi
+                                INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
+                                    ON oi.order_item_id = oim.order_item_id AND oim.meta_key = '_product_id'
+                                INNER JOIN {$wpdb->prefix}term_relationships AS tr ON tr.object_id = oim.meta_value
+                                INNER JOIN {$wpdb->prefix}term_taxonomy AS tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+                                WHERE oi.order_item_type = 'line_item'
+                                AND tt.term_id IN ({$placeholders})
+                                AND oi.order_id IN ({$order_bounds})",
+                            $query_args
                         )
                     )
                 );
@@ -1455,46 +1768,51 @@ class Order extends Abstract_Class {
 
             // Order Shipping Methods.
             if ( ! empty( $export_args['order_shipping'] ) ) {
-                $shipping_clause_placeholder = '(' . implode( ',', array_fill( 0, count( $export_args['order_shipping'] ), '%s' ) ) . ')';
-
-                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-                $object_ids = array_intersect(
+                $placeholders = $this->get_in_clause_placeholders( $export_args['order_shipping'] );
+                $object_ids   = array_intersect(
                     $object_ids,
                     $wpdb->get_col(
                         $wpdb->prepare(
-                            "SELECT DISTINCT oi.order_id 
+                            "SELECT DISTINCT oi.order_id
                                 FROM {$wpdb->prefix}woocommerce_order_items as oi
                                 INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta as oim ON oi.order_item_id = oim.order_item_id
                                 WHERE oi.order_item_type = 'shipping'
                                     AND oim.meta_key = 'method_id'
-                                    AND oim.meta_value IN {$shipping_clause_placeholder}",
-                            array_merge( $export_args['order_shipping'] )
+                                    AND oim.meta_value IN ({$placeholders})",
+                            $export_args['order_shipping']
                         )
                     )
                 );
-                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-                // phpcs:enable ordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
             }
 
+            // phpcs:enable WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
             // Order Digital Products.
-            if ( ! empty( $export_args['order_items_digital'] ) && ! empty( $export_args['order_items_digital'] ) ) {
+            if ( ! empty( $export_args['order_items_digital'] ) && ! empty( $object_ids ) ) {
                 $orders_clause_placeholder = '(' . implode( ',', array_fill( 0, count( $object_ids ), '%s' ) ) . ')';
 
-                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                // Derive the downloadable flag from the order items tables
+                // ({$wpdb->prefix}woocommerce_order_items / _order_itemmeta), which always
+                // exist for WooCommerce regardless of table prefix, HPOS, or whether the
+                // WooCommerce Analytics lookup table (wc_order_product_lookup) is provisioned.
+                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- %s placeholders are inside $orders_clause_placeholder, invisible to static analysis.
                 $orders_downloadable = $wpdb->get_results(
                     $wpdb->prepare(
-                        "SELECT wopl.order_id,
+                        "SELECT oi.order_id,
                             GROUP_CONCAT(DISTINCT pm.meta_value ORDER BY pm.meta_key DESC SEPARATOR '|') AS downloadable
-                            FROM wp_wc_order_product_lookup AS wopl
-                            INNER JOIN wp_postmeta AS pm ON (wopl.product_id = pm.post_id)
-                            WHERE pm.meta_key = '_downloadable'
-                            AND wopl.order_id IN {$orders_clause_placeholder}
-                            GROUP BY wopl.order_id",
+                            FROM {$wpdb->prefix}woocommerce_order_items AS oi
+                            INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
+                                ON oi.order_item_id = oim.order_item_id AND oim.meta_key = '_product_id'
+                            INNER JOIN {$wpdb->postmeta} AS pm
+                                ON pm.post_id = oim.meta_value AND pm.meta_key = '_downloadable'
+                            WHERE oi.order_item_type = 'line_item'
+                            AND oi.order_id IN {$orders_clause_placeholder}
+                            GROUP BY oi.order_id",
                         $object_ids
                     )
                 );
-                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
                 if ( 'include_digital' === $export_args['order_items_digital'] ) {
                     $orders_with_digital = array();
@@ -1770,6 +2088,29 @@ class Order extends Abstract_Class {
     }
 
     /**
+     * Build the placeholders and bound arguments for an order-item lookup that is
+     * scoped to an already-resolved set of order IDs.
+     *
+     * The order_id bound keeps these queries off a full scan of
+     * {$wpdb->prefix}woocommerce_order_items, which carries no index on
+     * order_item_type or order_item_name. The returned argument list is ordered to
+     * match: filter values first, order IDs second.
+     *
+     * @since 2.8.1
+     *
+     * @param array|string $filter_values The filter values to match against.
+     * @param array        $object_ids    The order IDs to bound the query to.
+     * @return array Numeric array of [ filter placeholders, order ID placeholders, bound arguments ].
+     */
+    private function get_bounded_in_clause_args( $filter_values, $object_ids ) {
+        return array(
+            $this->get_in_clause_placeholders( (array) $filter_values ),
+            $this->get_in_clause_placeholders( $object_ids ),
+            array_merge( array_values( (array) $filter_values ), array_values( $object_ids ) ),
+        );
+    }
+
+    /**
      * Process a single order item into a dataset row.
      *
      * @since 2.7.3
@@ -1850,13 +2191,13 @@ class Order extends Abstract_Class {
             }
         }
 
-        // Dynamically call a parser function based on the order items export format.
-        // Guard against an empty or unrecognised format so we never call an
-        // undefined method — fall back to the 'unique' parser.
-        $parse_order_item_data_func = '_parse_order_item_data_' . $export->args['order_items'];
-        if ( ! method_exists( $this, $parse_order_item_data_func ) ) {
-            $parse_order_item_data_func = '_parse_order_item_data_unique';
-        }
+        // Dynamically call a parser function based on the order items export format. Normalise to a
+        // guaranteed-valid format (defence-in-depth for legacy paths that populate $export->args
+        // without going through extend_export_dataset_args()) so the export never dispatches to an
+        // undefined parser method.
+        $order_items_format = self::normalize_order_items_format( $export->args['order_items'] ?? '' );
+
+        $parse_order_item_data_func = '_parse_order_item_data_' . $order_items_format;
         $this->$parse_order_item_data_func( $dataset, $default_data, $export->export_format, $export->category_separator );
 
         return $dataset;

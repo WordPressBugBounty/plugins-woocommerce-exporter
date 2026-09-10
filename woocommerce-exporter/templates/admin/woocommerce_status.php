@@ -8,23 +8,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 <table class="wc_status_table widefat" cellspacing="0">
     <thead>
         <tr>
-            <th colspan="3" data-export-label="Templates"><?php esc_attr_e( 'Store Exports', 'woocommerce-exporter' ); ?><?php echo wp_kses_post( woo_ce_wc_help_tip( __( 'This section shows diagnostic details for Store Exporter Deluxe.', 'woocommerce-exporter' ) ) ); ?></th>
+            <th colspan="3" data-export-label="Templates"><?php esc_attr_e( 'Store Exports', 'woocommerce-exporter' ); ?><?php echo wp_kses_post( woo_ce_wc_help_tip( __( 'This section shows diagnostic details for Store Exporter.', 'woocommerce-exporter' ) ) ); ?></th>
         </tr>
     </thead>
     <tbody>
 
         <tr>
-            <td data-export-label="<?php esc_attr_e( 'Extended logging mode for Store Exporter Deluxe', 'woocommerce-exporter' ); ?>"><?php esc_html_e( 'Logging mode', 'woocommerce-exporter' ); ?></td>
-            <td class="help"><?php echo wp_kses_post( woo_ce_wc_help_tip( __( 'Displays whether or not Store Exporter Deluxe is currently in extended logging mode.', 'woocommerce-exporter' ) ) ); ?></td>
+            <td data-export-label="<?php esc_attr_e( 'Extended logging mode for Store Exporter', 'woocommerce-exporter' ); ?>"><?php esc_html_e( 'Logging mode', 'woocommerce-exporter' ); ?></td>
+            <td class="help"><?php echo wp_kses_post( woo_ce_wc_help_tip( __( 'Displays whether or not Store Exporter is currently in extended logging mode.', 'woocommerce-exporter' ) ) ); ?></td>
             <td>
                 <?php
                 if ( $logging_mode ) {
                     echo '<mark class="error"><span class="dashicons dashicons-warning"></span> ' . esc_html__( 'Extended logging mode is enabled. Export processing times will be longer than typical exports.', 'woocommerce-exporter' ) . '</mark>';
-                    echo '&nbsp;<a href="' . esc_url( $logging_mode_url ) . '">Turn off Logging mode</a>';
                 } else {
-                    echo '<mark class="yes"><span class="dashicons dashicons-yes"></span>Inactive</mark>';
-                    echo '&nbsp;<a href="' . esc_url( $logging_mode_url ) . '">Turn on Logging mode</a>';
+                    echo '<mark class="yes"><span class="dashicons dashicons-yes"></span>' . esc_html__( 'Inactive', 'woocommerce-exporter' ) . '</mark>';
                 }
+                // The link is identical in both states, so it is emitted once.
+                echo '&nbsp;<a href="' . esc_url( $advanced_settings_url ) . '">' . esc_html__( 'Manage in Settings → Advanced', 'woocommerce-exporter' ) . '</a>';
                 ?>
             </td>
         </tr>
@@ -81,17 +81,17 @@ if ( ! defined( 'ABSPATH' ) ) {
         <?php } ?>
 
         <tr>
-            <td data-export-label="<?php esc_attr_e( 'Debugging mode for Store Exporter Deluxe', 'woocommerce-exporter' ); ?>"><?php esc_html_e( 'Debugging mode', 'woocommerce-exporter' ); ?></td>
-            <td class="help"><?php echo wp_kses_post( woo_ce_wc_help_tip( __( 'Displays whether or not Store Exporter Deluxe is currently in debugging mode.', 'woocommerce-exporter' ) ) ); ?></td>
+            <td data-export-label="<?php esc_attr_e( 'Debugging mode for Store Exporter', 'woocommerce-exporter' ); ?>"><?php esc_html_e( 'Debugging mode', 'woocommerce-exporter' ); ?></td>
+            <td class="help"><?php echo wp_kses_post( woo_ce_wc_help_tip( __( 'Displays whether or not Store Exporter is currently in debugging mode.', 'woocommerce-exporter' ) ) ); ?></td>
             <td>
                 <?php
                 if ( $debug_mode ) {
-                    echo '<mark class="error"><span class="dashicons dashicons-warning"></span> ' . esc_html__( 'Debugging mode is enabled. Quick Exports will not generate physical export files.', 'woocommerce-exporter' ) . '</mark>';
-                    echo '&nbsp;<a href="' . esc_url( $debug_mode_url ) . '">Turn off Debugging mode</a>';
+                    echo '<mark class="error"><span class="dashicons dashicons-warning"></span> ' . esc_html__( 'Debugging mode is enabled. Exports are refused and no export files are generated.', 'woocommerce-exporter' ) . '</mark>';
                 } else {
-                    echo '<mark class="yes"><span class="dashicons dashicons-yes"></span>Inactive</mark>';
-                    echo '&nbsp;<a href="' . esc_url( $debug_mode_url ) . '">Turn on Debugging mode</a>';
+                    echo '<mark class="yes"><span class="dashicons dashicons-yes"></span>' . esc_html__( 'Inactive', 'woocommerce-exporter' ) . '</mark>';
                 }
+                // The link is identical in both states, so it is emitted once.
+                echo '&nbsp;<a href="' . esc_url( $advanced_settings_url ) . '">' . esc_html__( 'Manage in Settings → Advanced', 'woocommerce-exporter' ) . '</a>';
                 ?>
             </td>
         </tr>

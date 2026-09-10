@@ -108,7 +108,7 @@ function woo_ce_scheduled_export_filters_meta_box() {
     // Allow Plugin/Theme authors to add custom fields to the Export Filters meta box.
     do_action( 'woo_ce_extend_scheduled_export_options', $post_ID );
 
-    $troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+    $troubleshooting_url = woo_ce_get_kb_url();
 
 ?>
     <div id="scheduled_export_options" class="panel-wrap scheduled_export_data">

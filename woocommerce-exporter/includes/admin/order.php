@@ -1126,7 +1126,7 @@ function woo_ce_orders_custom_fields() {
         $custom_order_products = implode( "\n", $custom_order_products );
     }
 
-    $troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+    $troubleshooting_url = woo_ce_get_kb_url();
 
     ob_start();
     ?>

@@ -2,7 +2,7 @@
 /**
  * Overview REST Controller.
  *
- * @since   5.5.0
+ * @since   2.8.0
  * @package VisserLabs\WSE\Classes\REST
  */
 
@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Provides dashboard summary data for the Vue overview page.
  *
- * @since 5.5.0
+ * @since 2.8.0
  */
 class Overview_Controller extends Abstract_Class {
 
@@ -28,7 +28,7 @@ class Overview_Controller extends Abstract_Class {
     /**
      * Register hooks.
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @return void
      */
     public function run() {
@@ -38,7 +38,7 @@ class Overview_Controller extends Abstract_Class {
     /**
      * Register REST routes.
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @return void
      */
     public function register_routes() {
@@ -56,7 +56,7 @@ class Overview_Controller extends Abstract_Class {
     /**
      * Permission callback.
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @return bool|\WP_Error
      */
     public function check_permission() {
@@ -75,7 +75,7 @@ class Overview_Controller extends Abstract_Class {
      *
      * @param \WP_REST_Request $request The REST request.
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @return \WP_REST_Response
      */
     public function get_overview( $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInImplementedInterface
@@ -90,7 +90,7 @@ class Overview_Controller extends Abstract_Class {
     /**
      * Get plugin version and system info.
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @return array
      */
     private function get_plugin_info() {
@@ -108,7 +108,7 @@ class Overview_Controller extends Abstract_Class {
     /**
      * Get admin tab URLs.
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @return array
      */
     private function get_tab_urls() {
@@ -116,7 +116,7 @@ class Overview_Controller extends Abstract_Class {
 
         return array(
             'overview'     => esc_url_raw( $base ),
-            'export'       => esc_url_raw( $base . '&tab=export' ),
+            'export'       => esc_url_raw( $base . '&tab=quick_export' ),
             'export_items' => esc_url_raw( $base . '&tab=export_items' ),
             'schedules'    => esc_url_raw( $base . '&tab=scheduled_export' ),
             'templates'    => esc_url_raw( $base . '&tab=export_template' ),
@@ -129,7 +129,7 @@ class Overview_Controller extends Abstract_Class {
     /**
      * Parse a WordPress memory limit string (e.g. "256M") into megabytes.
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @param string $limit Memory limit string.
      * @return int
      */
@@ -155,7 +155,7 @@ class Overview_Controller extends Abstract_Class {
     /**
      * Return elapsed time since WP bootstrap (in seconds).
      *
-     * @since 5.5.0
+     * @since 2.8.0
      * @return float
      */
     private function get_page_load_time() {

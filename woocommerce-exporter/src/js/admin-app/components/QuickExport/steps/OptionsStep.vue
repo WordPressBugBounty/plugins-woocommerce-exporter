@@ -1,15 +1,17 @@
 <script setup>
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { Check, FileText, Plus, ChevronRight, Info } from 'lucide-vue-next'
+import { Check, FileText, Plus, ChevronRight, Info, Lock } from 'lucide-vue-next'
 import { useQuickExportStore } from '../../../stores/quickExport'
 import { useToastsStore } from '../../../stores/toasts'
+import { useUpsellStore } from '../../../stores/upsell'
 import { formatVisual, extraOptionIcon, extraOptionDescription, LIMIT_PRESETS } from '../../../views/quickExportConstants'
 import BaseSelect from '../../ui/BaseSelect.vue'
 import RadioOptionCard from '../../ui/RadioOptionCard.vue'
 
 const store = useQuickExportStore()
 const toasts = useToastsStore()
+const upsell = useUpsellStore()
 const {
   selectedType, currentFilters, config,
   exportFormat, exportTemplate,
@@ -19,6 +21,14 @@ const {
 const formats   = computed(() => config.value?.formats ?? [])
 const templates = computed(() => config.value?.templates ?? [])
 const extraOptions = computed(() => currentFilters.value?.extraOptions ?? [])
+
+function onFormatTileClick (fmt) {
+  if (fmt.premium) {
+    upsell.open({ label: fmt.label, url: fmt.upsell_url })
+    return
+  }
+  store.exportFormat = fmt.value
+}
 
 const limitIsPreset = computed(() => {
   const v = String(store.exportLimit ?? '')
@@ -60,18 +70,32 @@ const manageTemplatesUrl = computed(() => {
           v-for="fmt in formats"
           :key="fmt.value"
           type="button"
-          class="wse-qe-format-tile relative flex flex-col items-center justify-center gap-2.5 py-[18px] px-3 pb-3.5 bg-white border-[1.5px] border-gray-200 rounded-[10px] cursor-pointer text-center transition-[border-color,box-shadow,background] hover:border-indigo-300"
-          :class="[`wse-qe-format--${fmt.value}`, exportFormat === fmt.value && 'border-indigo-600 bg-[#F5F3FF] shadow-[0_0_0_3px_rgba(108,123,255,0.08)]']"
-          @click="store.exportFormat = fmt.value"
+          class="wse-qe-format-tile relative flex flex-col items-center justify-center gap-2.5 py-[18px] px-3 pb-3.5 bg-white border-[1.5px] rounded-[10px] cursor-pointer text-center transition-[border-color,box-shadow,background]"
+          :class="[
+            `wse-qe-format--${fmt.value}`,
+            fmt.premium
+              ? 'is-premium border-gray-200 bg-gray-50 hover:border-amber-300 hover:shadow-[0_0_0_3px_#FEF3C7]'
+              : 'border-gray-200 hover:border-indigo-300',
+            !fmt.premium && exportFormat === fmt.value ? 'border-indigo-600 bg-[#F5F3FF] shadow-[0_0_0_3px_rgba(108,123,255,0.08)]' : ''
+          ]"
+          :title="fmt.premium ? 'Available in Store Exporter Deluxe' : ''"
+          :aria-label="fmt.premium ? `${fmt.label} — available in Store Exporter Deluxe` : null"
+          @click="onFormatTileClick(fmt)"
         >
-          <span v-if="exportFormat === fmt.value" class="absolute top-2 right-2 w-[18px] h-[18px] rounded-full bg-indigo-600 flex items-center justify-center">
+          <span v-if="fmt.premium" class="absolute top-2 right-2 w-[18px] h-[18px] rounded-full bg-amber-100 flex items-center justify-center">
+            <Lock :size="10" :stroke-width="2.5" color="#B45309" />
+          </span>
+          <span v-else-if="exportFormat === fmt.value" class="absolute top-2 right-2 w-[18px] h-[18px] rounded-full bg-indigo-600 flex items-center justify-center">
             <Check :size="11" :stroke-width="2.5" color="#fff" />
           </span>
-          <span class="relative w-11 h-11 flex items-center justify-center">
-            <component :is="formatVisual(fmt.value).icon" :size="28" :stroke-width="1.5" color="#6C7BFF" />
+          <span class="relative w-11 h-11 flex items-center justify-center" :class="fmt.premium && 'opacity-70'">
+            <component :is="formatVisual(fmt.value).icon" :size="28" :stroke-width="1.5" :color="fmt.premium ? '#9CA3AF' : '#6C7BFF'" />
             <span v-if="formatVisual(fmt.value).badge" class="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8.5px] font-bold text-gray-900 bg-white px-[3px] rounded-[2px] tracking-[0.04em]">{{ formatVisual(fmt.value).badge }}</span>
           </span>
-          <span class="text-[12.5px] font-semibold" :class="exportFormat === fmt.value ? 'text-gray-900' : 'text-gray-700'">{{ fmt.label }}</span>
+          <span class="text-[12.5px] font-semibold" :class="fmt.premium ? 'text-gray-600' : (exportFormat === fmt.value ? 'text-gray-900' : 'text-gray-700')">{{ fmt.label }}</span>
+          <span v-if="fmt.premium" class="inline-flex items-center gap-[3px] text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-[5px] py-[1px] px-1.5">
+            Deluxe
+          </span>
         </button>
       </div>
     </div>

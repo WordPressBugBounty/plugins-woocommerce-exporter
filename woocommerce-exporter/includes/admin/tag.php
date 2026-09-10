@@ -90,7 +90,7 @@ function woo_ce_tags_custom_fields() {
         $custom_terms = implode( "\n", $custom_terms );
     }
 
-    $troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+    $troubleshooting_url = woo_ce_get_kb_url();
 
     ob_start();
     ?>

@@ -8,7 +8,7 @@ import { useQuickExportStore } from '../../stores/quickExport'
 const store = useQuickExportStore()
 const {
   exportState, exportProgress, exportTotal, exportProcessed,
-  exportError, exportDownloadUrl, currentTypeConfig
+  exportError, exportDiagnostics, exportDownloadUrl, currentTypeConfig
 } = storeToRefs(store)
 
 const RADIUS = 40
@@ -132,6 +132,8 @@ const steps = computed(() => {
         <li
           v-for="(step, i) in steps"
           :key="i"
+          data-testid="export-step"
+          :data-status="step.status"
           class="flex items-center gap-[10px] text-[13px]"
           :class="{
             'text-gray-400': step.status === 'pending',
@@ -163,6 +165,17 @@ const steps = computed(() => {
 
       <!-- Error message -->
       <div v-if="exportError" class="text-[12.5px] text-red-500 text-center max-w-[300px] leading-[1.5]">{{ exportError }}</div>
+
+      <!-- Diagnostics for a refused export (e.g. debugging mode) -->
+      <dl
+        v-if="exportDiagnostics.length"
+        class="wse-qe-diagnostics m-0 w-full max-w-[300px] flex flex-col gap-1 text-[12px] text-gray-500"
+      >
+        <div v-for="item in exportDiagnostics" :key="item.label" class="flex justify-between gap-3">
+          <dt class="m-0 font-medium text-gray-600">{{ item.label }}</dt>
+          <dd class="m-0 text-right">{{ item.value }}</dd>
+        </div>
+      </dl>
 
       <!-- Actions -->
       <div class="flex gap-2 flex-wrap justify-center w-full">

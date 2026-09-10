@@ -5,7 +5,7 @@
  * Centralised catalogue of field-to-category assignments and predefined
  * field selections for every supported export type.
  *
- * @since   5.9.0
+ * @since   2.8.0
  * @package VisserLabs\WSE\Classes\Export
  */
 
@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  *   $category  = Field_Registry::get_category( 'product', 'sale_price' );
  *   $defaults  = Field_Registry::get_predefined( 'order' );
  *
- * @since 5.9.0
+ * @since 2.8.0
  */
 class Field_Registry {
 
@@ -36,7 +36,7 @@ class Field_Registry {
      * The inverted (field_name => category) map is built lazily and cached
      * in {@see $inverted_cache}.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @var array<string, array<string, string[]>>
      */
     private static $categories = array(
@@ -528,7 +528,7 @@ class Field_Registry {
      * These are pre-selected when creating a new export template, giving users
      * a sensible starting point without requiring manual field selection.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @var array<string, string[]>
      */
     private static $predefined = array(
@@ -548,7 +548,7 @@ class Field_Registry {
     /**
      * Cached inverted (field_name => category) maps, keyed by export type.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @var array<string, array<string, string>>
      */
     private static $inverted_cache = array();
@@ -559,7 +559,7 @@ class Field_Registry {
      * @param string $type       Export type slug (e.g. 'product', 'order').
      * @param string $field_name Field name slug (e.g. 'sale_price').
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return string Category label; defaults to 'Basic Info' for unknown fields.
      */
     public static function get_category( string $type, string $field_name ): string {
@@ -573,7 +573,7 @@ class Field_Registry {
      *
      * @param string $type Export type slug.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return string[]
      */
     public static function get_predefined( string $type ): array {
@@ -593,7 +593,7 @@ class Field_Registry {
      *
      * @param string $type Export type slug.
      *
-     * @since 5.9.0
+     * @since 2.8.0
      * @return array<string, string>
      */
     private static function get_inverted_map( string $type ): array {

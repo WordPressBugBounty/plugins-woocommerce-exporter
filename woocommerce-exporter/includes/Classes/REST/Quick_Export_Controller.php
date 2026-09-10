@@ -231,6 +231,53 @@ class Quick_Export_Controller extends Abstract_Class {
     }
 
     /**
+     * Normalised list of registered custom-meta keys for a legacy option.
+     *
+     * The `custom_products` / `custom_orders` options are stored either as an
+     * array of keys or as a newline/comma-separated string (the legacy textarea
+     * format). Returns a trimmed, de-blanked, re-indexed array either way.
+     *
+     * @since 2.8.1
+     * @param string $option_name Legacy option name (e.g. `custom_products`).
+     * @return string[] Registered meta keys.
+     */
+    private function get_registered_custom_meta_keys( $option_name ) {
+        $saved = function_exists( 'woo_ce_get_option' ) ? woo_ce_get_option( $option_name, '' ) : '';
+        $keys  = is_array( $saved ) ? $saved : preg_split( '/[\r\n,]+/', (string) $saved );
+        $keys  = array_filter( array_map( 'trim', (array) $keys ), 'strlen' );
+        return array_values( $keys );
+    }
+
+    /**
+     * Append the per-key custom-meta VALUE filter card for a Product or Order
+     * export, when meta keys are registered. Products and Orders share the same
+     * card shape, differing only by option name, key, label and group - hence
+     * the single helper.
+     *
+     * @since 2.8.1
+     * @param array  $filters Filter definitions, appended by reference.
+     * @param string $type    Export type slug.
+     * @return void
+     */
+    private function maybe_add_custom_meta_filter( &$filters, $type ) {
+        $is_product = 'product' === $type;
+        if ( ! $is_product && 'order' !== $type ) {
+            return;
+        }
+        $option_name = $is_product ? 'custom_products' : 'custom_orders';
+        if ( empty( $this->get_registered_custom_meta_keys( $option_name ) ) ) {
+            return;
+        }
+        $filters[] = array(
+            'key'   => $is_product ? 'product_filter_custom_meta_enabled' : 'order_filter_custom_meta_enabled',
+            'label' => $is_product
+                ? __( 'Custom Product meta', 'woocommerce-exporter' )
+                : __( 'Custom Order meta', 'woocommerce-exporter' ),
+            'group' => $is_product ? 'Product Filters' : 'Order Filters',
+        );
+    }
+
+    /**
      * Custom-meta textarea definitions per export type. Mirrors the legacy
      * woo_ce_{type}_custom_fields() screens so the SPA can render the same
      * inputs (Custom Product meta, Custom Product Attributes, etc.).
@@ -538,10 +585,10 @@ class Quick_Export_Controller extends Abstract_Class {
      * Return the list of supported export formats.
      *
      * @since 5.6.0
-     * @return array  Each entry: { value, label }
+     * @return array  Each entry: { value, label, premium, upsell_url }
      */
     private function get_export_formats() {
-        return array(
+        $formats = array(
             array(
                 'value' => 'csv',
                 'label' => 'CSV',
@@ -563,6 +610,15 @@ class Quick_Export_Controller extends Abstract_Class {
                 'label' => 'XML',
             ),
         );
+
+        foreach ( $formats as &$format ) {
+            $is_premium           = woo_ce_is_premium_export_format( $format['value'] );
+            $format['premium']    = $is_premium;
+            $format['upsell_url'] = $is_premium ? woo_ce_get_export_format_upsell_url( $format['value'] ) : null;
+        }
+        unset( $format );
+
+        return $formats;
     }
 
     // -------------------------------------------------------------------------
@@ -963,6 +1019,12 @@ class Quick_Export_Controller extends Abstract_Class {
 
         $filters = isset( $definitions[ $type ] ) ? $definitions[ $type ] : array();
 
+        // Custom-meta VALUE filters. The classic Quick Export screen exposed a
+        // per-key value input plumbed into product_custom_meta / order_custom_meta;
+        // re-add it here so the SPA can scope by custom meta. Only offered when
+        // meta keys are registered.
+        $this->maybe_add_custom_meta_filter( $filters, $type );
+
         foreach ( $filters as &$filter ) {
             $filter['enabled']     = false;
             $filter['description'] = $this->get_filter_description( $filter['key'] );
@@ -993,6 +1055,7 @@ class Quick_Export_Controller extends Abstract_Class {
             'product_filter_tag_enabled'            => __( 'Include products with specific tags.', 'woocommerce-exporter' ),
             'product_dates_filter_enabled'          => __( 'Include products created within a date range.', 'woocommerce-exporter' ),
             'product_modified_dates_filter_enabled' => __( 'Include products modified within a date range.', 'woocommerce-exporter' ),
+            'product_filter_custom_meta_enabled'    => __( 'Include products matching a custom meta value.', 'woocommerce-exporter' ),
             'product_filter_brand_enabled'          => __( 'Include products from specific brands.', 'woocommerce-exporter' ),
             'product_filter_user_role_enabled'      => __( 'Include products created by users with specific roles.', 'woocommerce-exporter' ),
             'product_filter_stock_status_enabled'   => __( 'Filter products by their inventory stock status.', 'woocommerce-exporter' ),
@@ -1010,7 +1073,7 @@ class Quick_Export_Controller extends Abstract_Class {
             'order_filter_user_role_enabled'        => __( 'Include orders placed by users with specific roles.', 'woocommerce-exporter' ),
             'order_filter_customer_enabled'         => __( 'Include orders from a specific customer email.', 'woocommerce-exporter' ),
             'order_filter_coupon_enabled'           => __( 'Include orders that used a specific coupon code.', 'woocommerce-exporter' ),
-            'order_filter_product_enabled'          => __( 'Include orders containing a specific product (by ID or SKU).', 'woocommerce-exporter' ),
+            'order_filter_product_enabled'          => __( 'Include orders containing a specific product (by ID).', 'woocommerce-exporter' ),
             'order_filter_category_enabled'         => __( 'Include orders containing products from specific categories.', 'woocommerce-exporter' ),
             'order_filter_tag_enabled'              => __( 'Include orders containing products with specific tags.', 'woocommerce-exporter' ),
             'order_filter_brand_enabled'            => __( 'Include orders containing products from specific brands.', 'woocommerce-exporter' ),
@@ -1019,6 +1082,7 @@ class Quick_Export_Controller extends Abstract_Class {
             'order_filter_digital_enabled'          => __( 'Include or exclude orders based on digital product content.', 'woocommerce-exporter' ),
             'order_filter_notes_enabled'            => __( 'Control whether order notes are included in the export.', 'woocommerce-exporter' ),
             'order_filter_item_types_enabled'       => __( 'Choose which order item types to include in the export.', 'woocommerce-exporter' ),
+            'order_filter_custom_meta_enabled'      => __( 'Include orders matching a custom meta value.', 'woocommerce-exporter' ),
             // User filters.
             'user_filter_user_role_enabled'         => __( 'Include users by role.', 'woocommerce-exporter' ),
             'user_dates_filter_enabled'             => __( 'Include users registered within a date range.', 'woocommerce-exporter' ),
@@ -1055,6 +1119,7 @@ class Quick_Export_Controller extends Abstract_Class {
             'product_filter_tag_enabled'            => 'Tags',
             'product_dates_filter_enabled'          => 'Calendar',
             'product_modified_dates_filter_enabled' => 'CalendarClock',
+            'product_filter_custom_meta_enabled'    => 'Tags',
             'product_filter_brand_enabled'          => 'Award',
             'product_filter_user_role_enabled'      => 'Users',
             'product_filter_stock_status_enabled'   => 'Package',
@@ -1081,6 +1146,7 @@ class Quick_Export_Controller extends Abstract_Class {
             'order_filter_digital_enabled'          => 'Download',
             'order_filter_notes_enabled'            => 'FileText',
             'order_filter_item_types_enabled'       => 'Layers',
+            'order_filter_custom_meta_enabled'      => 'Tags',
             // User.
             'user_filter_user_role_enabled'         => 'Users',
             'user_dates_filter_enabled'             => 'Calendar',
@@ -1104,10 +1170,11 @@ class Quick_Export_Controller extends Abstract_Class {
      * Sub-control definitions rendered when the user expands a filter card.
      *
      * Returns an array of controls. Each control has:
-     *   - type:  'multiselect' | 'date_range'
+     *   - type:  'multiselect' | 'select' | 'radio_group' | 'date_range' | 'text' | 'number' | 'comparison_number'
      *   - name:  form_data field name to submit
      *   - label: short label rendered above the control (optional)
-     *   - options: [{ value, label }] (multiselect only)
+     *   - options: [{ value, label }] (multiselect / select / radio_group)
+     *   - placeholder: input hint (text / number only)
      *
      * @since 5.6.0
      * @param string $filter_key Filter key.
@@ -1186,20 +1253,28 @@ class Quick_Export_Controller extends Abstract_Class {
                 );
 
             case 'product_dates_filter_enabled':
+                // "Date created" maps to the reader's published-date bounds (post_date).
                 return array(
                     array(
-                        'type'  => 'date_range',
-                        'name'  => 'product_dates_filter',
-                        'label' => __( 'Date created', 'woocommerce-exporter' ),
+                        'type'       => 'date_range',
+                        'name'       => 'product_dates_filter',
+                        'preset_key' => 'product_filter_published_dates',
+                        'from_key'   => 'product_published_dates_from',
+                        'to_key'     => 'product_published_dates_to',
+                        'label'      => __( 'Date created', 'woocommerce-exporter' ),
                     ),
                 );
 
             case 'product_modified_dates_filter_enabled':
+                // "Date modified" maps to the reader's product_dates bounds (post_modified).
                 return array(
                     array(
-                        'type'  => 'date_range',
-                        'name'  => 'product_modified_dates_filter',
-                        'label' => __( 'Date modified', 'woocommerce-exporter' ),
+                        'type'       => 'date_range',
+                        'name'       => 'product_modified_dates_filter',
+                        'preset_key' => 'product_filter_dates',
+                        'from_key'   => 'product_dates_from',
+                        'to_key'     => 'product_dates_to',
+                        'label'      => __( 'Date modified', 'woocommerce-exporter' ),
                     ),
                 );
 
@@ -1229,20 +1304,27 @@ class Quick_Export_Controller extends Abstract_Class {
                 );
 
             case 'orders_filters[date]':
+                // Control name differs from the reader keys, so map them explicitly.
                 return array(
                     array(
-                        'type'  => 'date_range',
-                        'name'  => 'orders_filter_date',
-                        'label' => __( 'Order date', 'woocommerce-exporter' ),
+                        'type'       => 'date_range',
+                        'name'       => 'orders_filter_date',
+                        'preset_key' => 'order_dates_filter',
+                        'from_key'   => 'order_dates_from',
+                        'to_key'     => 'order_dates_to',
+                        'label'      => __( 'Order date', 'woocommerce-exporter' ),
                     ),
                 );
 
             case 'orders_filters[modified_date]':
                 return array(
                     array(
-                        'type'  => 'date_range',
-                        'name'  => 'orders_filter_modified_date',
-                        'label' => __( 'Date modified', 'woocommerce-exporter' ),
+                        'type'       => 'date_range',
+                        'name'       => 'orders_filter_modified_date',
+                        'preset_key' => 'order_modified_dates_filter',
+                        'from_key'   => 'order_modified_dates_from',
+                        'to_key'     => 'order_modified_dates_to',
+                        'label'      => __( 'Date modified', 'woocommerce-exporter' ),
                     ),
                 );
 
@@ -1557,20 +1639,12 @@ class Quick_Export_Controller extends Abstract_Class {
                 );
 
             case 'order_filter_brand_enabled':
-                $brand_taxonomies = array( 'product_brand', 'pwb-brand', 'pa_brand', 'yith_product_brand' );
-                $brand_options    = array();
-                foreach ( $brand_taxonomies as $tax ) {
-                    $brand_options = $this->get_term_choices( $tax );
-                    if ( ! empty( $brand_options ) ) {
-                        break;
-                    }
-                }
                 return array(
                     array(
                         'type'    => 'multiselect',
                         'name'    => 'order_filter_brand[]',
                         'label'   => __( 'Brands', 'woocommerce-exporter' ),
-                        'options' => $brand_options,
+                        'options' => $this->get_brand_term_choices(),
                     ),
                 );
 
@@ -1885,6 +1959,24 @@ class Quick_Export_Controller extends Abstract_Class {
                     ),
                 );
 
+            // Custom-meta VALUE filter sub-options: one text control per
+            // registered key. product_custom_meta stores a single string;
+            // order_custom_meta is comma-exploded by the engine.
+            case 'product_filter_custom_meta_enabled':
+            case 'order_filter_custom_meta_enabled':
+                $option_name = ( 'product_filter_custom_meta_enabled' === $filter_key ) ? 'custom_products' : 'custom_orders';
+                $name_prefix = ( 'product_filter_custom_meta_enabled' === $filter_key ) ? 'product_filter_custom_meta-' : 'order_filter_custom_meta-';
+                $controls    = array();
+                foreach ( $this->get_registered_custom_meta_keys( $option_name ) as $meta_key ) {
+                    $controls[] = array(
+                        'type'        => 'text',
+                        'name'        => $name_prefix . $meta_key,
+                        'label'       => $meta_key,
+                        'placeholder' => __( 'Filter by value…', 'woocommerce-exporter' ),
+                    );
+                }
+                return $controls;
+
             default:
                 return array();
         }
@@ -1913,6 +2005,60 @@ class Quick_Export_Controller extends Abstract_Class {
             $options[] = array(
                 'value' => (string) $term->term_id,
                 'label' => (string) $term->name,
+            );
+        }
+        return $options;
+    }
+
+    /**
+     * Fetch brand choices for the Order Brand filter.
+     *
+     * Every brand taxonomy on the store is offered rather than just the first
+     * one that happens to hold terms: the Order Brand filter matches the
+     * submitted term IDs without pinning a taxonomy, so brands from two Brands
+     * plugins can be mixed in one selection. Where more than one taxonomy
+     * contributes, the taxonomy slug is appended so two plugins' brands of the
+     * same name stay apart - the registered labels cannot do that job, every
+     * Brands plugin calls its singular label "Brand".
+     *
+     * The Product Brand filter deliberately does not use this - woo_ce_get_products()
+     * ( includes/product.php ) builds a tax_query pinned to the single taxonomy
+     * woo_ce_brand_term_taxonomy resolves to, so offering IDs from the other
+     * taxonomies there would return no products.
+     *
+     * The term count is left uncapped, unlike get_term_choices() for Categories and
+     * Tags: a brand this dropdown silently omitted could not be filtered on at all.
+     *
+     * Falls back to the first brand taxonomy holding terms when
+     * woo_ce_get_brand_filter_terms() ( includes/brand.php ) is unavailable.
+     *
+     * @since 2.8.1
+     * @return array<array{value:string,label:string}>
+     */
+    private function get_brand_term_choices() {
+        if ( ! function_exists( 'woo_ce_get_brand_filter_terms' ) ) {
+            foreach ( array( 'product_brand', 'pwb-brand', 'pa_brand', 'yith_product_brand' ) as $tax ) {
+                $brand_options = $this->get_term_choices( $tax );
+                if ( ! empty( $brand_options ) ) {
+                    return $brand_options;
+                }
+            }
+            return array();
+        }
+
+        $terms = woo_ce_get_brand_filter_terms();
+        if ( empty( $terms ) ) {
+            return array();
+        }
+
+        $show_taxonomy = count( array_unique( wp_list_pluck( $terms, 'taxonomy' ) ) ) > 1;
+
+        $options = array();
+        foreach ( $terms as $term ) {
+            $label     = $show_taxonomy ? $term->name . ' (' . $term->taxonomy . ')' : $term->name;
+            $options[] = array(
+                'value' => (string) $term->term_id,
+                'label' => (string) $label,
             );
         }
         return $options;
@@ -2216,7 +2362,7 @@ class Quick_Export_Controller extends Abstract_Class {
             'order'          => array( 'order_id', 'order_status', 'order_date', 'order_total', 'billing_email', 'billing_first_name', 'billing_last_name', 'shipping_method', 'payment_method', 'customer_id' ),
             'customer'       => array( 'customer_id', 'billing_email', 'billing_first_name', 'billing_last_name', 'billing_company', 'billing_country', 'orders_count', 'total_spent', 'last_order_date', 'date_registered' ),
             'user'           => array( 'ID', 'user_login', 'user_email', 'first_name', 'last_name', 'roles', 'user_registered', 'billing_country', 'display_name', 'last_login' ),
-            'coupon'         => array( 'ID', 'post_title', 'discount_type', 'coupon_amount', 'usage_limit', 'usage_count', 'expiry_date', 'product_ids', 'minimum_amount', 'individual_use' ),
+            'coupon'         => array( 'coupon_code', 'discount_type', 'coupon_amount', 'usage_limit', 'usage_count', 'expiry_date', 'product_ids', 'minimum_amount', 'individual_use' ),
             'category'       => array( 'term_id', 'name', 'slug', 'parent', 'description', 'count', 'image', 'menu_order', 'display_type', 'thumbnail_id' ),
             'tag'            => array( 'term_id', 'name', 'slug', 'description', 'count' ),
             'brand'          => array( 'term_id', 'name', 'slug', 'description', 'count', 'thumbnail_id' ),

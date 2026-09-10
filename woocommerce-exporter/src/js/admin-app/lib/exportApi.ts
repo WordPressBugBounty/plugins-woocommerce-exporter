@@ -17,6 +17,44 @@ function ajaxUrl (): string {
   return wpData().ajaxUrl ?? '/wp-admin/admin-ajax.php'
 }
 
+/** One label/value row of the debug-mode gate's diagnostics payload. */
+export interface ExportDiagnostic {
+  label: string
+  value: string
+}
+
+/**
+ * Thrown when the server rejects a request. Carries the `premium`/`upsell`/
+ * `feature` fields the AJAX gates attach to premium (Deluxe-only) export
+ * type/format rejections, so callers can surface an upsell instead of
+ * generic error text, plus the `debug`/`diagnostics` fields the debugging-mode
+ * gate attaches so the progress dialog can explain the refusal.
+ */
+export class ExportApiError extends Error {
+  premium: boolean
+  upsell: string | null
+  feature: string | null
+  debug: boolean
+  diagnostics: ExportDiagnostic[]
+
+  constructor (
+    message: string,
+    premium = false,
+    upsell: string | null = null,
+    feature: string | null = null,
+    debug = false,
+    diagnostics: ExportDiagnostic[] = []
+  ) {
+    super(message)
+    this.name = 'ExportApiError'
+    this.premium = premium
+    this.upsell = upsell
+    this.feature = feature
+    this.debug = debug
+    this.diagnostics = diagnostics
+  }
+}
+
 interface PrepareExportParams {
   type:     string
   nonce:    string
@@ -45,10 +83,10 @@ export async function prepareExport ({ type, nonce, formData }: PrepareExportPar
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    body.toString(),
   })
-  const data = await res.json() as { success: boolean; data: PrepareExportResult & { message?: string } }
+  const data = await res.json() as { success: boolean; data: PrepareExportResult & { message?: string; premium?: boolean; upsell?: string; feature?: string; debug?: boolean; diagnostics?: ExportDiagnostic[] } }
 
   if (!res.ok || data.success === false) {
-    throw new Error(data.data?.message ?? 'Export prepare failed.')
+    throw new ExportApiError(data.data?.message ?? 'Export prepare failed.', Boolean(data.data?.premium), data.data?.upsell ?? null, data.data?.feature ?? null, Boolean(data.data?.debug), data.data?.diagnostics ?? [])
   }
 
   return data.data
@@ -65,6 +103,11 @@ interface ProcessBatchResult {
   done:     boolean
   file_url?: string
   message?: string
+  premium?: boolean
+  upsell?: string
+  feature?: string
+  debug?: boolean
+  diagnostics?: ExportDiagnostic[]
 }
 
 /**
@@ -87,7 +130,7 @@ export async function processBatch ({ type, nonce, step }: ProcessBatchParams): 
   const data = await res.json() as { success: boolean; data: ProcessBatchResult }
 
   if (!res.ok || data.success === false) {
-    throw new Error(data.data?.message ?? `Batch ${step} failed.`)
+    throw new ExportApiError(data.data?.message ?? `Batch ${step} failed.`, Boolean(data.data?.premium), data.data?.upsell ?? null, data.data?.feature ?? null, Boolean(data.data?.debug), data.data?.diagnostics ?? [])
   }
 
   return data.data

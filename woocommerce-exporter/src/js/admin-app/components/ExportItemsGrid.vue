@@ -30,6 +30,7 @@ async function onCardClick (item) {
     <a
       v-for="item in items"
       :key="item.slug"
+      :data-testid="`export-type-card-${item.slug}`"
       :href="item.premium ? item.upsell_url : '#/quick-export'"
       :target="item.premium ? '_blank' : undefined"
       :rel="item.premium ? 'noopener' : undefined"
@@ -56,7 +57,7 @@ async function onCardClick (item) {
       <h3 class="text-[13px] font-semibold text-gray-900 m-0 leading-[1.3]">{{ item.label }}</h3>
       <p class="text-xs text-gray-500 m-0 leading-[1.5] flex-1 line-clamp-3">{{ item.description }}</p>
 
-      <span v-if="item.premium" class="inline-flex items-center gap-[4px] text-xs font-semibold text-amber-700 mt-auto">
+      <span v-if="item.premium" class="inline-flex items-center gap-[4px] text-xs font-semibold text-amber-700 mt-auto" data-testid="export-type-premium-label">
         <Lock :size="11" :stroke-width="2.5" /> Available in Deluxe
       </span>
       <span v-else class="inline-flex items-center gap-[3px] text-xs font-medium text-indigo-600 mt-auto">

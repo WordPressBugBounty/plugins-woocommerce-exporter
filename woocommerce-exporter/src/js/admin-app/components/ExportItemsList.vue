@@ -65,6 +65,7 @@ const formatRecords = (n) => (n > 0 ? n.toLocaleString() : '—')
         <tr
           v-for="item in pagedItems"
           :key="item.slug"
+          :data-testid="`export-type-row-${item.slug}`"
           class="border-b border-gray-100 last:border-b-0 transition-colors hover:bg-[#FAFAFA]"
         >
           <td class="px-3.5 py-2.5 align-middle text-gray-700">

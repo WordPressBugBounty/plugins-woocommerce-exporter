@@ -2,12 +2,46 @@ import { ref, reactive, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../lib/api'
 
+/**
+ * Resolve whether debugging mode is genuinely gating exports.
+ *
+ * WOO_CE_DEBUG is the constant every server-side export gate tests, and
+ * bootstrap.php defines it from the `debug_mode` option only when it is not
+ * already set. A wp-config.php `define('WOO_CE_DEBUG', true)` therefore wins,
+ * and constant and option can legitimately disagree (issue #89 / A25). Reading
+ * the raw option would then hide the banner while every export is still
+ * refused, with an Advanced toggle that reads "Off" and cannot fix it.
+ *
+ * So: when the server reports the constant is externally overridden, trust the
+ * constant. Otherwise trust the option value the server just confirmed — on a
+ * save the constant is one request stale (it froze at `init`, before the write)
+ * while the option is exactly what the next request's constant will mirror.
+ *
+ * @param {object} response      Settings GET/POST response body.
+ * @param {*}      optionValue   The `debug_mode` option value the server holds.
+ * @returns {boolean}
+ */
+function resolveDebugModeActive (response, optionValue) {
+  if (response?.debug_mode_overridden) return Boolean(response.debug_mode_active)
+  return Boolean(optionValue)
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref(null)
   const activeCategory = ref('general')
+  // Whether debugging mode is genuinely active on the server. Seeded from the
+  // bootstrapped wseAdminData (which mirrors the WOO_CE_DEBUG constant) so the
+  // banner is correct on every SPA screen, including Quick Export where
+  // fetchSettings() is never called and `settings.debug_mode` is still the
+  // hardcoded default. wp_localize_script stringifies scalars, so "1" / "".
+  // Later updates go through resolveDebugModeActive(), never the raw option.
+  const debugModeActive = ref(Boolean(window.wseAdminData?.debugMode))
   const categories = ref([])
+  // Read-only Deluxe-gated format definitions (XML, RSS) for FormatsSection.vue's
+  // locked cards — never POSTed back, so it lives outside the `settings` object.
+  const premiumFormats = ref([])
 
   const context = reactive({
     export_templates: [],
@@ -26,6 +60,7 @@ export const useSettingsStore = defineStore('settings', () => {
     bom: true,
     flush_cache: 'flush',
     excel_formulas: false,
+    csv_formula_escaping: true,
     timeout: 0,
     // Archives
     enable_archive: false,
@@ -35,20 +70,6 @@ export const useSettingsStore = defineStore('settings', () => {
     delimiter: ',',
     category_separator: '|',
     line_ending_formatting: 'windows',
-    // Export Formats - XML
-    xml_attribute_url: true,
-    xml_attribute_title: true,
-    xml_attribute_date: true,
-    xml_attribute_time: false,
-    xml_attribute_export: true,
-    xml_attribute_orderby: false,
-    xml_attribute_order: false,
-    xml_attribute_limit: false,
-    xml_attribute_offset: false,
-    // Export Formats - RSS
-    rss_title: '',
-    rss_link: '',
-    rss_description: '',
     // CRON Exports
     enable_cron: false,
     secret_key: '',
@@ -78,8 +99,6 @@ export const useSettingsStore = defineStore('settings', () => {
     trigger_new_order_items_formatting: 'unique',
     trigger_new_order_fields: 'all',
     // Advanced
-    hide_archives_tab: false,
-    hide_scheduled_exports_tab: false,
     debug_mode: false,
     logging_mode: false,
     // Audit Log — default false so the sidebar/section stay hidden until the
@@ -120,10 +139,12 @@ export const useSettingsStore = defineStore('settings', () => {
         if (data[k] !== undefined) settings[k] = data[k]
       })
       categories.value = data.categories ?? []
+      premiumFormats.value = data.premium_formats ?? []
       if (data.context) {
         Object.assign(context, data.context)
       }
       original.value = JSON.parse(JSON.stringify(settings))
+      debugModeActive.value = resolveDebugModeActive(data, data.debug_mode)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load settings.'
     } finally {
@@ -135,8 +156,15 @@ export const useSettingsStore = defineStore('settings', () => {
     isSaving.value = true
     error.value = null
     try {
-      await api.post('settings', { ...settings })
-      original.value = JSON.parse(JSON.stringify(settings))
+      // Snapshot BEFORE the await. `settings` is reactive and the user can keep
+      // toggling while the request is in flight, so every post-await read of it
+      // would describe a state this request never sent.
+      const payload = { ...settings }
+      const response = await api.post('settings', payload)
+      original.value = JSON.parse(JSON.stringify(payload))
+      // Only after the POST resolves: a dirty-but-unsaved toggle, or a save
+      // that rejects, must never flip the banner.
+      debugModeActive.value = resolveDebugModeActive(response, payload.debug_mode)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to save settings.'
       throw err
@@ -160,7 +188,8 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    isLoading, isSaving, error, activeCategory, categories, context,
+    isLoading, isSaving, error, activeCategory, categories, context, premiumFormats,
+    debugModeActive,
     settings, isDirty, unsavedCount, isSettingsLoaded,
     fetchSettings, saveSettings, resetToSaved, runAction
   }

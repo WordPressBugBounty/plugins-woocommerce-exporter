@@ -2,7 +2,7 @@
 /**
  * Export Items REST Controller.
  *
- * @since   5.6.0
+ * @since   2.8.0
  * @package VisserLabs\WSE\Classes\REST
  */
 
@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * Provides the full export type listing with per-type metadata for the
  * "All Export Items" Vue page.
  *
- * @since 5.6.0
+ * @since 2.8.0
  */
 class Export_Items_Controller extends Abstract_Class {
 
@@ -30,7 +30,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Register hooks.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return void
      */
     public function run() {
@@ -40,7 +40,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Register REST routes.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return void
      */
     public function register_routes() {
@@ -58,7 +58,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Permission callback.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return bool|\WP_Error
      */
     public function check_permission() {
@@ -77,7 +77,7 @@ class Export_Items_Controller extends Abstract_Class {
      *
      * @param \WP_REST_Request $request The REST request.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return \WP_REST_Response
      */
     public function get_export_items( $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInImplementedInterface
@@ -95,14 +95,14 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Build the list of export items enriched with record counts and last export dates.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return array
      */
     private function get_items() {
         $definitions  = $this->get_export_type_definitions();
         $counts       = Export_Helper::get_export_type_count();
         $last_exports = $this->get_last_export_dates();
-        $base_url     = admin_url( 'admin.php?page=woo_ce&tab=export' );
+        $base_url     = admin_url( 'admin.php?page=woo_ce&tab=quick_export' );
 
         $items = array();
         foreach ( $definitions as $slug => $def ) {
@@ -126,7 +126,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Fetch the most recent export date per export type from the archive attachments.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return array  Keyed by export-type slug, value is the MySQL date string.
      */
     private function get_last_export_dates() {
@@ -158,7 +158,7 @@ class Export_Items_Controller extends Abstract_Class {
      *
      * @param string $date_string MySQL date string.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return string
      */
     private function format_export_date( $date_string ) {
@@ -180,7 +180,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Static export type definitions: label, category, and description.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return array
      */
     private function get_export_type_definitions() {
@@ -271,7 +271,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Count all scheduled export posts.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return int
      */
     private function get_schedules_count() {
@@ -283,7 +283,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Count all export archives.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return int
      */
     private function get_archives_count() {
@@ -306,7 +306,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Get plugin version and system info.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return array
      */
     private function get_plugin_info() {
@@ -324,7 +324,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Get admin tab URLs.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return array
      */
     private function get_tab_urls() {
@@ -332,7 +332,7 @@ class Export_Items_Controller extends Abstract_Class {
 
         return array(
             'overview'     => esc_url_raw( $base ),
-            'export'       => esc_url_raw( $base . '&tab=export' ),
+            'export'       => esc_url_raw( $base . '&tab=quick_export' ),
             'export_items' => esc_url_raw( $base . '&tab=export_items' ),
             'schedules'    => esc_url_raw( $base . '&tab=scheduled_export' ),
             'templates'    => esc_url_raw( $base . '&tab=export_template' ),
@@ -347,7 +347,7 @@ class Export_Items_Controller extends Abstract_Class {
      *
      * @param string $limit Memory limit string (e.g. "256M").
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return int
      */
     private function parse_memory_limit( $limit ) {
@@ -372,7 +372,7 @@ class Export_Items_Controller extends Abstract_Class {
     /**
      * Return elapsed time since WP bootstrap.
      *
-     * @since 5.6.0
+     * @since 2.8.0
      * @return float
      */
     private function get_page_load_time() {

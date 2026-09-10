@@ -1136,7 +1136,7 @@ if ( is_admin() ) {
 	 */
 	function woo_ce_admin_fail_notices() {
 
-		$troubleshooting_url = 'https://www.visser.com.au/documentation/store-exporter-deluxe/troubleshooting/';
+		$troubleshooting_url = woo_ce_get_kb_url();
 
 		// If the failed flag is set then prepare for an error notice.
 		if ( isset( $_GET['failed'] ) ) {
@@ -1155,9 +1155,23 @@ if ( is_admin() ) {
 			woo_cd_admin_notice_html( $message, 'error' );
 		}
 
-		// Check if WOO_CE_DEBUG is running.
-		if ( defined( 'WOO_CE_DEBUG' ) && WOO_CE_DEBUG ) {
-			$message  = esc_html__( 'Store Exporter Deluxe is currently in <attr title="WOO_CE_DEBUG">debugging mode</attr>. No export file downloads will be generated from the Quick Export screen nor will Scheduled Exports or manual CRON exports generate export files until debug mode is de-activated.', 'woocommerce-exporter' );
+		// Check if WOO_CE_DEBUG is running. The Vue admin app renders its own
+		// reactive banner on the tabs it owns, so this static notice is limited
+		// to the legacy tabs and never duplicates it.
+		if ( defined( 'WOO_CE_DEBUG' ) && WOO_CE_DEBUG && ! woo_ce_is_spa_tab() ) {
+			// The only interpolated value is a hardcoded constant name, so the
+			// string carries no user input and is safe to pass unescaped to
+			// woo_cd_admin_notice_html() (which runs wp_kses_post()).
+			//
+			// COPY SYNC — this sentence also lives in the SPA banner
+			// (src/js/admin-app/components/DebugModeBanner.vue) and in the AJAX
+			// refusal payload (woo_ce_send_debug_mode_error(), below). Change
+			// one, change all three.
+			$message  = sprintf(
+				/* translators: %s: the WOO_CE_DEBUG constant name, wrapped in a code element. */
+				__( 'Store Exporter is currently in debugging mode (%s). Exports are refused and no export files are generated until debugging mode is de-activated.', 'woocommerce-exporter' ),
+				'<code>WOO_CE_DEBUG</code>'
+			);
 			$message .= ' (<a href="' . esc_url( $troubleshooting_url ) . '" target="_blank">' . esc_html__( 'Need help?', 'woocommerce-exporter' ) . '</a>)';
 			woo_cd_admin_notice_html( $message, 'error' );
 		}
@@ -1290,7 +1304,7 @@ if ( is_admin() ) {
 							);
 							$message     = '<span style="float:right;"><a href="' . esc_url( $dismiss_url ) . '" class="woocommerce-message-close notice-dismiss">' . esc_html__( 'Dismiss', 'woocommerce-exporter' ) . '</a></span>';
 							// Translators: %1$s is the temp directory, %2$s is the troubleshooting URL.
-							$message .= sprintf( esc_html__( 'The PHP open_basedir restriction is enabled for this WordPress site, ensure that you can save tempoary files to <code>%1$s</code>.<br /><br />If you experience corrupt exports read how to <a href="%2$s" target="_blank">override the default directory PHP stores temporary files for this Plugin</a>.', 'woocommerce-exporter' ), esc_html( $temp_dir ), esc_url( $troubleshooting_url . '#General_troubleshooting' ) );
+							$message .= sprintf( esc_html__( 'The PHP open_basedir restriction is enabled for this WordPress site, ensure that you can save tempoary files to <code>%1$s</code>.<br /><br />If you experience corrupt exports read how to <a href="%2$s" target="_blank">override the default directory PHP stores temporary files for this Plugin</a>.', 'woocommerce-exporter' ), esc_html( $temp_dir ), esc_url( $troubleshooting_url ) );
 							woo_cd_admin_notice_html( $message, 'notice' );
 						} else {
 							// Show a notice explaining what PHP open_basedir is and how to resolve it.
@@ -1304,7 +1318,7 @@ if ( is_admin() ) {
 							);
 							$message     = '<span style="float:right;"><a href="' . esc_url( $dismiss_url ) . '" class="woocommerce-message-close notice-dismiss">' . esc_html__( 'Dismiss', 'woocommerce-exporter' ) . '</a></span>';
 							// Translators: %1$s is the temp directory, %2$s is the list of allowed directories, %3$s is the troubleshooting URL.
-							$message .= sprintf( esc_html__( 'The PHP open_basedir restriction is enabled for this WordPress site but the directory <code>%1$s</code> is not in the allowed list of directories (<code>%2$s</code>).<br /><br />If you experience corrupt exports read how to <a href="%3$s" target="_blank">override the default directory PHP stores temporary files for this Plugin</a> or contact your hosting provider to resolve this.', 'woocommerce-exporter' ), esc_html( $temp_dir ), esc_html( implode( ', ', $open_basedir ) ), esc_url( $troubleshooting_url . '#General_troubleshooting' ) );
+							$message .= sprintf( esc_html__( 'The PHP open_basedir restriction is enabled for this WordPress site but the directory <code>%1$s</code> is not in the allowed list of directories (<code>%2$s</code>).<br /><br />If you experience corrupt exports read how to <a href="%3$s" target="_blank">override the default directory PHP stores temporary files for this Plugin</a> or contact your hosting provider to resolve this.', 'woocommerce-exporter' ), esc_html( $temp_dir ), esc_html( implode( ', ', $open_basedir ) ), esc_url( $troubleshooting_url ) );
 							woo_cd_admin_notice_html( $message, 'error' );
 						}
 					}
@@ -1326,7 +1340,7 @@ if ( is_admin() ) {
 				);
 				$message     = '<span style="float:right;"><a href="' . esc_url( $dismiss_url ) . '" class="woocommerce-message-close notice-dismiss">' . esc_html__( 'Dismiss', 'woocommerce-exporter' ) . '</a></span>';
 				// Translators: %1$s is the PHP version, %2$s is the troubleshooting URL.
-				$message .= sprintf( esc_html__( 'Your PHP version (%1$s) is not supported and is very much out of date, since 2010 all users are strongly encouraged to upgrade to PHP 5.3+ and above. Contact your hosting provider to make this happen. See: <a href="%2$s" target="_blank">Migrating from PHP 5.2 to 5.3</a>', 'woocommerce-exporter' ), phpversion(), esc_url( $troubleshooting_url . '#General_troubleshooting' ) );
+				$message .= sprintf( esc_html__( 'Your PHP version (%1$s) is not supported and is very much out of date, since 2010 all users are strongly encouraged to upgrade to PHP 5.3+ and above. Contact your hosting provider to make this happen. See: <a href="%2$s" target="_blank">Migrating from PHP 5.2 to 5.3</a>', 'woocommerce-exporter' ), phpversion(), esc_url( $troubleshooting_url ) );
 				woo_cd_admin_notice_html( $message, 'error' );
 			}
 		}
@@ -1605,7 +1619,7 @@ if ( is_admin() ) {
 				);
 				$message     = '<span style="float:right;"><a href="' . esc_url( $dismiss_url ) . '" class="woocommerce-message-close notice-dismiss">' . esc_html__( 'Dismiss', 'woocommerce-exporter' ) . '</a></span>';
 				/* translators: %s: Troubleshooting URL */
-				$message .= sprintf( esc_html__( 'It looks like the PHP Class ZipArchive is missing, this means we are unable to generate Excel XLSX (Excel 97-2003) and some Excel XLS (Excel 2007-2013) files.<br /><br />Read how to <a href="%s" target="_blank">install the ZipArchive Class or use the alternate PCLZip PHP Class</a> or contact your hosting provider to resolve this.', 'woocommerce-exporter' ), esc_url( $troubleshooting_url . '#General_troubleshooting' ) );
+				$message .= sprintf( esc_html__( 'It looks like the PHP Class ZipArchive is missing, this means we are unable to generate Excel XLSX (Excel 97-2003) and some Excel XLS (Excel 2007-2013) files.<br /><br />Read how to <a href="%s" target="_blank">install the ZipArchive Class or use the alternate PCLZip PHP Class</a> or contact your hosting provider to resolve this.', 'woocommerce-exporter' ), esc_url( $troubleshooting_url ) );
 				woo_cd_admin_notice_html( $message, 'error' );
 			}
 		}
@@ -2094,7 +2108,7 @@ function woo_ce_export_dataset( $export_type = null, &$output = null ) {
 	$export->total_rows    = 0;
 	$export->total_columns = 0;
 
-	$troubleshooting_url = 'http://www.visser.com.au/documentation/store-exporter-deluxe/';
+	$troubleshooting_url = woo_ce_get_kb_url();
 
 	if ( ! $export->cron && ! $export->scheduled_export ) {
 		set_transient( WOO_CE_PREFIX . '_running', time(), woo_ce_get_option( 'timeout', HOUR_IN_SECONDS ) );
@@ -2696,6 +2710,19 @@ function woo_ce_is_premium_export_type( $export_type = '' ) {
 }
 
 /**
+ * Return the knowledge base URL for Store Exporter troubleshooting articles.
+ *
+ * Every admin notice, help tab and export screen that links to the knowledge
+ * base calls this helper, so the destination is changed in one place.
+ *
+ * @since 2.8.0
+ * @return string Knowledge base category URL.
+ */
+function woo_ce_get_kb_url() {
+	return esc_url_raw( 'https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/' );
+}
+
+/**
  * Build the marketing upsell URL for a premium export type.
  *
  * @since 2.8.0
@@ -2708,6 +2735,181 @@ function woo_ce_get_export_type_upsell_url( $export_type = '' ) {
 		str_replace( '_', '', $export_type )
 	);
 	return esc_url_raw( 'https://visser.com.au/plugins/woocommerce-export/' . $utm );
+}
+
+/**
+ * Returns the list of export formats that are available in the free Store Exporter.
+ *
+ * Every other export format is premium and requires Store Exporter Deluxe.
+ * This is the single source of truth consumed by the REST controllers and
+ * the Quick Export/download gates. It is
+ * deliberately an allowlist (rather than a denylist of today's premium
+ * formats) so it matches Abstract_Exporter's own csv/tsv writer guards —
+ * any future/unknown format is gated by default instead of silently
+ * reaching the 0-byte write path.
+ *
+ * @since 2.8.0
+ * @return array Array of export format slugs available in the free plugin.
+ */
+function woo_ce_get_free_export_formats() {
+	return apply_filters( 'woo_ce_free_export_formats', array( 'csv', 'tsv' ) );
+}
+
+/**
+ * Determine whether an export format requires Store Exporter Deluxe.
+ *
+ * The comparison is case-insensitive. A non-scalar value (e.g. an array)
+ * is treated as premium so the check fails closed.
+ *
+ * @since 2.8.0
+ * @param string $format Export format slug.
+ * @return bool True when the format is premium (Deluxe-only), false when it is free.
+ */
+function woo_ce_is_premium_export_format( $format = '' ) {
+	if ( ! is_scalar( $format ) ) {
+		return true;
+	}
+	$format = strtolower( (string) $format );
+	if ( '' === $format ) {
+		return false;
+	}
+	return ! in_array( $format, woo_ce_get_free_export_formats(), true );
+}
+
+/**
+ * Build the marketing upsell URL for a premium export format.
+ *
+ * Reuses the legacy campaign string from includes/admin/quick_export.php so
+ * historical analytics for this upsell placement stay consistent.
+ *
+ * @since 2.8.0
+ * @param string $format Export format slug.
+ * @return string Upsell URL with campaign UTM parameters.
+ */
+function woo_ce_get_export_format_upsell_url( $format = '' ) {
+	$utm = sprintf( '?utm_source=wse&utm_medium=export&utm_campaign=optionsformat%slink', sanitize_key( $format ) );
+	return esc_url_raw( 'https://visser.com.au/plugins/woocommerce-export/' . $utm );
+}
+
+/**
+ * Resolve an export format to one the free plugin is actually allowed to write.
+ *
+ * An empty format falls back to the stored `_export_format` option (default
+ * `csv`) — this covers values inherited from settings rather than explicitly
+ * chosen. Any format that is still premium or unrecognised afterwards (e.g.
+ * a site that persisted `xls` before 2.8.0) is coerced to `csv` so it can
+ * never reach Abstract_Exporter's csv/tsv-only writer guards and emit an
+ * empty file. Always returns a format present in the free allowlist.
+ *
+ * @since 2.8.0
+ * @param string $format Requested export format slug.
+ * @return string A format the free plugin can safely write (`csv` or `tsv`).
+ */
+function woo_ce_resolve_export_format( $format = '' ) {
+	if ( ! is_scalar( $format ) ) {
+		$format = '';
+	}
+	$format = strtolower( (string) $format );
+	if ( '' === $format ) {
+		$format = strtolower( (string) get_option( WOO_CE_PREFIX . '_export_format', 'csv' ) );
+	}
+	return in_array( $format, woo_ce_get_free_export_formats(), true ) ? $format : 'csv';
+}
+
+/**
+ * Send the JSON error response for a premium (Deluxe-only) export type and exit.
+ *
+ * Shared by the Quick Export runner and download gates so the copy, upsell
+ * URL and payload shape stay in sync across every call site.
+ *
+ * @since 2.8.0
+ * @param string $export_type Export type slug.
+ * @return void This function calls wp_send_json_error() and does not return.
+ */
+function woo_ce_send_premium_type_error( $export_type = '' ) {
+	wp_send_json_error(
+		array(
+			'message' => sprintf(
+				/* translators: %s: export type label (e.g. Customers). */
+				__( 'Exporting %s is available in Store Exporter Deluxe.', 'woocommerce-exporter' ),
+				woo_ce_get_export_type_label( $export_type )
+			),
+			'premium' => true,
+			'upsell'  => woo_ce_get_export_type_upsell_url( $export_type ),
+		)
+	);
+}
+
+/**
+ * Send the JSON error response for a premium (Deluxe-only) export format and exit.
+ *
+ * Shared by the Quick Export runner and download gates so the copy, upsell
+ * URL and payload shape stay in sync across every call site.
+ *
+ * @since 2.8.0
+ * @param string $requested_format Export format slug as requested by the client.
+ * @return void This function calls wp_send_json_error() and does not return.
+ */
+function woo_ce_send_premium_format_error( $requested_format = '' ) {
+	$format_key    = strtolower( (string) $requested_format );
+	$known_formats = woo_ce_get_export_formats();
+	$format_label  = isset( $known_formats[ $format_key ] )
+		? woo_ce_get_export_format_label( $format_key )
+		: __( 'this file format', 'woocommerce-exporter' );
+	wp_send_json_error(
+		array(
+			'message' => sprintf(
+				/* translators: %s: export format label (e.g. Excel (XLS)). */
+				__( 'Exporting to %s is available in Store Exporter Deluxe.', 'woocommerce-exporter' ),
+				$format_label
+			),
+			'premium' => true,
+			'upsell'  => woo_ce_get_export_format_upsell_url( $requested_format ),
+			'feature' => $format_label,
+		)
+	);
+}
+
+/**
+ * Send the JSON error response for a request refused by debugging mode and exit.
+ *
+ * Shared by the Quick Export runner and the download gate so the copy and
+ * payload shape stay in sync across every call site. The diagnostics are
+ * rendered in the SPA progress dialog, so they describe the refused request.
+ *
+ * @since 2.8.0
+ * @param string   $export_type      Export type slug.
+ * @param string   $requested_format Export format slug as requested by the client.
+ * @param int|null $field_count      Number of export fields requested, or null when unknown.
+ * @return void This function calls wp_send_json_error() and does not return.
+ */
+function woo_ce_send_debug_mode_error( $export_type = '', $requested_format = '', $field_count = null ) {
+	$diagnostics = array(
+		array(
+			'label' => __( 'Export type', 'woocommerce-exporter' ),
+			'value' => woo_ce_get_export_type_label( $export_type ),
+		),
+		array(
+			'label' => __( 'Export format', 'woocommerce-exporter' ),
+			'value' => woo_ce_get_export_format_label( woo_ce_resolve_export_format( $requested_format ) ),
+		),
+	);
+	if ( null !== $field_count ) {
+		$diagnostics[] = array(
+			'label' => __( 'Export fields', 'woocommerce-exporter' ),
+			'value' => (string) absint( $field_count ),
+		);
+	}
+	// COPY SYNC — this sentence also lives in the SPA banner
+	// (src/js/admin-app/components/DebugModeBanner.vue) and in the legacy admin
+	// notice (woo_ce_admin_fail_notices(), above). Change one, change all three.
+	wp_send_json_error(
+		array(
+			'message'     => __( 'Store Exporter is in debugging mode, so this export was refused and no export file was generated. Turn debugging mode off under Store Export > Settings > Advanced, then run the export again.', 'woocommerce-exporter' ),
+			'debug'       => true,
+			'diagnostics' => $diagnostics,
+		)
+	);
 }
 
 /**
@@ -3250,8 +3452,17 @@ function woo_ce_legacy_scheduled_export() {
 
 /**
  * Register the Export Template custom post type.
+ *
+ * @since 2.8.1 Every capability maps to the filtered export capability instead of the `post` set.
  */
 function woo_ce_register_export_template_cpt() {
+
+	/*
+	 * Every capability key maps to the plugin export capability. With
+	 * capability_type => 'post', any edit_posts holder could open the editor and
+	 * define which columns a privileged export emits.
+	 */
+	$export_capability = apply_filters( 'woo_ce_admin_user_capability', 'view_woocommerce_reports' );
 
 	$labels = array(
 		'name'               => __( 'Export Templates', 'woocommerce-exporter' ),
@@ -3279,7 +3490,9 @@ function woo_ce_register_export_template_cpt() {
 		'show_in_menu'       => false,
 		'query_var'          => true,
 		'rewrite'            => false,
-		'capability_type'    => 'post',
+		'capability_type'    => 'export_template',
+		'map_meta_cap'       => false,
+		'capabilities'       => \VisserLabs\WSE\Helpers\Helper::export_post_type_capabilities( $export_capability ),
 		'has_archive'        => false,
 		'hierarchical'       => false,
 		'menu_position'      => null,
@@ -3508,7 +3721,7 @@ function woo_ce_modules_list( $module_status = false ) {
 		'name'        => 'store_toolkit',
 		'title'       => __( 'Store Toolkit', 'woocommerce-exporter' ),
 		'description' => __( 'Store Toolkit includes a growing set of commonly-used WooCommerce administration tools aimed at web developers and store maintainers.', 'woocommerce-exporter' ),
-		'url'         => 'http://wordpress.org/extend/plugins/woocommerce-store-toolkit/',
+		'url'         => 'https://wordpress.org/plugins/woocommerce-store-toolkit/',
 		'slug'        => 'woocommerce-store-toolkit',
 		'function'    => 'woo_st_admin_init',
 	);
@@ -4229,7 +4442,7 @@ function woo_ce_modules_list( $module_status = false ) {
 		'name'        => 'wc_product_importer_deluxe',
 		'title'       => __( 'WooCommerce Product Importer Deluxe', 'woocommerce-exporter' ),
 		'description' => __( 'Bulk import hundreds, even thousands of linked Products and Product images into your WooCommerce store.', 'woocommerce-exporter' ),
-		'url'         => 'https://www.visser.com.au/plugins/product-importer-deluxe/',
+		'url'         => 'https://visser.com.au/how-to-import-woocommerce-products/',
 		'function'    => 'woo_pd_i18n',
 	);
 	$modules[] = array(

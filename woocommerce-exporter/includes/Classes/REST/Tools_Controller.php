@@ -410,7 +410,7 @@ class Tools_Controller extends Abstract_Class {
         $tools = array();
 
         // Product Importer Deluxe.
-        $pd_url      = 'http://www.visser.com.au/woocommerce/plugins/product-importer-deluxe/';
+        $pd_url      = 'https://visser.com.au/how-to-import-woocommerce-products/';
         $pd_internal = false;
         if ( function_exists( 'woo_pd_init' ) ) {
             $pd_url      = esc_url_raw( add_query_arg( array( 'page' => 'woo_pd', 'tab' => null ), admin_url( 'admin.php' ) ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound
@@ -424,7 +424,7 @@ class Tools_Controller extends Abstract_Class {
         );
 
         // Store Toolkit.
-        $st_url      = 'http://www.visser.com.au/woocommerce/plugins/store-toolkit/';
+        $st_url      = 'https://wordpress.org/plugins/woocommerce-store-toolkit/';
         $st_internal = false;
         if ( function_exists( 'woo_st_admin_init' ) ) {
             $st_url      = esc_url_raw( add_query_arg( array( 'page' => 'woo_st', 'tab' => null ), admin_url( 'admin.php' ) ) ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound

@@ -35,7 +35,7 @@ class Deactivation extends Abstract_Class {
     /**
      * Plugin deactivation.
      *
-     * @since 13.3.5
+     * @since 2.7.3
      * @access public
      *
      * @param int $blog_id Blog ID.

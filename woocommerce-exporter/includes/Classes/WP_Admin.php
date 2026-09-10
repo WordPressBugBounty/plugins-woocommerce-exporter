@@ -25,7 +25,7 @@ class WP_Admin extends Abstract_Class {
      *
      * @param string $hook_suffix The current admin page.
      *
-     * @since 3.0
+     * @since 2.7.3
      * @return void
      */
     public function admin_enqueue_scripts( $hook_suffix = '' ) {
@@ -45,18 +45,13 @@ class WP_Admin extends Abstract_Class {
                 )
             );
 
-            // Enqueue the Vue SPA for tabs that use it. woo_ce_resolve_current_tab()
-            // is the shared resolver (also used by the page wrapper and body
-            // renderer) so all three agree on the active tab, including the
-            // skip_overview default. The value may include a sub-path
-            // (e.g. custom_meta_fields/product), so the base segment is isolated.
-            $tab      = function_exists( 'woo_ce_resolve_current_tab' ) ? woo_ce_resolve_current_tab() : 'overview';
-            $tab_base = strstr( $tab, '/', true );
-            if ( false === $tab_base ) {
-                $tab_base = $tab;
-            }
-            $spa_tabs = function_exists( 'woo_ce_spa_tabs' ) ? woo_ce_spa_tabs() : array();
-            if ( in_array( $tab_base, $spa_tabs, true ) ) {
+            // Enqueue the Vue SPA for tabs that use it. woo_ce_is_spa_tab() is
+            // the single shared test (also used by the body renderer and the
+            // debug-mode admin notice) so every caller agrees on which tabs the
+            // app owns. The resolved tab is still needed for the SPA route,
+            // which may include a sub-path (e.g. custom_meta_fields/product).
+            $tab = function_exists( 'woo_ce_resolve_current_tab' ) ? woo_ce_resolve_current_tab() : 'overview';
+            if ( woo_ce_is_spa_tab() ) {
                 $this->enqueue_admin_app( $tab );
             }
         }
@@ -145,6 +140,12 @@ class WP_Admin extends Abstract_Class {
                 'ajaxUrl'          => esc_url_raw( admin_url( 'admin-ajax.php' ) ),
                 'quickExportNonce' => wp_create_nonce( 'manual_export' ),
                 'exportTypes'      => $export_type_options,
+                // Seeded from the CONSTANT, never the raw option: a site can
+                // define WOO_CE_DEBUG in wp-config.php, and bootstrap.php only
+                // defines it from the option when it is not already set, so the
+                // two can legitimately disagree. The constant is what gates the
+                // export, so the constant is what the banner must report.
+                'debugMode'        => defined( 'WOO_CE_DEBUG' ) && WOO_CE_DEBUG,
             )
         );
 
@@ -252,18 +253,34 @@ class WP_Admin extends Abstract_Class {
 
         // Premium export types are Deluxe-only; block them server-side so the
         // free plugin cannot generate their datasets even if the request is forged.
-        if ( function_exists( 'woo_ce_is_premium_export_type' ) && woo_ce_is_premium_export_type( $export_type ) ) {
-            wp_send_json_error(
-                array(
-                    'message' => sprintf(
-                        /* translators: %s: export type label (e.g. Customers). */
-                        __( 'Exporting %s is available in Store Exporter Deluxe.', 'woocommerce-exporter' ),
-                        woo_ce_get_export_type_label( $export_type )
-                    ),
-                    'premium' => true,
-                    'upsell'  => woo_ce_get_export_type_upsell_url( $export_type ),
-                )
-            );
+        if ( woo_ce_is_premium_export_type( $export_type ) ) {
+            woo_ce_send_premium_type_error( $export_type );
+        }
+
+        // Debugging mode refuses the whole runner — prepare, batch and finalise
+        // alike — so no export file can be generated while it is on. Clearing
+        // the in-progress flag here is what stops debug flipped on mid-export
+        // from leaving the 30-minute _export_running transient set and locking
+        // out every later export.
+        if ( defined( 'WOO_CE_DEBUG' ) && WOO_CE_DEBUG ) {
+            $debug_instance = new Exporter();
+            $debug_instance->clear_export_transient();
+
+            $debug_form_data = array();
+            // is_string() is required, not defensive: form_data[]=x makes
+            // parse_str() throw a TypeError on PHP 8 and turns the intended
+            // JSON refusal into an uncaught fatal.
+            if ( isset( $_POST['form_data'] ) && is_string( $_POST['form_data'] ) ) {
+                parse_str( wp_unslash( $_POST['form_data'] ), $debug_form_data ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- the query string is parsed here and the individual values read below are sanitized.
+            }
+            $debug_format = isset( $debug_form_data['export_format'] ) && is_scalar( $debug_form_data['export_format'] )
+                ? sanitize_text_field( (string) $debug_form_data['export_format'] )
+                : '';
+            $debug_fields = isset( $debug_form_data[ $export_type . '_fields' ] ) && is_array( $debug_form_data[ $export_type . '_fields' ] )
+                ? count( $debug_form_data[ $export_type . '_fields' ] )
+                : null;
+
+            woo_ce_send_debug_mode_error( $export_type, $debug_format, $debug_fields );
         }
 
         $instance = new Exporter();
@@ -271,6 +288,16 @@ class WP_Admin extends Abstract_Class {
         // On first call (ajax_prepare), set the form data.
         if ( 'prepare' === sanitize_text_field( wp_unslash( $_POST['method'] ) ) ) {
             $instance->set_form_data( $_POST['form_data'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+            // Premium export formats are Deluxe-only; block them here, before
+            // ajax_prepare() sets the 30-minute _export_running transient, so a
+            // forged premium-format request can never lock out a legitimate
+            // CSV/TSV export that follows it.
+            $requested_format = $instance->get_form_data()['export_format'] ?? '';
+            $requested_format = is_scalar( $requested_format ) ? (string) $requested_format : '';
+            if ( woo_ce_is_premium_export_format( $requested_format ) ) {
+                woo_ce_send_premium_format_error( $requested_format );
+            }
         }
 
         $method = 'ajax_' . sanitize_text_field( wp_unslash( $_POST['method'] ) );
@@ -281,6 +308,39 @@ class WP_Admin extends Abstract_Class {
 
         $instance->$method();
         wp_die();
+    }
+
+    /**
+     * Delete an archived export's file from the protected export directory.
+     *
+     * Archived exports live outside the uploads tree, so WordPress's own
+     * wp_delete_attachment() cleanup (which only removes files inside the
+     * uploads directory) leaves the file behind.
+     *
+     * @since 2.8.1
+     * @access public
+     *
+     * @param int $post_id The attachment being deleted.
+     * @return void
+     */
+    public function delete_archive_file( $post_id ) {
+        if ( ! metadata_exists( 'post', $post_id, '_woo_export_type' ) ) {
+            return;
+        }
+
+        $file = get_attached_file( $post_id );
+        if ( ! $file ) {
+            return;
+        }
+
+        // Resolve before comparing: a stored "../" path must never reach the delete sink.
+        $real_path = realpath( $file );
+        $real_dir  = realpath( Exporter::EXPORT_DIR );
+        if ( false === $real_path || false === $real_dir || 0 !== strpos( $real_path, $real_dir . DIRECTORY_SEPARATOR ) ) {
+            return;
+        }
+
+        wp_delete_file( $real_path );
     }
 
     /**
@@ -295,34 +355,85 @@ class WP_Admin extends Abstract_Class {
             wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['nonce'] ) ), 'woo_ce_download_file' ) &&
             'download_file' === sanitize_text_field( wp_unslash( $_GET['action'] ) )
         ) {
-            $export_type = isset( $_GET['type'] ) ? sanitize_text_field( wp_unslash( $_GET['type'] ) ) : '';
-
-            // Premium export types are Deluxe-only; refuse to serve their files.
-            if ( function_exists( 'woo_ce_is_premium_export_type' ) && woo_ce_is_premium_export_type( $export_type ) ) {
-                wp_send_json_error(
-                    array(
-                        'message' => sprintf(
-                            /* translators: %s: export type label (e.g. Customers). */
-                            __( 'Exporting %s is available in Store Exporter Deluxe.', 'woocommerce-exporter' ),
-                            woo_ce_get_export_type_label( $export_type )
-                        ),
-                        'premium' => true,
-                        'upsell'  => woo_ce_get_export_type_upsell_url( $export_type ),
-                    )
+            // A nonce is a per-user CSRF token, not an authorisation check, so gate
+            // the download on the same capability that guards the exporter admin UI
+            // before any file is read, streamed, or deleted.
+            if ( ! current_user_can( apply_filters( 'woo_ce_admin_user_capability', 'view_woocommerce_reports' ) ) ) {
+                wp_die(
+                    esc_html__( 'You do not have permission to download this file.', 'woocommerce-exporter' ),
+                    esc_html__( 'Forbidden', 'woocommerce-exporter' ),
+                    array( 'response' => 403 )
                 );
             }
 
+            $export_type = isset( $_GET['type'] ) ? sanitize_text_field( wp_unslash( $_GET['type'] ) ) : '';
+
+            // Clear the in-progress flag up front: the premium gates below exit early,
+            // and leaving it set would block every subsequent export for 30 minutes.
             $instance = new Exporter();
+            $instance->clear_export_transient();
+
+            // Debugging mode gates this second entry point too: a file_url
+            // issued before debug was enabled, or a replayed download nonce,
+            // must not still serve a real export file.
+            if ( defined( 'WOO_CE_DEBUG' ) && WOO_CE_DEBUG ) {
+                woo_ce_send_debug_mode_error(
+                    $export_type,
+                    isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : ''
+                );
+            }
+
+            // Premium export types are Deluxe-only; refuse to serve their files.
+            if ( woo_ce_is_premium_export_type( $export_type ) ) {
+                woo_ce_send_premium_type_error( $export_type );
+            }
+
+            $requested_format = isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '';
+
+            // Premium export formats are Deluxe-only; refuse to serve their files.
+            if ( woo_ce_is_premium_export_format( $requested_format ) ) {
+                woo_ce_send_premium_format_error( $requested_format );
+            }
+
             $instance->set_exporter( $export_type );
 
             if ( empty( $_GET['filename'] ) ) {
                 wp_send_json_error( array( 'message' => __( 'Filename not specified.', 'woocommerce-exporter' ) ) );
             }
 
+            // Reduce the requested filename to its basename so a path-traversal
+            // payload (e.g. "../../../wp-config.php") cannot carry directory
+            // components out of the export directory.
+            $filename = basename( sanitize_text_field( wp_unslash( $_GET['filename'] ) ) );
+
             $instance->set_export_settings( get_transient( WOO_CE_PREFIX . '_export_settings' ) );
-            $instance->set_export_format( isset( $_GET['format'] ) ? sanitize_text_field( wp_unslash( $_GET['format'] ) ) : '' );
+            // Coerce through the same allowlist that guards Abstract_Exporter's
+            // writers, so an empty or unknown format can never reach them and
+            // silently emit a 0-byte file.
+            $instance->set_export_format( woo_ce_resolve_export_format( $requested_format ) );
             $instance->set_export_encoding( isset( $_GET['encoding'] ) ? sanitize_text_field( wp_unslash( $_GET['encoding'] ) ) : '' );
-            $instance->set_filename( sanitize_text_field( wp_unslash( $_GET['filename'] ) ) );
+            $instance->set_filename( $filename );
+
+            // Defence in depth: confirm the resolved path genuinely lives inside the
+            // export directory before it reaches the read/stream/unlink sinks in
+            // export(). realpath() returns false for a path that does not resolve
+            // (including a traversal that escaped or a missing file), which is
+            // rejected too.
+            $real_path = realpath( $instance->get_file_path( $filename ) );
+            $real_dir  = realpath( Exporter::EXPORT_DIR );
+
+            if (
+                false === $real_path ||
+                false === $real_dir ||
+                0 !== strpos( $real_path, $real_dir . DIRECTORY_SEPARATOR )
+            ) {
+                wp_die(
+                    esc_html__( 'The requested file could not be found.', 'woocommerce-exporter' ),
+                    esc_html__( 'Not Found', 'woocommerce-exporter' ),
+                    array( 'response' => 404 )
+                );
+            }
+
             $instance->clear_export_transient();
             $instance->export();
         }
@@ -356,6 +467,9 @@ class WP_Admin extends Abstract_Class {
 
         // Register AJAX action handler for quick export.
         add_action( 'wp_ajax_woo_ce_quick_export', array( $this, 'ajax_quick_export' ) );
+
+        // Remove an archived export's file when its attachment is deleted.
+        add_action( 'delete_attachment', array( $this, 'delete_archive_file' ) );
 
         // Add batch size option.
         add_action( 'woo_ce_export_options', array( $this, 'batch_size_option' ), 99 );

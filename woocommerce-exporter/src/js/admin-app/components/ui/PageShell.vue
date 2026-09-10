@@ -12,7 +12,7 @@ defineProps({
 </script>
 
 <template>
-  <component :is="tag" class="wse-main">
+  <component :is="tag" class="wse-main" data-testid="app-main">
     <slot />
   </component>
 </template>

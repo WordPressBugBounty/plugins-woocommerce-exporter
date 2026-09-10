@@ -2146,6 +2146,38 @@ function woo_ce_get_orders( $export_type = 'order', $args = array(), $export = a
             $order_ids = array_intersect( $order_ids, $post_ids );
         }
 
+        // Filter Orders by Coupons set-wise against woocommerce_order_items.order_item_name — the
+        // same match Order::get_object_ids() uses, so both engines agree by construction and no
+        // per-order coupon read is needed. Reading the order items rather than WooCommerce
+        // Analytics' wc_order_coupon_lookup keeps the filter working when that derived table is
+        // stale, and lets a coupon deleted after use still be filtered on.
+        // This filter holds coupon codes (see Export_Helper::resolve_coupon_codes()); an enabled
+        // filter that resolved to nothing carries Export_Helper::NO_MATCH, so the IN clause matches
+        // no order rather than widening the export to every order.
+        //
+        // The order_id bound keeps the query on the order_id index: woocommerce_order_items has no
+        // index on order_item_type or order_item_name.
+        if ( ! empty( $coupon ) && ! empty( $order_ids ) ) {
+            global $wpdb;
+
+            $coupon_codes = array_values( (array) $coupon );
+            $placeholders = implode( ',', array_fill( 0, count( $coupon_codes ), '%s' ) );
+            $order_bounds = implode( ',', array_fill( 0, count( $order_ids ), '%s' ) );
+            // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $matching_ids = $wpdb->get_col(
+                $wpdb->prepare(
+                    "SELECT DISTINCT oi.order_id
+                        FROM {$wpdb->prefix}woocommerce_order_items AS oi
+                        WHERE oi.order_item_type = 'coupon'
+                        AND oi.order_item_name IN ({$placeholders})
+                        AND oi.order_id IN ({$order_bounds})",
+                    array_merge( $coupon_codes, array_values( $order_ids ) )
+                )
+            );
+            // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $order_ids = array_intersect( $order_ids, array_map( 'absint', $matching_ids ) );
+        }
+
         foreach ( $order_ids as $order_id ) {
 
             $order = wc_get_order( $order_id );
@@ -2185,20 +2217,7 @@ function woo_ce_get_orders( $export_type = 'order', $args = array(), $export = a
                 }
             }
 
-            // Filter Orders by Coupons.
-            // $order_coupon_code = woo_ce_get_order_assoc_coupon( $order_id, $order );
-            $order_coupon_code = null;
-            if ( ! empty( $coupon ) ) {
-                $coupon_ids = array();
-                $size       = count( $export->args['order_coupon'] );
-                for ( $i = 0; $i < $size; $i++ ) {
-                    $coupon_ids[] = strtolower( get_the_title( $coupon[ $i ] ) );
-                }
-                if ( ! in_array( strtolower( $order_coupon_code ), $coupon_ids, true ) ) {
-                    unset( $order );
-                    continue;
-                }
-            }
+            // Orders are already filtered by Coupons set-wise above (order_coupon holds codes).
 
             // Filter Orders on Product Category.
             if ( ! empty( $product_category ) ) {

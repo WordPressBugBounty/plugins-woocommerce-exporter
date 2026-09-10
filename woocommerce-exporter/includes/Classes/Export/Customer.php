@@ -185,6 +185,7 @@ class Customer extends Abstract_Class {
 
         if ( ! empty( $order_objects ) ) {
             foreach ( $order_objects as $i => $order ) {
+                $data       = array();
                 $order_data = $order->get_data();
 
                 // Customer Data.
@@ -209,6 +210,18 @@ class Customer extends Abstract_Class {
                         );
 
                         $data['completed_orders'] = count( $customer_completed_orders_query->get_orders() );
+                    }
+                } else {
+                    // Guest order: no registered customer, so emit blank/zero identity and spend fields.
+                    $data['user_id']   = '';
+                    $data['user_name'] = '';
+                    $data['user_role'] = '';
+
+                    $data['total_spent']  = Formatting::format_price( 0 );
+                    $data['total_orders'] = 0;
+
+                    if ( isset( $fields['completed_orders'] ) ) {
+                        $data['completed_orders'] = 0;
                     }
                 }
 

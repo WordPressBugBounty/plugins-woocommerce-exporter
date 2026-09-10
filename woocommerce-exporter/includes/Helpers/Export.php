@@ -21,6 +21,23 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 class Export {
 
     /**
+     * Sentinel returned by resolve_coupon_codes() when an *enabled* Coupon filter resolves to
+     * nothing.
+     *
+     * A negative value is used deliberately: the residue a *disabled* Coupon filter leaves behind
+     * is built with absint() (see woo_ce_extend_order_dataset_args() in order-extend.php), which can
+     * never produce a negative number, so "enabled but unresolvable" is always distinguishable from
+     * "disabled". Matched set-wise against woocommerce_order_items.order_item_name, `IN ('-1')`
+     * matches no order, so the export correctly returns nothing rather than silently widening to
+     * every order.
+     *
+     * @since 2.8.1
+     *
+     * @var int
+     */
+    const NO_MATCH = -1;
+
+    /**
      * Get export type count.
      *
      * @since 2.7.3
@@ -202,6 +219,16 @@ class Export {
                 $from = new WC_DateTime( 'first day of january last year', $timezone );
                 $to   = new WC_DateTime( 'last day of december last year', $timezone );
                 break;
+            case 'specific':
+                // The SPA quick export date picker submits an ISO (Y-m-d) custom range.
+                if ( ! empty( $args['from'] ) && ! empty( $args['to'] ) ) {
+                    list( $from_str, $to_str ) = self::parse_iso_range( $args['from'], $args['to'], 'Y-m-d 00:00:00', 'Y-m-d 23:59:59' );
+                    if ( false !== $from_str && false !== $to_str ) {
+                        $from = new WC_DateTime( $from_str, $timezone );
+                        $to   = new WC_DateTime( $to_str, $timezone );
+                    }
+                }
+                break;
             case 'manual':
                 if ( isset( $args['from'] ) && isset( $args['to'] ) ) {
                     $from = new WC_DateTime( $args['from'], $timezone );
@@ -223,8 +250,8 @@ class Export {
         if ( null !== $from && null !== $to ) {
 
             // Always start from the beginning of the day.
-            // For manual and variable filters, we don't want to set the time to 00:00:00.
-            if ( ! in_array( $filter, array( 'manual', 'variable' ), true ) ) {
+            // For manual, variable and specific filters, we don't want to set the time to 00:00:00.
+            if ( ! in_array( $filter, array( 'manual', 'variable', 'specific' ), true ) ) {
                 $from->setTime( 0, 0, 0 );
                 $to->setTime( 0, 0, 0 );
             }
@@ -245,6 +272,61 @@ class Export {
         }
 
         return array( $from, $to );
+    }
+
+    /**
+     * Parse an ISO (Y-m-d) date range and reformat each bound.
+     *
+     * The SPA quick export date picker submits custom ranges as ISO (Y-m-d)
+     * strings. Legacy per-type readers reformat those bounds to the shape their
+     * downstream query expects (full-day 'Y-m-d H:i:s' strings, or a bare
+     * 'd-m-Y' string that is later exploded into a date_query). This centralises
+     * the parse-and-reformat used by every 'specific' date-filter branch.
+     *
+     * Each bound is parsed strictly, so a bound that is not already canonical ISO
+     * yields false rather than a plausible-looking wrong date. See
+     * `parse_iso_date()`.
+     *
+     * @since 2.8.1
+     *
+     * @param string $from        ISO (Y-m-d) lower bound. Empty or non-canonical ISO yields false.
+     * @param string $to          ISO (Y-m-d) upper bound. Empty or non-canonical ISO yields false.
+     * @param string $from_format Output format for the lower bound.
+     * @param string $to_format   Output format for the upper bound. Defaults to $from_format.
+     * @return array Two-element list: array( string|false $from, string|false $to ).
+     */
+    public static function parse_iso_range( $from, $to, $from_format, $to_format = null ) {
+        $to_format = $to_format ?? $from_format;
+        $from_obj  = self::parse_iso_date( $from );
+        $to_obj    = self::parse_iso_date( $to );
+        return array(
+            ( null !== $from_obj ) ? $from_obj->format( $from_format ) : false,
+            ( null !== $to_obj ) ? $to_obj->format( $to_format ) : false,
+        );
+    }
+
+    /**
+     * Strictly parse a canonical ISO (Y-m-d) date bound.
+     *
+     * `DateTime` is lenient about out-of-range components — it overflows them, so
+     * '2024-13-45' silently becomes 14 Feb 2025 and the export would be filtered
+     * by a date the caller never asked for. The round-trip comparison rejects
+     * anything that is not already canonical ISO.
+     *
+     * @since 2.8.1
+     *
+     * @param string $iso_date Date bound in ISO `Y-m-d`.
+     * @return \DateTime|null Parsed date, or null when the input is not canonical ISO.
+     */
+    private static function parse_iso_date( $iso_date ) {
+        $iso_date = (string) $iso_date;
+        $parsed   = \DateTime::createFromFormat( '!Y-m-d', $iso_date );
+
+        if ( ! $parsed instanceof \DateTime || $parsed->format( 'Y-m-d' ) !== $iso_date ) {
+            return null;
+        }
+
+        return $parsed;
     }
 
     /**
@@ -478,6 +560,80 @@ class Export {
      */
     public static function get_unique_filename( $path, $filename ) {
         return wp_unique_filename( $path, sanitize_file_name( $filename ) );
+    }
+
+    /**
+     * Resolve a raw Coupon filter value to the list of coupon codes it names.
+     *
+     * Whether a digits-only value is read as an ID first or as a code first is a property of the
+     * *control*, not of the value, so callers state it via $prefer rather than have it guessed:
+     *
+     * - Code controls (Quick Export SPA text input) submit a coupon *code*, and a code can be a
+     *   bare number ("25", "2024"). These are used as codes directly, or a coupon coded "25" would
+     *   be shadowed by coupon post 25.
+     * - ID controls (classic multiselect, the free-text field above the coupon-list threshold that
+     *   submits a comma-separated ID list) submit coupon *IDs*, which are converted to the coupon's
+     *   current code. A digits-only value naming a real shop_coupon post is read as that ID first,
+     *   so it cannot be shadowed by a coupon whose *code* is the same number.
+     *
+     * Comma-separated values are split first, so the ID-list free-text fields resolve each entry
+     * independently. Every resulting code passes through wc_format_coupon_code(), which applies
+     * wc_sanitize_coupon_code() and wc_strtolower() — the same normalisation WooCommerce applies
+     * before storing order_item_name, so a code typed in any case still matches.
+     *
+     * @since 2.8.1
+     *
+     * @param mixed  $raw               Raw filter value: a coupon code, a coupon ID, a comma-separated
+     *                                  list of either, or an array of any of those.
+     * @param bool   $no_match_sentinel Whether to return array( self::NO_MATCH ) when nothing resolves.
+     *                                  Callers acting on an *enabled* filter want this: NO_MATCH is a
+     *                                  value no recorded coupon code will equal, so the export
+     *                                  correctly matches nothing, whereas an empty array reads as
+     *                                  "no filter" and would silently widen the export to every
+     *                                  order. Default false.
+     * @param string $prefer            'code' to read digits as a code first, 'id' to read them as an
+     *                                  ID first, or 'auto' (default) to infer from the value's shape:
+     *                                  an array came from an ID control, a bare string from a code
+     *                                  control.
+     * @return array List of coupon codes. Empty when nothing resolved and $no_match_sentinel
+     *               is false.
+     */
+    public static function resolve_coupon_codes( $raw, $no_match_sentinel = false, $prefer = 'auto' ) {
+        $prefer_id    = ( 'id' === $prefer ) || ( 'auto' === $prefer && is_array( $raw ) );
+        $coupon_codes = array();
+
+        foreach ( (array) $raw as $entry ) {
+            // The ID-list free-text fields submit a comma-separated string; resolve each entry on
+            // its own. A coupon code containing a comma is possible but vanishingly rare, and the
+            // ID-list shape is by far the more likely input here.
+            foreach ( array_filter( array_map( 'trim', explode( ',', (string) $entry ) ), 'strlen' ) as $coupon ) {
+                $coupon = sanitize_text_field( $coupon );
+
+                // ID control: a digits-only value is a coupon ID, so it contributes that coupon's
+                // current code rather than a same-numbered code. An ID naming no coupon post — a
+                // coupon deleted since the filter was saved — yields no code and is dropped, not
+                // reinterpreted as a code, which could otherwise match an unrelated coupon that
+                // happens to be coded with the same digits. Such orders can still be exported by
+                // filtering on the code itself.
+                if ( $prefer_id && ctype_digit( $coupon ) ) {
+                    if ( 'shop_coupon' === get_post_type( absint( $coupon ) ) ) {
+                        $coupon_codes[] = wc_get_coupon_code_by_id( absint( $coupon ) );
+                    }
+                    continue;
+                }
+
+                $coupon_codes[] = $coupon;
+            }
+        }
+
+        $coupon_codes = array_map( 'wc_format_coupon_code', $coupon_codes );
+        $coupon_codes = array_values( array_unique( array_filter( $coupon_codes, 'strlen' ) ) );
+
+        if ( empty( $coupon_codes ) && $no_match_sentinel ) {
+            return array( self::NO_MATCH );
+        }
+
+        return $coupon_codes;
     }
 
     /**

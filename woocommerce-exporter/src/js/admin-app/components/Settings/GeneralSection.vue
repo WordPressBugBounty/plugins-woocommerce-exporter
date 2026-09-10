@@ -506,6 +506,52 @@ function insertVariable (token) {
         </div>
       </div>
 
+      <!-- Escape formulas in CSV/TSV -->
+      <div class="py-5 px-6">
+        <div class="flex items-center gap-4">
+          <div class="flex items-start gap-3 flex-1 min-w-0">
+            <span class="flex-shrink-0 w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+              <SlidersHorizontal :size="15" :stroke-width="1.75" color="#6C7BFF" />
+            </span>
+            <div class="min-w-0">
+              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Escape Formulas in CSV/TSV</p>
+              <p class="text-[12px] text-gray-400 m-0">
+                Prefix any CSV or TSV cell a spreadsheet would execute with a single quote. Negative amounts and
+                international phone numbers are left untouched.
+              </p>
+              <p v-if="settings.excel_formulas" class="text-[12px] text-gray-400 italic m-0 mt-1">
+                Only applies while Excel Formulas is set to Stripped.
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2.5 flex-shrink-0">
+            <button
+              type="button"
+              class="relative w-11 h-6 rounded-full border-none p-0 flex-shrink-0 transition-colors"
+              :class="[
+                settings.csv_formula_escaping && !settings.excel_formulas ? 'bg-indigo-600' : 'bg-gray-300',
+                settings.excel_formulas ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+              ]"
+              aria-label="Escape formulas in CSV/TSV"
+              :aria-pressed="settings.csv_formula_escaping"
+              :disabled="settings.excel_formulas"
+              @click="settings.csv_formula_escaping = !settings.csv_formula_escaping"
+            >
+              <span
+                class="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-transform"
+                :class="settings.csv_formula_escaping && 'translate-x-[20px]'"
+              />
+            </button>
+            <span
+              class="text-[13px] font-semibold"
+              :class="settings.csv_formula_escaping && !settings.excel_formulas ? 'text-indigo-600' : 'text-gray-400'"
+            >
+              {{ settings.csv_formula_escaping ? 'Escaped' : 'Raw' }}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <!-- Script Timeout -->
       <div class="py-5 px-6">
         <div class="flex items-start gap-3 mb-4">

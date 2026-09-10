@@ -40,7 +40,7 @@ const audit = [
 </script>
 
 <template>
-  <div class="wse-upsell-preview p-6 bg-gray-50 text-gray-900 w-full">
+  <div class="wse-upsell-preview p-6 bg-gray-50 text-gray-900 w-full" data-testid="upsell-preview">
 
     <!-- Faux toolbar shared by the list-style screens -->
     <div class="flex flex-wrap items-center gap-3 mb-4">
