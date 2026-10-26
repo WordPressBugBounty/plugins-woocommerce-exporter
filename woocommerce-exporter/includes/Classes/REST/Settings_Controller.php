@@ -10,6 +10,7 @@ namespace VisserLabs\WSE\Classes\REST;
 
 use VisserLabs\WSE\Abstracts\Abstract_Class;
 use VisserLabs\WSE\Abstracts\Abstract_Exporter;
+use VisserLabs\WSE\Helpers\Export as Export_Helper;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -136,8 +137,18 @@ class Settings_Controller extends Abstract_Class {
                 // General.
                 'filename'               => woo_ce_get_option( 'filename', 'export-{type}-{store}-{date}-{time}' ),
                 'encoding'               => woo_ce_get_option( 'encoding', 'UTF-8' ),
-                'date_format'            => woo_ce_get_option( 'date_format', 'F j, Y' ),
-                'field_escape'           => woo_ce_get_option( 'field_escape', 'all' ),
+                // Read through the helper so the screen shows the format the export engine
+                // will actually use. It previously defaulted to 'F j, Y' — a different
+                // default from every other reader — so an unconfigured store displayed one
+                // format, exported in another, and saving the screen silently adopted the
+                // displayed one.
+                'date_format'            => Export_Helper::get_date_format(),
+                // Resolved through the engine's own reader rather than read raw, for the
+                // same reason header_formatting is: the screen and the engine must agree
+                // about what a stored value means. It also reconciles the two option keys
+                // this control was split across, so a store whose only saves went to the
+                // SPA's orphan `field_escape` sees the mode its exports will actually use.
+                'escape_formatting'      => Abstract_Exporter::stored_escape_formatting(),
                 'header_formatting'      => $header_formatting,
                 'bom'                    => (bool) woo_ce_get_option( 'bom', 1 ),
                 'flush_cache'            => woo_ce_get_option( 'flush_cache', 'flush' ),
@@ -212,8 +223,24 @@ class Settings_Controller extends Abstract_Class {
             // General.
             'filename'               => 'sanitize_text_field',
             'encoding'               => 'sanitize_text_field',
-            'date_format'            => 'sanitize_text_field',
-            'field_escape'           => 'sanitize_text_field',
+            // Canonicalised rather than merely sanitized: sanitize_text_field() alone
+            // accepts '', which the Settings screen submits the moment the Custom radio is
+            // clicked before anything is typed. A stored '' is not caught by get_option()'s
+            // default (that only applies to an ABSENT row), so it reached the date filters
+            // and collapsed every "Fixed date" range to "now". An unusable value now
+            // resolves to the format already stored, leaving the store on a working setting.
+            'date_format'            => static function ( $value ) {
+                return Export_Helper::coerce_date_format( $value, Export_Helper::get_date_format() );
+            },
+            // Canonicalise through the engine's normaliser rather than a second
+            // allowlist: sanitize_text_field() alone would let a bad client store
+            // `nonw`, which no radio matches and which the writer would then fail
+            // safe on for every export until the next save through the UI. This
+            // also fixes where the value lands — the SPA saved to `field_escape`,
+            // a key no read path has ever consulted.
+            'escape_formatting'      => static function ( $value ) {
+                return Abstract_Exporter::normalize_escape_formatting( $value );
+            },
             // Canonicalise through the engine's own normaliser rather than a second
             // hardcoded allowlist: `sanitize_text_field()` alone would let a bad
             // client store `yes` or `includ`, which no radio matches. Routing the

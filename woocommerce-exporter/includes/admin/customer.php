@@ -125,9 +125,7 @@ function woo_ce_customers_custom_fields_link() {
  */
 function woo_ce_customers_custom_fields() {
     $custom_customers = woo_ce_get_option( 'custom_customers', '' );
-    if ( $custom_customers ) {
-        $custom_customers = implode( "\n", $custom_customers );
-    }
+    $custom_customers = woo_ce_format_custom_meta_lines( $custom_customers );
 
     $troubleshooting_url = woo_ce_get_kb_url();
 

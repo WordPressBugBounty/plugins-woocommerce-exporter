@@ -37,9 +37,7 @@ function woo_ce_brand_sorting() {
  */
 function woo_ce_brands_custom_fields() {
     $custom_terms = woo_ce_get_option( 'custom_brands', '' );
-    if ( $custom_terms ) {
-        $custom_terms = implode( "\n", $custom_terms );
-    }
+    $custom_terms = woo_ce_format_custom_meta_lines( $custom_terms );
 
     $troubleshooting_url = woo_ce_get_kb_url();
 

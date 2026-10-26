@@ -4623,7 +4623,7 @@ function woo_ce_modules_list( $module_status = false ) {
 		'description' => __( 'Perfect WooCommerce Brands allows you to show product brands in your WooCommerce based store.', 'woocommerce-exporter' ),
 		'url'         => 'https://wordpress.org/plugins/perfect-woocommerce-brands/',
 		'slug'        => 'perfect-woocommerce-brands',
-		'class'       => '\Perfect_Woocommerce_Brands\Perfect_Woocommerce_Brands',
+		'class'       => array( 'QuadLayers\PWB\Plugin', '\Perfect_Woocommerce_Brands\Perfect_Woocommerce_Brands' ),
 	);
 	$modules[] = array(
 		'name'        => 'wc_piva',
@@ -5013,6 +5013,25 @@ function woo_ce_is_export_template( $post_ID = false ) {
 		}
 	}
 	return $output;
+}
+
+/**
+ * Format a stored custom meta list for a textarea, one item per line.
+ *
+ * The option can hold an array, a string, or an empty value. An empty array
+ * is falsy, so the old `if ( $value ) implode()` pattern passed it unchanged
+ * to esc_textarea(), which stops the page with a TypeError.
+ *
+ * @since 2.8.2
+ *
+ * @param mixed $value Stored option value.
+ * @return string One item per line, or an empty string.
+ */
+function woo_ce_format_custom_meta_lines( $value ) {
+    if ( is_array( $value ) ) {
+        return implode( "\n", array_map( 'strval', array_filter( $value, 'is_scalar' ) ) );
+    }
+    return is_scalar( $value ) ? (string) $value : '';
 }
 
 /**

@@ -38,6 +38,187 @@ class Export {
     const NO_MATCH = -1;
 
     /**
+     * Date-filter preset meta key => the from/to bound keys stored alongside it.
+     *
+     * One source of truth for the trio every date filter is stored as. The
+     * classic Settings save path walks it to restate every stored bound when the
+     * store changes its export date format.
+     *
+     * @since 2.8.2
+     * @var array<string, string[]>
+     */
+    const DATE_FILTER_BOUNDS = array(
+        '_filter_order_date'          => array( '_filter_order_dates_from', '_filter_order_dates_to' ),
+        '_filter_order_modified_date' => array( '_filter_order_modified_dates_from', '_filter_order_modified_dates_to' ),
+        '_filter_subscription_date'   => array( '_filter_subscription_dates_from', '_filter_subscription_dates_to' ),
+        '_filter_user_date'           => array( '_filter_user_dates_from', '_filter_user_dates_to' ),
+        '_filter_user_modified_date'  => array( '_filter_user_modified_dates_from', '_filter_user_modified_dates_to' ),
+    );
+
+    /**
+     * The date format every reader falls back to when the stored option is unusable.
+     *
+     * @since 2.8.2
+     * @var string
+     */
+    const DEFAULT_DATE_FORMAT = 'd/m/Y';
+
+    /**
+     * Values the export date format can hold that are not a deliberate choice.
+     *
+     * `custom` is the Custom radio's own submitted value, not a format — the classic
+     * Settings screen stored it verbatim whenever that radio was selected with an empty
+     * text box. `1` and `0` are historical corruption; `date('1')` renders the literal
+     * "1" for every date, so neither can be a format anyone picked. Compared after
+     * trimming, and alongside the empty/non-string checks in `is_valid_date_format()`.
+     *
+     * @since 2.8.2
+     * @var string[]
+     */
+    const CORRUPT_DATE_FORMATS = array( '1', '0', 'custom' );
+
+    /**
+     * Whether a string can be used as an export date format.
+     *
+     * Deliberately a narrow denylist rather than a "does this look like a date format"
+     * heuristic, because the two fail in opposite directions and only one of them is
+     * recoverable:
+     *
+     *  - Accepting a corrupt value costs little. `get_date_filter()` parses every
+     *    bound and drops the filter when it cannot read one, so an unrecognised corrupt
+     *    format no longer collapses a range to "now" — it just exports unfiltered, the
+     *    same as any other unreadable bound.
+     *  - Rejecting a VALID value is destructive. The activation repair rewrites the
+     *    stored option, while each stored bound stays in the old format. Get this
+     *    wrong and the admin's format choice is gone and their filters silently stop
+     *    filtering.
+     *
+     * So this only rejects what no admin could have chosen. A store may legitimately
+     * hold `U` (Unix timestamps for an ERP feed), `m/Y` or `F Y` (monthly reporting),
+     * `o-W-N` (ISO week dates), `H:i:s`, or a bare `Y` — all of which a token-counting
+     * heuristic would throw away. The Custom box at `includes/settings.php` accepts free
+     * text, so every one of them is reachable.
+     *
+     * @since 2.8.2
+     *
+     * @param mixed $format Candidate date format string.
+     * @return bool False only for a value no admin could have chosen.
+     */
+    public static function is_valid_date_format( $format ) {
+        if ( ! is_string( $format ) ) {
+            return false;
+        }
+
+        $format = trim( $format );
+
+        return '' !== $format && ! in_array( $format, self::CORRUPT_DATE_FORMATS, true );
+    }
+
+    /**
+     * Coerce a stored date format to a usable one.
+     *
+     * `get_option()`'s default applies only when the option ROW IS ABSENT. A row
+     * holding `''` is returned verbatim, which is how a corrupted setting reaches
+     * the date filters at all. Every reader of the export date format routes its
+     * stored value through here so that one rule covers all of them, each keeping
+     * its own historical default.
+     *
+     * @since 2.8.2
+     *
+     * @param mixed  $stored         Value read from the option.
+     * @param string $default_format Format to fall back to when $stored is unusable.
+     * @return string A usable PHP date format string.
+     */
+    public static function coerce_date_format( $stored, $default_format = self::DEFAULT_DATE_FORMAT ) {
+        return self::is_valid_date_format( $stored ) ? trim( $stored ) : $default_format;
+    }
+
+    /**
+     * Return the configured export date format, defaulting to d/m/Y.
+     *
+     * Single source of truth for the option key and its default value. Coerces an
+     * unusable stored value to the default: the option can hold `''`, `'1'` or
+     * `'custom'` (see the Settings write paths), and `get_option()`'s default does
+     * not cover a row that exists but is empty. Returning such a value made the
+     * manual date filter resolve to "now" instead of the selected range.
+     *
+     * @since 2.8.2
+     *
+     * @return string PHP date format string.
+     */
+    public static function get_date_format() {
+        return self::coerce_date_format( get_option( WOO_CE_PREFIX . '_date_format', self::DEFAULT_DATE_FORMAT ) );
+    }
+
+    /**
+     * Parse a stored date-filter bound, tolerating either the store's export
+     * date format or ISO `Y-m-d`.
+     *
+     * Stored bounds are written in the store's export date format (default
+     * `d/m/Y`), so that is tried first. The ISO fallback covers bounds the SPA
+     * date picker emits as `Y-m-d`, and stays correct when the store format IS
+     * `Y-m-d` because the first attempt then succeeds. Only an unambiguous
+     * failure of the store format reaches the fallback, so no value can be
+     * parsed under two different interpretations.
+     *
+     * @since 2.8.2
+     *
+     * @param string $value        Stored date bound.
+     * @param string $input_format Expected format, from `get_date_format()`.
+     * @return \DateTime|null Parsed date, or null when neither format applies.
+     */
+    public static function parse_filter_date( $value, $input_format ) {
+        foreach ( array( $input_format, 'Y-m-d' ) as $format ) {
+            $parsed = \DateTime::createFromFormat( $format, $value );
+            $errors = \DateTime::getLastErrors();
+            // getLastErrors() returns false on PHP 8.2+ when there are no issues.
+            $has_error = false === $parsed
+                || ( $errors && ( $errors['warning_count'] || $errors['error_count'] ) );
+            if ( ! $has_error ) {
+                return $parsed;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Restate a stored date bound from one export date format in another.
+     *
+     * Used when the store changes its export date format: every scheduled export's
+     * stored `_filter_*_dates_*` bound is written in the OLD format and has to be
+     * rewritten in the new one.
+     *
+     * The bound is parsed with `parse_filter_date()` — the store format, then ISO —
+     * rather than with `strtotime()`. `strtotime()` cannot read the plugin's own
+     * default `d/m/Y` (it reads '/' as the American m/d/Y and returns false for any
+     * day past the 12th), and `gmdate( $format, false )` then stamps 1 Jan 1970 over
+     * the admin's real date. An unreadable bound returns '' so the caller can leave
+     * the stored value alone rather than overwrite it with a guess.
+     *
+     * @since 2.8.2
+     *
+     * @param string $value       Stored date bound.
+     * @param string $from_format Format the bound is currently written in.
+     * @param string $to_format   Format to rewrite it in.
+     * @return string Reformatted bound, or '' when the value cannot be read.
+     */
+    public static function reformat_date_bound( $value, $from_format, $to_format ) {
+        $value = sanitize_text_field( (string) $value );
+
+        if ( '' === $value ) {
+            return '';
+        }
+
+        if ( ! self::is_valid_date_format( $from_format ) || ! self::is_valid_date_format( $to_format ) ) {
+            return '';
+        }
+
+        $parsed = self::parse_filter_date( $value, $from_format );
+
+        return $parsed instanceof \DateTime ? $parsed->format( $to_format ) : '';
+    }
+
+    /**
      * Get export type count.
      *
      * @since 2.7.3
@@ -172,10 +353,16 @@ class Export {
      * @param string $filter      The filter to apply.
      * @param array  $args        The arguments.
      *                            Example: array( 'from' => '2021-01-01', 'to' => '2021-01-31', 'variable' => '1', 'variable_length' => 'month' ).
+     *                            Optional key 'date_format' (e.g. 'd/m/Y') is used to parse 'from'/'to' when the filter is
+     *                            'manual'; it defaults to the store's export date format.
      * @param string $returns     The return type. Default 'string'. Accepts 'string' or 'timestamp'.
      * @param string $format      The date format. Default 'Y-m-d H:i:s'.
      *
      * @since 2.7.3
+     * @since 2.8.2 The 'manual' filter always parses its bounds with the store's export date format,
+     *              then ISO. It previously passed them straight to `new WC_DateTime( $bound )`, which
+     *              read an empty bound as "now" and threw on a d/m/Y one. The upper bound now covers
+     *              the whole selected day (23:59:59).
      * @return array
      */
     public static function get_date_filter( $filter, $args = array(), $returns = 'string', $format = 'Y-m-d H:i:s' ) {
@@ -231,8 +418,42 @@ class Export {
                 break;
             case 'manual':
                 if ( isset( $args['from'] ) && isset( $args['to'] ) ) {
-                    $from = new WC_DateTime( $args['from'], $timezone );
-                    $to   = new WC_DateTime( $args['to'], $timezone );
+                    /*
+                     * Both bounds ALWAYS go through the parser. This used to be
+                     * `new WC_DateTime( $args['from'], $timezone )`. PHP's DateTime
+                     * constructor reads an empty string as "now", so a bound that
+                     * had already failed to parse upstream collapsed the whole range
+                     * to a razor-thin window around the current timestamp — the
+                     * export then returned only today's orders instead of the
+                     * selected range. A non-empty d/m/Y bound threw, because that
+                     * constructor reads '/' as the American m/d/Y and any day past
+                     * the 12th is an invalid month.
+                     *
+                     * An unreadable bound now drops the filter and says so in the
+                     * log, rather than inventing a range nobody asked for.
+                     */
+                    $supplied     = $args['date_format'] ?? null;
+                    $input_format = self::is_valid_date_format( $supplied ) ? $supplied : self::get_date_format();
+
+                    $from_parsed = self::parse_filter_date( $args['from'], $input_format );
+                    $to_parsed   = self::parse_filter_date( $args['to'], $input_format );
+                    if ( null === $from_parsed || null === $to_parsed ) {
+                        if ( function_exists( 'wc_get_logger' ) ) {
+                            wc_get_logger()->warning(
+                                sprintf(
+                                    /* translators: 1: from date string 2: to date string 3: expected date format */
+                                    __( 'Export date filter: could not parse "%1$s" or "%2$s" using format "%3$s" or "Y-m-d". Export will run without a date filter.', 'woocommerce-exporter' ),
+                                    $args['from'],
+                                    $args['to'],
+                                    $input_format
+                                ),
+                                array( 'source' => 'woocommerce-exporter' )
+                            );
+                        }
+                        break;
+                    }
+                    $from = new WC_DateTime( $from_parsed->format( 'Y-m-d' ) . ' 00:00:00', $timezone );
+                    $to   = new WC_DateTime( $to_parsed->format( 'Y-m-d' ) . ' 23:59:59', $timezone );
                 }
                 break;
             case 'variable':
@@ -637,13 +858,34 @@ class Export {
     }
 
     /**
+     * Maximum IDs that one ID filter input may expand to, over all its entries.
+     *
+     * An ID range comes straight from user input with no upper bound of its own
+     * (e.g. '1-99999999'), so without a cap range() would allocate an array with
+     * tens of millions of elements and exhaust memory. The budget is shared by
+     * every entry, so many ranges in one string cannot get past it either.
+     * 100,000 IDs cost a few MB and cover any real ID range.
+     *
+     * @since 2.8.2
+     */
+    const MAX_ID_COUNT = 100000;
+
+    /**
      * Sanitize multiple ID input.
      *
      * This function will sanitize a string of comma separated IDs and ranges into an array of integers.
      * For example, '1,2,3,4,5-10' will be converted to [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
      * This function will also remove any duplicates and empty values.
      *
+     * An entry is rejected (not truncated) when it is not numeric (e.g. 'abc'
+     * or '100-') or when it would push the total over self::MAX_ID_COUNT. A
+     * rejected entry never widens the result: when the input asked for IDs but
+     * no valid ID survives, the function returns array( 0 ),
+     * which matches no record, never an empty array, which callers read as
+     * "no ID filter" and so export every record.
+     *
      * @since 2.7.3
+     * @since 2.8.2 Bounds the total IDs and fails closed on a rejected entry.
      *
      * @param string $input The input.
      * @return array
@@ -652,19 +894,47 @@ class Export {
         // Explode the input by comma.
         $input = array_map( 'trim', explode( ',', sanitize_text_field( $input ) ) );
 
-        // Check if the input contains a range.
-        foreach ( $input as $key => $value ) {
+        // Collect into a separate list. Merging ranges into $input while the
+        // loop walks it re-indexes the array, so a later single ID overwrote
+        // the first ID of an earlier range ("3-5,9" lost 3).
+        $ids       = array();
+        $requested = false;
+        foreach ( $input as $value ) {
+            if ( '' === $value ) {
+                continue;
+            }
+
+            $requested = true;
+
             if ( strpos( $value, '-' ) !== false ) {
                 $range = array_map( 'trim', explode( '-', $value ) );
-                $input = array_merge( $input, range( $range[0], $range[1] ) );
-                unset( $input[ $key ] );
-            } else {
-                $input[ $key ] = absint( $value );
+
+                if ( ! isset( $range[0], $range[1] ) || ! is_numeric( $range[0] ) || ! is_numeric( $range[1] ) ) {
+                    continue;
+                }
+
+                $range_start = min( absint( $range[0] ), absint( $range[1] ) );
+                $range_end   = max( absint( $range[0] ), absint( $range[1] ) );
+
+                if ( count( $ids ) + ( $range_end - $range_start ) + 1 > self::MAX_ID_COUNT ) {
+                    continue;
+                }
+
+                $ids = array_merge( $ids, range( $range_start, $range_end ) );
+            } elseif ( is_numeric( $value ) && count( $ids ) < self::MAX_ID_COUNT ) {
+                $ids[] = absint( $value );
             }
+            // Any other entry, such as 'abc', is rejected, not read as ID 0.
         }
 
         // Remove duplicates and empty values.
-        return array_unique( array_filter( $input ) );
+        $ids = array_values( array_unique( array_filter( $ids ) ) );
+
+        // SECURITY: the user asked for a subset. Return a sentinel that matches
+        // nothing, not an empty list that the caller reads as "every record".
+        // Input made only of empty entries asks for nothing, so it keeps the
+        // "no filter" meaning.
+        return ( empty( $ids ) && $requested ) ? array( 0 ) : $ids;
     }
 
     /***************************************************************************

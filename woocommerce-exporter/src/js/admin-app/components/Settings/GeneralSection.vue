@@ -381,26 +381,26 @@ function insertVariable (token) {
           </span>
           <div>
             <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Field Escape Formatting</p>
-            <p class="text-[12px] text-gray-400 m-0">This option affects how data is written in CSV exports.</p>
+            <p class="text-[12px] text-gray-400 m-0">Controls how cells are quoted in CSV and TSV exports. Excel formats (XLS, XLSX) are not affected.</p>
           </div>
         </div>
         <div class="flex flex-col gap-2 pl-11">
-          <BaseRadio v-model="settings.field_escape" value="all" align="start">
+          <BaseRadio v-model="settings.escape_formatting" value="all" align="start">
             <span>
               <strong class="block text-[13px] text-gray-900">Escape all cells</strong>
-              <span class="text-[12px] text-gray-400">Write field data exactly as it is saved in the database.</span>
+              <span class="text-[12px] text-gray-400">Wrap every cell in quotes, so field data is written exactly as it is saved in the database.</span>
             </span>
           </BaseRadio>
-          <BaseRadio v-model="settings.field_escape" value="excel" align="start">
+          <BaseRadio v-model="settings.escape_formatting" value="excel" align="start">
             <span>
               <strong class="block text-[13px] text-gray-900">Escape cells as Excel would</strong>
-              <span class="text-[12px] text-gray-400">Caution: may affect phone numbers and postcodes with leading zeroes.</span>
+              <span class="text-[12px] text-gray-400">Quote a cell only where a delimiter, quote or line break makes it necessary.</span>
             </span>
           </BaseRadio>
-          <BaseRadio v-model="settings.field_escape" value="none" align="start">
+          <BaseRadio v-model="settings.escape_formatting" value="none" align="start">
             <span>
               <strong class="block text-[13px] text-gray-900">Do not escape any cells</strong>
-              <span class="text-[12px] text-gray-400">Caution: may affect text fields containing the delimiter character.</span>
+              <span class="text-[12px] text-gray-400">Quote nothing, except a field containing a line break. Caution: this corrupts any field containing the delimiter character.</span>
             </span>
           </BaseRadio>
         </div>

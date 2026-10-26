@@ -1,4 +1,5 @@
 import { createRouter, createMemoryHistory } from 'vue-router'
+import { KB_HUB_URL, KB_ARTICLES } from './docLinks'
 
 // All routes use dynamic import() so each view is its own chunk.
 // With ES module output (vite.config.js format: 'es') Rollup emits separate
@@ -14,16 +15,18 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 // Audit Log are Deluxe-only. They keep their nav slot but resolve to a shared
 // UpsellView instead of the feature — no store, no controller, no data. The
 // route's meta.upsell object is the sole source of that view's copy and CTA.
-const HELP_KB = 'https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/'
+// meta.helpUrl — per-route Help button link. URLs live in docLinks.js; Settings and
+// the upsell routes use the KB hub.
 
 const routes = [
-  { path: '/', name: 'overview', meta: { helpUrl: HELP_KB }, component: () => import('./views/OverviewView.vue') },
-  { path: '/export-items', name: 'export-items', meta: { helpUrl: HELP_KB }, component: () => import('./views/ExportItemsView.vue') },
-  { path: '/quick-export', name: 'quick-export', meta: { helpUrl: HELP_KB }, component: () => import('./views/QuickExportView.vue') },
-  { path: '/settings', name: 'settings', meta: { helpUrl: HELP_KB }, component: () => import('./views/SettingsView.vue') },
-  { path: '/tools', name: 'tools', meta: { helpUrl: HELP_KB }, component: () => import('./views/ToolsView.vue') },
-  { path: '/custom-meta-fields', name: 'custom-meta-fields', meta: { helpUrl: HELP_KB }, component: () => import('./views/CustomMetaFieldsView.vue') },
-  { path: '/custom-meta-fields/:type', name: 'custom-meta-fields-form', meta: { helpUrl: HELP_KB }, component: () => import('./views/CustomMetaFieldsFormView.vue') },
+  { path: '/', name: 'overview', meta: { helpUrl: KB_ARTICLES.gettingStarted }, component: () => import('./views/OverviewView.vue') },
+  { path: '/export-items', name: 'export-items', meta: { helpUrl: KB_ARTICLES.exportFields }, component: () => import('./views/ExportItemsView.vue') },
+  { path: '/quick-export', name: 'quick-export', meta: { helpUrl: KB_ARTICLES.quickExport }, component: () => import('./views/QuickExportView.vue') },
+  { path: '/settings', name: 'settings', meta: { helpUrl: KB_HUB_URL }, component: () => import('./views/SettingsView.vue') },
+  { path: '/tools', name: 'tools', meta: { helpUrl: KB_ARTICLES.supportedPlugins }, component: () => import('./views/ToolsView.vue') },
+  { path: '/custom-meta-fields', name: 'custom-meta-fields', meta: { helpUrl: KB_ARTICLES.customMetaFields }, component: () => import('./views/CustomMetaFieldsView.vue') },
+  { path: '/custom-meta-fields/:type', name: 'custom-meta-fields-form', meta: { helpUrl: KB_ARTICLES.customMetaFields }, component: () => import('./views/CustomMetaFieldsFormView.vue') },
+  { path: '/ai-mcp', name: 'ai-mcp', meta: { helpUrl: KB_ARTICLES.aiMcp }, component: () => import('./views/AiMcpView.vue') },
 
   // Deluxe-only — rendered as upsells.
   {
@@ -31,7 +34,7 @@ const routes = [
     name: 'scheduled-exports',
     component: () => import('./views/UpsellView.vue'),
     meta: {
-      helpUrl: HELP_KB,
+      helpUrl: KB_HUB_URL,
       upsell: {
         feature: 'Scheduled Exports',
         lead: 'Set exports to run automatically and deliver themselves — no manual runs, no timeouts.',
@@ -50,7 +53,7 @@ const routes = [
     name: 'export-templates',
     component: () => import('./views/UpsellView.vue'),
     meta: {
-      helpUrl: HELP_KB,
+      helpUrl: KB_HUB_URL,
       upsell: {
         feature: 'Export Templates',
         lead: 'Stop rebuilding the same field list every time. Save it as a template and pick it in one click.',
@@ -69,7 +72,7 @@ const routes = [
     name: 'archives',
     component: () => import('./views/UpsellView.vue'),
     meta: {
-      helpUrl: HELP_KB,
+      helpUrl: KB_HUB_URL,
       upsell: {
         feature: 'Archives',
         lead: 'Deluxe keeps a history of every export file so you can re-download past runs anytime.',
@@ -87,7 +90,7 @@ const routes = [
     name: 'audit-log',
     component: () => import('./views/UpsellView.vue'),
     meta: {
-      helpUrl: HELP_KB,
+      helpUrl: KB_HUB_URL,
       upsell: {
         feature: 'Audit Log',
         lead: 'Track every export and download for compliance and team accountability.',
@@ -141,6 +144,9 @@ router.afterEach((to) => {
       break
     case 'audit-log':
       tab = 'audit_log'
+      break
+    case 'ai-mcp':
+      tab = 'ai_mcp'
       break
     default:
       tab = 'overview'

@@ -24,7 +24,7 @@ if( is_admin() ) {
 
 						global $wpdb;
 
-						$count += $wpdb->get_var( 'SELECT COUNT(id) FROM `' . $wpdb->prefix . 'pv_commission`' );
+						$count += $wpdb->get_var( 'SELECT COUNT(id) FROM `' . $wpdb->prefix . "pv_commission` WHERE status != 'reversed'" );
 					}
 					restore_current_blog();
 				}
@@ -41,7 +41,7 @@ if( is_admin() ) {
 
 					global $wpdb;
 
-					$count = $wpdb->get_var( 'SELECT COUNT(id) FROM `' . $wpdb->prefix . 'pv_commission`' );
+					$count = $wpdb->get_var( 'SELECT COUNT(id) FROM `' . $wpdb->prefix . "pv_commission` WHERE status != 'reversed'" );
 				}
 				set_transient( WOO_CE_PREFIX . '_commission_count', $count, HOUR_IN_SECONDS );
 			} else {

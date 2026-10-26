@@ -1,6 +1,6 @@
 <script setup>
 import { storeToRefs } from 'pinia'
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-vue-next'
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-vue-next'
 import { useToastsStore } from '../stores/toasts'
 
 const store = useToastsStore()
@@ -9,12 +9,14 @@ const { toasts } = storeToRefs(store)
 const ICONS = {
   success: CheckCircle2,
   error: AlertCircle,
+  warning: AlertTriangle,
   info: Info
 }
 
 const TYPE_CLASSES = {
   success: { border: 'border-l-[3px] border-l-emerald-500', icon: 'text-emerald-500' },
   error: { border: 'border-l-[3px] border-l-red-600', icon: 'text-red-600' },
+  warning: { border: 'border-l-[3px] border-l-amber-500', icon: 'text-amber-600' },
   info: { border: 'border-l-[3px] border-l-indigo-600', icon: 'text-indigo-600' },
 }
 </script>

@@ -54,8 +54,9 @@ export const useSettingsStore = defineStore('settings', () => {
     // General
     filename: 'export-{type}-{store}-{date}-{time}',
     encoding: 'UTF-8',
-    date_format: 'F j, Y',
-    field_escape: 'all',
+    // Matches the server default, Export_Helper::DEFAULT_DATE_FORMAT.
+    date_format: 'd/m/Y',
+    escape_formatting: 'all',
     header_formatting: 'include',
     bom: true,
     flush_cache: 'flush',

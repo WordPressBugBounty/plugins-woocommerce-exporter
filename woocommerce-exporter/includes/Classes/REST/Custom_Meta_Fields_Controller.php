@@ -331,7 +331,8 @@ class Custom_Meta_Fields_Controller extends Abstract_Class {
      * PUT wse/v1/custom-meta-fields/{type} — save field definitions.
      *
      * Each definition in the payload is validated against the known definitions
-     * for the type. Unknown definition names are ignored.
+     * for the type. Unknown definition names are ignored and listed in `ignored`.
+     * An availability flag missing from the payload keeps its saved value.
      *
      * @param \WP_REST_Request $request The REST request.
      *
@@ -353,12 +354,14 @@ class Custom_Meta_Fields_Controller extends Abstract_Class {
         $valid_def_names = array_column( $this->get_type_field_definitions( $type ), 'name' );
         $raw_definitions = (array) $request->get_param( 'field_definitions' );
         $saved           = array();
+        $ignored         = array();
 
         foreach ( $raw_definitions as $raw_def ) {
             $raw_def  = (array) $raw_def;
             $def_name = sanitize_key( $raw_def['name'] ?? '' );
 
             if ( ! in_array( $def_name, $valid_def_names, true ) ) {
+                $ignored[] = $def_name;
                 continue;
             }
 
@@ -369,11 +372,12 @@ class Custom_Meta_Fields_Controller extends Abstract_Class {
             );
 
             $raw_avail    = (array) ( $raw_def['availability'] ?? array() );
-            $availability = array(
-                'quick_export'     => ! empty( $raw_avail['quick_export'] ),
-                'scheduled_export' => ! empty( $raw_avail['scheduled_export'] ),
-                'export_template'  => ! empty( $raw_avail['export_template'] ),
-            );
+            $current      = (array) $this->resolve_availability( $def_name );
+            $availability = array();
+
+            foreach ( array( 'quick_export', 'scheduled_export', 'export_template' ) as $flag ) {
+                $availability[ $flag ] = array_key_exists( $flag, $raw_avail ) ? ! empty( $raw_avail[ $flag ] ) : ! empty( $current[ $flag ] );
+            }
 
             woo_ce_update_option( $def_name, $keys );
             woo_ce_update_option( $def_name . '_availability', $availability );
@@ -391,6 +395,7 @@ class Custom_Meta_Fields_Controller extends Abstract_Class {
                 'type'              => $type,
                 'label'             => $supported_types[ $type ]['label'],
                 'field_definitions' => $saved,
+                'ignored'           => $ignored,
             )
         );
     }

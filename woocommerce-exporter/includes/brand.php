@@ -10,15 +10,13 @@ if( is_admin() ) {
 				return $count;
 
 			$count = 0;
-			$term_taxonomy = apply_filters( 'woo_ce_brand_term_taxonomy', 'product_brand' );
 
 			// Override for WordPress MultiSite
 			if( apply_filters( 'woo_ce_export_dataset_multisite', true ) && woo_ce_is_network_admin() ) {
 				$sites = get_sites();
 				foreach( $sites as $site ) {
 					switch_to_blog( $site->blog_id );
-					if( taxonomy_exists( $term_taxonomy ) )
-						$count += wp_count_terms( $term_taxonomy );
+					$count += woo_ce_get_brand_term_count();
 					restore_current_blog();
 				}
 				return $count;
@@ -27,8 +25,7 @@ if( is_admin() ) {
 			// Check if the existing Transient exists
 			$cached = get_transient( WOO_CE_PREFIX . '_brand_count' );
 			if( $cached == false ) {
-				if( taxonomy_exists( $term_taxonomy ) )
-					$count = wp_count_terms( $term_taxonomy );
+				$count = woo_ce_get_brand_term_count();
 				set_transient( WOO_CE_PREFIX . '_brand_count', $count, HOUR_IN_SECONDS );
 			} else {
 				$count = $cached;
@@ -116,6 +113,11 @@ function woo_ce_get_brand_fields( $format = 'full', $post_ID = 0 ) {
 	$fields[] = array(
 		'name' => 'count',
 		'label' => __( 'Count', 'woocommerce-exporter' )
+	);
+	$fields[] = array(
+		'name'  => 'taxonomy',
+		'label' => __( 'Brand Taxonomy', 'woocommerce-exporter' ),
+		'hover' => __( 'Tells apart brands of the same name from different Brands plugins', 'woocommerce-exporter' ),
 	);
 
 /*
@@ -276,24 +278,33 @@ function woo_ce_get_product_brands( $args = array(), $export = null ) {
 		global $export;
 	}
 
-	$term_taxonomy = apply_filters( 'woo_ce_brand_term_taxonomy', 'product_brand' );
+	// Export the terms of every brand taxonomy on the store, not just the one
+	// woo_ce_brand_term_taxonomy resolves to, so brands from a second Brands
+	// plugin are no longer dropped from the export. See #416.
+	$term_taxonomies = woo_ce_get_brand_term_taxonomies();
+	if ( empty( $term_taxonomies ) ) {
+		return;
+	}
+
 	$defaults = array(
-		'orderby' => 'name',
-		'order' => 'ASC',
-		'hide_empty' => 0
+		'taxonomy'   => $term_taxonomies,
+		'orderby'    => 'name',
+		'order'      => 'ASC',
+		'hide_empty' => 0,
 	);
 	$args = wp_parse_args( $args, $defaults );
 
 	// Allow other developers to bake in their own filters
 	$args = apply_filters( 'woo_ce_get_product_brands_args', $args );
 
-	$brands = get_terms( $term_taxonomy, $args );
+	$brands = get_terms( $args );
 	if( !empty( $brands ) && is_wp_error( $brands ) == false ) {
 		foreach( $brands as $key => $brand ) {
 			$brands[$key]->description = woo_ce_format_description_excerpt( $brand->description );
 			$brands[$key]->parent_name = '';
 			if( $brands[$key]->parent_id = $brand->parent ) {
-				if( $parent_brand = get_term( $brands[$key]->parent_id, $term_taxonomy ) ) {
+				$parent_brand = get_term( $brands[ $key ]->parent_id, $brand->taxonomy );
+				if ( $parent_brand && ! is_wp_error( $parent_brand ) ) {
 					$brands[$key]->parent_name = $parent_brand->name;
 				}
 				unset( $parent_brand );
@@ -443,37 +454,65 @@ function woo_ce_detect_product_brands() {
  * A store can run more than one Brands implementation at a time - WooCommerce
  * core Brands ( 9.4+ ) registers product_brand, Perfect WooCommerce Brands
  * registers pwb-brand, YITH registers yith_product_brand - but the
- * woo_ce_brand_term_taxonomy filter can only ever name one of them. Filter
- * dropdowns that offer brands to pick from use this list instead so brands from
- * the other taxonomies are not hidden. The single-taxonomy filter is still
- * seeded in first so a store that repoints it at a custom taxonomy keeps working.
+ * woo_ce_brand_term_taxonomy filter can only ever name one of them. The Brand
+ * export dataset, the Brand record count and the filter dropdowns all read this
+ * list instead, so brands from the other taxonomies are neither dropped nor
+ * hidden. The single-taxonomy filter is still seeded in first so a store that
+ * repoints it at a custom taxonomy keeps working. See #416.
+ *
+ * The global "Brand" product attribute (pa_brand) is a product attribute, not a
+ * brand taxonomy. It is listed only for the filter paths, so its values never
+ * mix into the Brand export, the Brand count or the Product "Brand" column.
  *
  * @since 2.8.1
+ * @since 2.8.2 Added $include_attributes. pa_brand is listed only when it is true.
  *
+ * @param bool $include_attributes Optional. Whether to include the pa_brand attribute. Default false.
  * @return array List of brand taxonomy names that exist on this store.
  */
-function woo_ce_get_brand_term_taxonomies() {
+function woo_ce_get_brand_term_taxonomies( $include_attributes = false ) {
 
     $taxonomies = array(
         apply_filters( 'woo_ce_brand_term_taxonomy', 'product_brand' ),
         'product_brand',
         'pwb-brand',
-        'pa_brand',
         'yith_product_brand',
     );
 
-    $taxonomies = array_unique( (array) apply_filters( 'woo_ce_brand_term_taxonomies', $taxonomies ) );
+    if ( $include_attributes ) {
+        $taxonomies[] = 'pa_brand';
+    }
+
+    $taxonomies = array_unique( (array) apply_filters( 'woo_ce_brand_term_taxonomies', $taxonomies, $include_attributes ) );
 
     return array_values( array_filter( $taxonomies, 'taxonomy_exists' ) );
 }
 
 /**
+ * Return how many Product Brand terms the store holds across every brand taxonomy.
+ *
+ * Counted one taxonomy at a time because wp_count_terms() only takes an array of
+ * arguments from WordPress 5.6. See #416.
+ *
+ * @since 2.8.2
+ *
+ * @return int Total number of brand terms, 0 when the store has no brand taxonomy.
+ */
+function woo_ce_get_brand_term_count() {
+
+    $count = 0;
+    foreach ( woo_ce_get_brand_term_taxonomies() as $term_taxonomy ) {
+        $count += absint( wp_count_terms( $term_taxonomy ) );
+    }
+    return $count;
+}
+
+/**
  * Return Product Brand terms from every brand taxonomy on the store.
  *
- * Unlike woo_ce_get_product_brands(), which reads a single taxonomy because the
- * Brand export type exports one taxonomy's terms as its records, this returns
- * the union for use in filter dropdowns. Each term is given the parent_name
- * property that woo_ce_format_product_category_label() expects.
+ * Unlike woo_ce_get_product_brands(), which hydrates the terms for the Brand
+ * export rows, this one is for filter dropdowns: each term is given the
+ * parent_name property that woo_ce_format_product_category_label() expects.
  *
  * @since 2.8.1
  *
@@ -482,7 +521,7 @@ function woo_ce_get_brand_term_taxonomies() {
  */
 function woo_ce_get_brand_filter_terms( $args = array() ) {
 
-    $taxonomies = woo_ce_get_brand_term_taxonomies();
+    $taxonomies = woo_ce_get_brand_term_taxonomies( true );
     if ( empty( $taxonomies ) ) {
         return array();
     }

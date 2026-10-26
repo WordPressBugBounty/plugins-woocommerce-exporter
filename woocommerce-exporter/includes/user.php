@@ -181,7 +181,6 @@ function woo_ce_cron_user_dataset_args( $args, $post_id, $export_type = '', $is_
 		// Date registered
 		$user_filter_date = get_post_meta( $scheduled_export, '_filter_user_date', true );
 		if( $user_filter_date ) {
-			$export->args['user_dates_filter'] = $user_filter_date;
 			switch( $user_filter_date ) {
 
 				case 'manual':

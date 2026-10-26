@@ -46,6 +46,7 @@ function tabToRoute (tab) {
     tools: '/tools',
     custom_meta_fields: '/custom-meta-fields',
     audit_log: '/audit-log',
+    ai_mcp: '/ai-mcp',
   }
   const slash = tab.indexOf('/')
   if (slash === -1) return baseRoutes[tab] ?? '/'

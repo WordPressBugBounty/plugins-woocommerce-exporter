@@ -1114,17 +1114,11 @@ function woo_ce_orders_flag_notes() {
 function woo_ce_orders_custom_fields() {
 
     $custom_orders = woo_ce_get_option( 'custom_orders', '' );
-    if ( $custom_orders ) {
-        $custom_orders = implode( "\n", $custom_orders );
-    }
+    $custom_orders = woo_ce_format_custom_meta_lines( $custom_orders );
     $custom_order_items = woo_ce_get_option( 'custom_order_items', '' );
-    if ( $custom_order_items ) {
-        $custom_order_items = implode( "\n", $custom_order_items );
-    }
+    $custom_order_items = woo_ce_format_custom_meta_lines( $custom_order_items );
     $custom_order_products = woo_ce_get_option( 'custom_order_products', '' );
-    if ( $custom_order_products ) {
-        $custom_order_products = implode( "\n", $custom_order_products );
-    }
+    $custom_order_products = woo_ce_format_custom_meta_lines( $custom_order_products );
 
     $troubleshooting_url = woo_ce_get_kb_url();
 

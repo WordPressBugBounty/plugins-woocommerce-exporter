@@ -13,6 +13,7 @@ import GeneralSection from '../components/Settings/GeneralSection.vue'
 import FormatsSection from '../components/Settings/FormatsSection.vue'
 import AdvancedSection from '../components/Settings/AdvancedSection.vue'
 import PageActions from '../components/PageActions.vue'
+import { KB_HUB_URL } from '../docLinks'
 
 const sectionComponents = {
   general: GeneralSection,
@@ -263,7 +264,7 @@ const delimiterDisplay = computed(() => {
               </li>
             </ul>
             <a
-              href="https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/"
+              :href="KB_HUB_URL"
               target="_blank"
               rel="noopener noreferrer"
               class="text-[12px] text-indigo-600 no-underline hover:underline inline-flex items-center gap-1"

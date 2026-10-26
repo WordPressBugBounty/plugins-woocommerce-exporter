@@ -109,7 +109,11 @@ function startEdit (field) {
 }
 function commitEdit () {
   if (!editingName.value) return
-  emit('setLabel', editingName.value, editingDraft.value.trim() || editingName.value)
+  // Emit the cleared draft as an empty string rather than falling back to the
+  // field's slug. The consumer reads empty as "undo the rename"; the slug used
+  // to look harmless only because the export engine discarded every override,
+  // and now it would land in the exported header as e.g. `post_title`.
+  emit('setLabel', editingName.value, editingDraft.value.trim())
   editingName.value  = null
   editingDraft.value = ''
 }

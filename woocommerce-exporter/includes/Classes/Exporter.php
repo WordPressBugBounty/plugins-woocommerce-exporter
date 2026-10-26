@@ -199,7 +199,7 @@ class Exporter extends Abstract_Exporter {
             $batch    = get_transient( WOO_CE_PREFIX . '_export_batch' );
             $exported = get_transient( WOO_CE_PREFIX . '_total_exported' );
 
-            $this->set_export_type( $_REQUEST['type'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $this->set_export_type( isset( $_REQUEST['type'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['type'] ) ) : '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- ajax_quick_export() verifies the nonce.
             $this->set_export_settings( $export );
             $this->set_export_batch( $batch );
             $this->set_export_columns( $export->columns );
@@ -221,6 +221,11 @@ class Exporter extends Abstract_Exporter {
 
             // If last batch, generate download link. Otherwise, return next step.
             if ( $step >= count( $batch ) ) {
+                // The file is complete, so release the run lock now. The download
+                // handler reads only _export_settings and the URL, so an export the
+                // user never downloads no longer blocks the next one for 30 minutes.
+                delete_transient( WOO_CE_PREFIX . '_export_running' );
+
                 $query_args = apply_filters(
                     'woo_ce_download_file_query_args',
                     array(
@@ -272,15 +277,15 @@ class Exporter extends Abstract_Exporter {
      * @param object $export    The export settings.
      * @param array  $form_data The form data from front end export form.
      */
-	public function save_export_fields( $export, $form_data ) {
+    public function save_export_fields( $export, $form_data ) {
         if ( ! empty( $form_data['dataset'] ) ) {
             update_option( WOO_CE_PREFIX . '_last_export', $form_data['dataset'] );
         }
 
-		// Default fields.
+        // Default fields.
         $fields = $export->fields;
-		if ( false === $fields && ! is_array( $fields ) ) {
-			$fields = array();
+        if ( false === $fields && ! is_array( $fields ) ) {
+            $fields = array();
         }
         if ( ! empty( $fields ) ) {
             update_option( WOO_CE_PREFIX . "_{$this->export_type}_fields", array_map( 'sanitize_text_field', (array) $fields ) );
@@ -288,8 +293,8 @@ class Exporter extends Abstract_Exporter {
 
         // Default sorting.
         $sorting = $export->fields_order;
-		if ( false === $sorting && ! is_array( $sorting ) ) {
-			$sorting = array();
+        if ( false === $sorting && ! is_array( $sorting ) ) {
+            $sorting = array();
         }
         if ( ! empty( $sorting ) ) {
             update_option( WOO_CE_PREFIX . "_{$this->export_type}_sorting", array_map( 'absint', (array) $sorting ) );
@@ -339,7 +344,7 @@ class Exporter extends Abstract_Exporter {
          * @param array  $form_data The form data from front end export form.
          */
         do_action( 'wsed_save_export_fields', $export, $form_data );
-	}
+    }
 
     /**
      * Clear export transient.

@@ -193,7 +193,6 @@ function woo_ce_extend_brand_item( $brand ) {
 						$category->wpseo_twitter_description = ( isset( $meta[$term_id]['wpseo_twitter-description'] ) ? $meta[$term_id]['wpseo_twitter-description'] : '' );
 						$category->wpseo_twitter_image = ( isset( $meta[$term_id]['wpseo_twitter-image'] ) ? $meta[$term_id]['wpseo_twitter-image'] : '' );
 					}
-					unset( $term_id );
 				}
 			}
 		}

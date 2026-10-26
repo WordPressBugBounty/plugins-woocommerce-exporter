@@ -26,8 +26,7 @@ if( is_admin() ) {
 			return;
 
 		$custom_product_tabs = woo_ce_get_option( 'custom_product_tabs', '' );
-		if( !empty( $custom_product_tabs ) )
-			$custom_product_tabs = implode( "\n", $custom_product_tabs );
+		$custom_product_tabs = woo_ce_format_custom_meta_lines( $custom_product_tabs );
 
 		ob_start(); ?>
 <tr>
@@ -50,8 +49,7 @@ if( is_admin() ) {
 			return;
 
 		$custom_wootabs = woo_ce_get_option( 'custom_wootabs', '' );
-		if( !empty( $custom_wootabs ) )
-			$custom_wootabs = implode( "\n", $custom_wootabs );
+		$custom_wootabs = woo_ce_format_custom_meta_lines( $custom_wootabs );
 
 		ob_start(); ?>
 <tr>

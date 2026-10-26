@@ -86,9 +86,7 @@ function woo_ce_tag_sorting() {
 function woo_ce_tags_custom_fields() {
 
     $custom_terms = woo_ce_get_option( 'custom_tags', '' );
-    if ( $custom_terms ) {
-        $custom_terms = implode( "\n", $custom_terms );
-    }
+    $custom_terms = woo_ce_format_custom_meta_lines( $custom_terms );
 
     $troubleshooting_url = woo_ce_get_kb_url();
 

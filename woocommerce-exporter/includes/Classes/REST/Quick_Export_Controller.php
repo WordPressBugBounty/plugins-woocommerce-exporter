@@ -30,6 +30,14 @@ class Quick_Export_Controller extends Abstract_Class {
     const REST_BASE      = 'quick-export';
 
     /**
+     * Maximum number of choices rendered into a filter multiselect. Keeps the
+     * /filters payload bounded on a large catalog or term set.
+     *
+     * @since 2.8.2
+     */
+    const CHOICE_LIMIT = 200;
+
+    /**
      * Register hooks.
      *
      * @since 5.6.0
@@ -799,6 +807,11 @@ class Quick_Export_Controller extends Abstract_Class {
                     'label' => __( 'Shipping Class', 'woocommerce-exporter' ),
                     'group' => 'Product Filters',
                 ),
+                array(
+                    'key'   => 'product_filter_sku_include',
+                    'label' => __( 'SKU', 'woocommerce-exporter' ),
+                    'group' => 'Product Filters',
+                ),
                 // Inventory Filters.
                 array(
                     'key'   => 'product_filter_stock_status_enabled',
@@ -1025,6 +1038,10 @@ class Quick_Export_Controller extends Abstract_Class {
         // meta keys are registered.
         $this->maybe_add_custom_meta_filter( $filters, $type );
 
+        // Plugin-gated filters. Each is only offered when its dependency is
+        // active AND its option list is non-empty, so no empty card renders.
+        $this->maybe_add_plugin_gated_filters( $filters, $type );
+
         foreach ( $filters as &$filter ) {
             $filter['enabled']     = false;
             $filter['description'] = $this->get_filter_description( $filter['key'] );
@@ -1040,6 +1057,47 @@ class Quick_Export_Controller extends Abstract_Class {
     }
 
     /**
+     * Append the filter cards whose backing feature requires a third-party plugin.
+     *
+     * Each is only appended when BOTH its dependency is detected AND its
+     * resulting option list is non-empty, so no empty card is ever rendered.
+     *
+     * @since 2.8.2
+     * @param array  $filters Filter definitions, appended by reference.
+     * @param string $type    Export type slug.
+     * @return void
+     */
+    private function maybe_add_plugin_gated_filters( &$filters, $type ) {
+        if ( 'product' !== $type || ! function_exists( 'woo_ce_detect_export_plugin' ) ) {
+            return;
+        }
+
+        // WPML / WooCommerce Multilingual.
+        if ( function_exists( 'woo_ce_detect_wpml' ) && woo_ce_detect_wpml() && woo_ce_detect_export_plugin( 'wpml_wc' ) ) {
+            $languages = function_exists( 'icl_get_languages' ) ? (array) icl_get_languages( 'skip_missing=N' ) : array();
+            if ( ! empty( $languages ) ) {
+                $filters[] = array(
+                    'key'   => 'product_filter_language_include',
+                    'label' => __( 'Language', 'woocommerce-exporter' ),
+                    'group' => 'Product Filters',
+                );
+            }
+        }
+
+        // Product Vendors / YITH WooCommerce Multi Vendor.
+        if ( woo_ce_detect_export_plugin( 'vendors' ) || woo_ce_detect_export_plugin( 'yith_vendor' ) ) {
+            $vendors = function_exists( 'woo_ce_get_product_vendors' ) ? (array) woo_ce_get_product_vendors( array( 'hide_empty' => 1 ), 'full' ) : array();
+            if ( ! empty( $vendors ) ) {
+                $filters[] = array(
+                    'key'   => 'product_filter_vendor_include',
+                    'label' => __( 'Product Vendor', 'woocommerce-exporter' ),
+                    'group' => 'Product Filters',
+                );
+            }
+        }
+    }
+
+    /**
      * Short helper text shown under each filter card title.
      *
      * @since 5.6.0
@@ -1047,7 +1105,7 @@ class Quick_Export_Controller extends Abstract_Class {
      * @return string
      */
     private function get_filter_description( $filter_key ) {
-        $map = array(
+        $map         = array(
             // Product filters.
             'product_filter_product_type_enabled'   => __( 'Include products based on their type.', 'woocommerce-exporter' ),
             'product_filter_product_status_enabled' => __( 'Include products based on their status.', 'woocommerce-exporter' ),
@@ -1062,6 +1120,9 @@ class Quick_Export_Controller extends Abstract_Class {
             'product_filter_stock_quantity_enabled' => __( 'Filter products by stock quantity threshold.', 'woocommerce-exporter' ),
             'product_filter_featured_enabled'       => __( 'Include featured or non-featured products only.', 'woocommerce-exporter' ),
             'product_filter_shipping_class_enabled' => __( 'Include products from specific shipping classes.', 'woocommerce-exporter' ),
+            'product_filter_sku_include'            => __( 'Include or exclude specific products, by SKU.', 'woocommerce-exporter' ),
+            'product_filter_language_include'       => __( 'Include products in a specific WPML language.', 'woocommerce-exporter' ),
+            'product_filter_vendor_include'         => __( 'Include products from specific vendors.', 'woocommerce-exporter' ),
             // Order filters.
             'orders_filters[status]'                => __( 'Include orders by status.', 'woocommerce-exporter' ),
             'orders_filters[payment_method]'        => __( 'Include orders by payment gateway.', 'woocommerce-exporter' ),
@@ -1099,7 +1160,21 @@ class Quick_Export_Controller extends Abstract_Class {
             'review_filter_status_enabled'          => __( 'Include reviews by approval status.', 'woocommerce-exporter' ),
             'review_dates_filter_enabled'           => __( 'Include reviews created within a date range.', 'woocommerce-exporter' ),
         );
-        return isset( $map[ $filter_key ] ) ? $map[ $filter_key ] : '';
+        $description = isset( $map[ $filter_key ] ) ? $map[ $filter_key ] : '';
+
+        // The product picker is capped at self::CHOICE_LIMIT and the SPA
+        // multiselect has no remote search, so products beyond the cap are
+        // unselectable. Say so on the card, so the user can tell a full list
+        // from a truncated one.
+        if ( 'product_filter_sku_include' === $filter_key && $this->product_catalog_exceeds_choice_limit() ) {
+            $description .= ' ' . sprintf(
+                /* translators: %s: number of products listed in the picker. */
+                __( 'Showing the first %s products, sorted by title.', 'woocommerce-exporter' ),
+                number_format_i18n( self::CHOICE_LIMIT )
+            );
+        }
+
+        return $description;
     }
 
     /**
@@ -1126,6 +1201,9 @@ class Quick_Export_Controller extends Abstract_Class {
             'product_filter_stock_quantity_enabled' => 'BarChart2',
             'product_filter_featured_enabled'       => 'Star',
             'product_filter_shipping_class_enabled' => 'Truck',
+            'product_filter_sku_include'            => 'Barcode',
+            'product_filter_language_include'       => 'Languages',
+            'product_filter_vendor_include'         => 'Store',
             // Order.
             'orders_filters[status]'                => 'CheckCircle2',
             'orders_filters[date]'                  => 'Calendar',
@@ -1385,14 +1463,9 @@ class Quick_Export_Controller extends Abstract_Class {
                 );
 
             case 'product_filter_brand_enabled':
-                $brand_taxonomies = array( 'product_brand', 'pwb-brand', 'pa_brand', 'yith_product_brand' );
-                $options          = array();
-                foreach ( $brand_taxonomies as $tax ) {
-                    $options = $this->get_term_choices( $tax );
-                    if ( ! empty( $options ) ) {
-                        break;
-                    }
-                }
+                // Offer the brands of every brand taxonomy. woo_ce_get_products()
+                // matches the term IDs against all of them. See #416.
+                $options = $this->get_brand_term_choices();
                 return array(
                     array(
                         'type'    => 'multiselect',
@@ -1489,6 +1562,76 @@ class Quick_Export_Controller extends Abstract_Class {
                         'type'    => 'multiselect',
                         'name'    => 'product_filter_shipping_class[]',
                         'label'   => __( 'Shipping classes', 'woocommerce-exporter' ),
+                        'options' => $options,
+                    ),
+                );
+
+            case 'product_filter_sku_include':
+                // Values are product IDs, consumed via post__in / post__not_in in
+                // woo_ce_get_products(). The label only shows the SKU. The exclude
+                // toggle flips the SAME selection between the two.
+                return array(
+                    array(
+                        'type'    => 'multiselect',
+                        'name'    => 'product_filter_sku[]',
+                        'label'   => __( 'Products', 'woocommerce-exporter' ),
+                        'options' => $this->get_product_choices(),
+                    ),
+                    array(
+                        'type'    => 'radio_group',
+                        'name'    => 'product_filter_sku_exclude',
+                        'label'   => __( 'Match type', 'woocommerce-exporter' ),
+                        'default' => '0',
+                        'options' => array(
+                            array(
+                                'value' => '0',
+                                'label' => __( 'Include selected products', 'woocommerce-exporter' ),
+                            ),
+                            array(
+                                'value' => '1',
+                                'label' => __( 'Exclude selected products', 'woocommerce-exporter' ),
+                            ),
+                        ),
+                    ),
+                );
+
+            case 'product_filter_language_include':
+                $options = array();
+                if ( function_exists( 'icl_get_languages' ) ) {
+                    foreach ( (array) icl_get_languages( 'skip_missing=N' ) as $code => $language ) {
+                        $label     = is_array( $language ) && isset( $language['native_name'] ) ? $language['native_name'] : (string) $code;
+                        $options[] = array(
+                            'value' => (string) $code,
+                            'label' => (string) $label,
+                        );
+                    }
+                }
+                return array(
+                    array(
+                        'type'    => 'multiselect',
+                        'name'    => 'product_filter_language[]',
+                        'label'   => __( 'Languages', 'woocommerce-exporter' ),
+                        'options' => $options,
+                    ),
+                );
+
+            case 'product_filter_vendor_include':
+                $options = array();
+                if ( function_exists( 'woo_ce_get_product_vendors' ) ) {
+                    foreach ( (array) woo_ce_get_product_vendors( array( 'hide_empty' => 1 ), 'full' ) as $vendor ) {
+                        if ( is_object( $vendor ) && isset( $vendor->term_id, $vendor->name ) ) {
+                            $options[] = array(
+                                'value' => (string) $vendor->term_id,
+                                'label' => (string) $vendor->name,
+                            );
+                        }
+                    }
+                }
+                return array(
+                    array(
+                        'type'    => 'multiselect',
+                        'name'    => 'product_filter_vendor[]',
+                        'label'   => __( 'Vendors', 'woocommerce-exporter' ),
                         'options' => $options,
                     ),
                 );
@@ -1994,7 +2137,7 @@ class Quick_Export_Controller extends Abstract_Class {
             array(
                 'taxonomy'   => $taxonomy,
                 'hide_empty' => false,
-                'number'     => 200,
+                'number'     => $this->get_term_choices_limit( $taxonomy ),
             )
         );
         if ( is_wp_error( $terms ) || empty( $terms ) ) {
@@ -2011,7 +2154,119 @@ class Quick_Export_Controller extends Abstract_Class {
     }
 
     /**
-     * Fetch brand choices for the Order Brand filter.
+     * Fetch a bounded list of products for the SKU multiselect.
+     *
+     * Values are product IDs; the label shows the SKU. Capped at
+     * self::CHOICE_LIMIT so the payload stays bounded on a large catalog.
+     *
+     * @since 2.8.2
+     * @return array<array{value:string,label:string}>
+     */
+    private function get_product_choices() {
+        $products = get_posts(
+            array(
+                'post_type'      => 'product',
+                'post_status'    => 'any',
+                // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Capped at self::CHOICE_LIMIT, same bound as get_term_choices(); keeps the filter payload bounded on a large catalog.
+                'posts_per_page' => self::CHOICE_LIMIT,
+                'orderby'        => 'title',
+                'order'          => 'ASC',
+            )
+        );
+        if ( empty( $products ) ) {
+            return array();
+        }
+        $options = array();
+        foreach ( $products as $product ) {
+            $sku       = get_post_meta( $product->ID, '_sku', true );
+            $label     = $sku ? sprintf( '%s (%s)', $product->post_title, $sku ) : $product->post_title;
+            $options[] = array(
+                'value' => (string) $product->ID,
+                'label' => (string) $label,
+            );
+        }
+        return $options;
+    }
+
+    /**
+     * Whether the catalog holds more products than the SKU picker can list.
+     *
+     * Asks only for the single product past the cap, so the check costs one
+     * bounded ID query rather than a full count.
+     *
+     * @since 2.8.2
+     * @return bool
+     */
+    private function product_catalog_exceeds_choice_limit() {
+        static $exceeds = null;
+        if ( null === $exceeds ) {
+            $overflow = get_posts(
+                array(
+                    'post_type'      => 'product',
+                    'post_status'    => 'any',
+                    'posts_per_page' => 1,
+                    'offset'         => self::CHOICE_LIMIT,
+                    'fields'         => 'ids',
+                    'orderby'        => 'title',
+                    'order'          => 'ASC',
+                    'no_found_rows'  => true,
+                )
+            );
+            $exceeds  = ! empty( $overflow );
+        }
+        return $exceeds;
+    }
+
+    /**
+     * Resolve how many terms a filter multiselect may list.
+     *
+     * The bound is filterable per taxonomy so a store with more terms than
+     * self::CHOICE_LIMIT can still pick every term.
+     *
+     * Return -1, or 0, to list every term. -1 is mapped onto 0 here because
+     * WP_Term_Query runs absint() over its number argument, so -1 would arrive
+     * as 1. A value that is not numeric, not a whole number, or outside PHP's
+     * integer range leaves the default in place.
+     *
+     * CAUTION: a very large term list enlarges the filters payload. Raise the
+     * bound to the number of terms the store holds rather than removing it.
+     *
+     * @since 2.8.2
+     * @param string $taxonomy Taxonomy slug the choices are read from.
+     * @return int Number of terms to request. 0 lists every term.
+     */
+    private function get_term_choices_limit( $taxonomy ) {
+        /**
+         * Filters the maximum number of terms listed in a Quick Export filter multiselect.
+         *
+         * Applies to the Category, Tag and Shipping class multiselects on the Product
+         * and Order filter cards. It does not reach the Brands multiselects: those are
+         * built by get_brand_term_choices(), which lists every brand already.
+         *
+         * @since 2.8.2
+         * @param int    $limit    Maximum number of terms to list. Return -1 or 0 for every term.
+         * @param string $taxonomy Taxonomy slug the choices are read from.
+         */
+        $limit = apply_filters( 'woo_ce_quick_export_term_choices_limit', self::CHOICE_LIMIT, $taxonomy );
+
+        if ( ! is_numeric( $limit ) ) {
+            return self::CHOICE_LIMIT;
+        }
+
+        $limit = (float) $limit;
+
+        // Only a whole number inside PHP's integer range can be honoured as a
+        // bound. A fractional value casts down - 0.4 becomes 0 - and 0 means
+        // every term, the opposite of the small bound the caller asked for.
+        if ( floor( $limit ) !== $limit || abs( $limit ) > PHP_INT_MAX ) {
+            return self::CHOICE_LIMIT;
+        }
+
+        return $limit < 1 ? 0 : (int) $limit;
+    }
+
+    /**
+     * Fetch brand choices for the Brand filters.
      *
      * Every brand taxonomy on the store is offered rather than just the first
      * one that happens to hold terms: the Order Brand filter matches the
@@ -2021,10 +2276,8 @@ class Quick_Export_Controller extends Abstract_Class {
      * same name stay apart - the registered labels cannot do that job, every
      * Brands plugin calls its singular label "Brand".
      *
-     * The Product Brand filter deliberately does not use this - woo_ce_get_products()
-     * ( includes/product.php ) builds a tax_query pinned to the single taxonomy
-     * woo_ce_brand_term_taxonomy resolves to, so offering IDs from the other
-     * taxonomies there would return no products.
+     * The Product Brand filter uses this too - woo_ce_get_products()
+     * ( includes/product.php ) matches the term IDs against every brand taxonomy.
      *
      * The term count is left uncapped, unlike get_term_choices() for Categories and
      * Tags: a brand this dropdown silently omitted could not be filtered on at all.
@@ -2365,7 +2618,7 @@ class Quick_Export_Controller extends Abstract_Class {
             'coupon'         => array( 'coupon_code', 'discount_type', 'coupon_amount', 'usage_limit', 'usage_count', 'expiry_date', 'product_ids', 'minimum_amount', 'individual_use' ),
             'category'       => array( 'term_id', 'name', 'slug', 'parent', 'description', 'count', 'image', 'menu_order', 'display_type', 'thumbnail_id' ),
             'tag'            => array( 'term_id', 'name', 'slug', 'description', 'count' ),
-            'brand'          => array( 'term_id', 'name', 'slug', 'description', 'count', 'thumbnail_id' ),
+            'brand'          => array( 'term_id', 'name', 'slug', 'description', 'count', 'thumbnail_id', 'taxonomy' ),
             'subscription'   => array( 'ID', 'order_status', 'order_date', 'order_total', 'billing_email', 'billing_first_name', 'billing_last_name', 'billing_period', 'billing_interval', 'next_payment' ),
             'review'         => array( 'comment_ID', 'comment_post_ID', 'comment_author', 'comment_author_email', 'comment_date', 'comment_content', 'comment_approved', 'rating' ),
             'attribute'      => array( 'attribute_id', 'attribute_label', 'attribute_name', 'attribute_type', 'attribute_orderby', 'attribute_public' ),

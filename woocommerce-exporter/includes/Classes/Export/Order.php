@@ -49,6 +49,15 @@ class Order extends Abstract_Class {
     const ORDER_ITEMS_FORMATTING_DEFAULT = 'unique';
 
     /**
+     * Default "Order item types" value, matching the default argument of
+     * woo_ce_get_order_items() (includes/order.php).
+     *
+     * @since 2.8.2
+     * @var string[]
+     */
+    const ORDER_ITEMS_TYPES_DEFAULT = array( 'line_item' );
+
+    /**
      * Billing e-mail matched when the Customer filter is enabled but the submitted
      * value is not a usable address. The domain is reserved by RFC 2606 so no order
      * can carry it, which keeps an enabled filter from widening the export.
@@ -1118,6 +1127,43 @@ class Order extends Abstract_Class {
     }
 
     /**
+     * Normalise an "Order item types" value to a guaranteed-valid, non-empty array.
+     *
+     * WC_Order::get_items() runs `array_filter( (array) $types )` on its argument, so it
+     * cannot tell "no filter" from "no types": boolean false, an empty array and an empty
+     * string all reduce to an empty type list and return ZERO order items. Every caller
+     * therefore needs a real type here, and self::ORDER_ITEMS_TYPES_DEFAULT is the plugin's
+     * own established default for this argument — woo_ce_get_order_items()
+     * (includes/order.php) uses it.
+     *
+     * A comma-separated string is split defensively, so a value of "line_item,fee" can
+     * never resolve to one type literally named "line_item,fee".
+     *
+     * Non-scalar members are dropped rather than cast: strval() on an array raises an
+     * "Array to string conversion" warning and yields the literal string "Array", which
+     * would reproduce the very zero-item symptom this method exists to prevent.
+     *
+     * Returning an array unconditionally also keeps the unguarded in_array() calls on this
+     * argument in includes/order.php from ever receiving a non-array value.
+     *
+     * @since 2.8.2
+     * @access private
+     *
+     * @param mixed $value The candidate "Order item types" value: an array, a comma-separated
+     *                     string, or any empty value.
+     * @return string[] A non-empty array of sanitised order item types.
+     */
+    private static function normalize_order_items_types( $value ) {
+        if ( is_string( $value ) ) {
+            $value = explode( ',', $value );
+        }
+
+        $types = array_filter( array_map( 'sanitize_text_field', array_filter( (array) $value, 'is_scalar' ) ) );
+
+        return ! empty( $types ) ? array_values( $types ) : self::ORDER_ITEMS_TYPES_DEFAULT;
+    }
+
+    /**
      * Determine whether a Quick Export order filter card is enabled.
      *
      * The Vue Quick Export SPA submits each filter's enable toggle as the string '1'
@@ -1389,7 +1435,10 @@ class Order extends Abstract_Class {
 
         // Order IDs (classic UI only; no SPA control).
         if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'id' ) ) {
-            $args['order_ids'] = ! empty( $settings['order_filter_id'] ) ? Export_Helper::sanitize_multiple_id_input( $settings['order_filter_id'] ) : false;
+            // A string check, not empty(): empty() reads '0' as "no filter", which
+            // exported every order.
+            $order_filter_id   = isset( $settings['order_filter_id'] ) && is_scalar( $settings['order_filter_id'] ) ? trim( (string) $settings['order_filter_id'] ) : '';
+            $args['order_ids'] = '' !== $order_filter_id ? Export_Helper::sanitize_multiple_id_input( $order_filter_id ) : false;
         }
 
         // Order Payment Gateway. SPA nests the toggle under orders_filters[payment_method];
@@ -1416,8 +1465,15 @@ class Order extends Abstract_Class {
         // false when the setting is absent or empty — an empty or invalid value produces the undefined
         // method name "_parse_order_item_data_<value>" downstream and fatals the export.
         // Normalising here means every downstream consumer sees a valid format too.
+        // "Order item types" is normalised the same way and for the same class of reason:
+        // WC_Order::get_items() runs `array_filter( (array) $types )` on its argument, so
+        // boolean false and an empty array both read as "no types at all" and return ZERO
+        // order items rather than an unfiltered list. That blanked every "Order Items"
+        // column on every Quick Export, the SPA having no control that submits this setting
+        // at all. Normalising here also guarantees every downstream consumer sees an array,
+        // including the unguarded in_array() calls in includes/order.php.
         $args['order_items']              = self::normalize_order_items_format( ! empty( $settings['order_items'] ) ? sanitize_text_field( $settings['order_items'] ) : '' );
-        $args['order_items_types']        = isset( $settings['order_items_types'] ) ? array_map( 'sanitize_text_field', (array) $settings['order_items_types'] ) : false;
+        $args['order_items_types']        = self::normalize_order_items_types( $settings['order_items_types'] ?? false );
         $args['order_flag_notes']         = isset( $settings['order_flag_notes'] ) ? absint( $settings['order_flag_notes'] ) : false;
         $args['max_order_items']          = isset( $settings['max_order_items'] ) ? absint( $settings['max_order_items'] ) : 10;
         $args['order_orderby']            = isset( $settings['order_orderby'] ) ? sanitize_text_field( $settings['order_orderby'] ) : 'DATE';
@@ -1430,6 +1486,14 @@ class Order extends Abstract_Class {
             // For the scheduled exports export settings are stored in the post meta.
             // We will refactor the scheduled exports in the future.
             $args = apply_filters( 'woo_ce_extend_cron_dataset_args', $args, $export->post_id, $export->type, true );
+
+            // Re-apply the "Order item types" default AFTER the scheduled-export args builder
+            // has run. woo_ce_cron_order_dataset_args() (includes/order.php) resolves the key
+            // from the export's `_filter_order_item_types` post meta and puts boolean false
+            // back when that meta is empty, then wins the wp_parse_args() merge — so without
+            // this a scheduled order export blanks its Order Items columns exactly as the
+            // Quick Export did.
+            $args['order_items_types'] = self::normalize_order_items_types( $args['order_items_types'] ?? false );
         }
 
         /**
@@ -1497,6 +1561,9 @@ class Order extends Abstract_Class {
                     'to'              => $export_args['order_dates_to'] ?? null,
                     'variable'        => $export_args['order_dates_filter_variable'] ?? null,
                     'variable_length' => $export_args['order_dates_filter_variable_length'] ?? null,
+                    // apply_quick_date_filter() already stored both bounds as ISO,
+                    // so they are not parsed again with the store format.
+                    'date_format'     => 'Y-m-d',
                 ),
             );
             $args['date_created']      = $date_from && $date_to ? "{$date_from}...{$date_to}" : '';
@@ -1511,6 +1578,9 @@ class Order extends Abstract_Class {
                     'to'              => $export_args['order_modified_dates_to'] ?? null,
                     'variable'        => $export_args['order_modified_dates_filter_variable'] ?? null,
                     'variable_length' => $export_args['order_modified_dates_filter_variable_length'] ?? null,
+                    // apply_quick_date_filter() already stored both bounds as ISO,
+                    // so they are not parsed again with the store format.
+                    'date_format'     => 'Y-m-d',
                 ),
             );
 

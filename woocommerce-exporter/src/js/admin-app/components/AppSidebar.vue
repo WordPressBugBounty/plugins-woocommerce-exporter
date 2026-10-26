@@ -13,7 +13,8 @@ import {
   PanelLeftOpen,
   LayoutGrid,
   Lock,
-  ScrollText
+  ScrollText,
+  Sparkles
 } from 'lucide-vue-next'
 import mascotUrl from '@/assets/wse-mascot.svg'
 
@@ -161,6 +162,20 @@ function isActive (...names) {
         <ScrollText :size="16" :stroke-width="1.75" />
         <span v-if="!collapsed" class="flex-1">Audit Log</span>
         <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
+      </a>
+
+      <a
+        class="wse-nav-link mb-[2px]"
+        :class="[collapsed ? 'justify-center px-[9px]' : 'px-3', isActive('ai-mcp') ? 'wse-nav-link--active' : 'wse-nav-link--default']"
+        href="#"
+        @click.prevent="router.push('/ai-mcp')"
+      >
+        <Sparkles :size="16" :stroke-width="1.75" />
+        <span v-if="!collapsed" class="flex-1">AI / MCP</span>
+        <span
+          v-if="!collapsed"
+          class="text-[10px] font-semibold uppercase px-[6px] py-[2px] rounded-full leading-none flex-shrink-0 bg-indigo-100 text-indigo-700"
+        >New</span>
       </a>
 
       <a

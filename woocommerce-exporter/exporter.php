@@ -3,7 +3,7 @@
  * Plugin Name:          Store Exporter for WooCommerce
  * Plugin URI:           https://visser.com.au/
  * Description:          Export Products, Orders, Users, Categories, Tags and other store details out of WooCommerce into Excel spreadsheets and other simple formatted files (e.g. CSV, TSV, Excel formats including XLS and XLSX, XML, etc.)
- * Version:              2.8.1
+ * Version:              2.8.2
  * Author:               Visser Labs
  * Author URI:           https://visser.com.au/
  * License:              GPL2
@@ -14,7 +14,7 @@
  * Tested up to: 7.1
  *
  * WC requires at least: 5.0
- * WC tested up to:      11.0
+ * WC tested up to:      11.2
  *
  * @package  VisserLabs\WSE
  * @author   Rymera Web Co <josh@rymera.com.au>
@@ -50,7 +50,7 @@ define( 'WOO_CE_PLUGIN_BASE_NAME', plugin_basename( WOO_CE_RELPATH ) );
 define( 'WOO_CE_PLUGINPATH', WP_PLUGIN_URL . '/' . basename( __DIR__ ) );
 define( 'WOO_CE_PLUGIN_FILE', __FILE__ );
 define( 'WOO_CE_PREFIX', 'woo_ce' );
-define( 'WOO_CE_VERSION', '2.8.1' );
+define( 'WOO_CE_VERSION', '2.8.2' );
 
 /**
  * Default batch size for exporting data.

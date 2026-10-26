@@ -400,8 +400,9 @@ function woo_ce_get_review_data( $review_id = 0, $args = array(), $fields = arra
 	$review->product_name = woo_ce_format_post_title( get_the_title( $review->comment_post_ID ) );
 	remove_filter( 'the_title', 'woo_ce_get_product_title' );
 	$review->comment_content = woo_ce_format_description_excerpt( $review->comment_content );
-	$review->comment_date    = woo_ce_format_date( $review->comment_date );
-	$review->comment_time    = woo_ce_format_date( $review->comment_date, 'H:i' );
+	$raw_comment_date        = $review->comment_date;
+	$review->comment_date    = woo_ce_format_date( $raw_comment_date );
+	$review->comment_time    = woo_ce_format_date( $raw_comment_date, 'H:i' );
 	$review->rating          = get_comment_meta( $review_id, 'rating', true );
 	$review->verified        = get_comment_meta( $review_id, 'verified', true );
 	$review->sku             = get_post_meta( $review->comment_post_ID, '_sku', true );

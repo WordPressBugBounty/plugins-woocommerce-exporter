@@ -96,6 +96,7 @@ class WP_Admin extends Abstract_Class {
             'tools'              => '/tools',
             'custom_meta_fields' => '/custom-meta-fields',
             'audit_log'          => '/audit-log',
+            'ai_mcp'             => '/ai-mcp',
         );
 
         // Resolve the full initial route from tab, including any sub-path.
@@ -368,10 +369,14 @@ class WP_Admin extends Abstract_Class {
 
             $export_type = isset( $_GET['type'] ) ? sanitize_text_field( wp_unslash( $_GET['type'] ) ) : '';
 
-            // Clear the in-progress flag up front: the premium gates below exit early,
-            // and leaving it set would block every subsequent export for 30 minutes.
-            $instance = new Exporter();
-            $instance->clear_export_transient();
+            // A download can run while a newer export is in progress. That export
+            // owns the shared transients, so clear them only when none is running.
+            $instance           = new Exporter();
+            $export_in_progress = (bool) get_transient( WOO_CE_PREFIX . '_export_running' );
+
+            if ( ! $export_in_progress ) {
+                $instance->clear_export_transient();
+            }
 
             // Debugging mode gates this second entry point too: a file_url
             // issued before debug was enabled, or a replayed download nonce,
@@ -407,6 +412,8 @@ class WP_Admin extends Abstract_Class {
             $filename = basename( sanitize_text_field( wp_unslash( $_GET['filename'] ) ) );
 
             $instance->set_export_settings( get_transient( WOO_CE_PREFIX . '_export_settings' ) );
+            // While another export runs, the settings transient is that export's.
+            $instance->set_settings_match_file( ! $export_in_progress );
             // Coerce through the same allowlist that guards Abstract_Exporter's
             // writers, so an empty or unknown format can never reach them and
             // silently emit a 0-byte file.
@@ -434,7 +441,19 @@ class WP_Admin extends Abstract_Class {
                 );
             }
 
-            $instance->clear_export_transient();
+            if ( $export_in_progress ) {
+                // The running export writes to this same file; serving it would
+                // send a partial file and delete it under that export.
+                if ( get_transient( WOO_CE_PREFIX . '_export_filename' ) === $filename ) {
+                    wp_die(
+                        esc_html__( 'An export is running and is writing this file. Try again when it finishes.', 'woocommerce-exporter' ),
+                        esc_html__( 'Export in progress', 'woocommerce-exporter' ),
+                        array( 'response' => 409 )
+                    );
+                }
+            } else {
+                $instance->clear_export_transient();
+            }
             $instance->export();
         }
     }

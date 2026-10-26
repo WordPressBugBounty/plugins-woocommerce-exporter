@@ -183,6 +183,7 @@ class Tools_Controller extends Abstract_Class {
      * @param \WP_REST_Request $request REST request — expects { slug: string }.
      *
      * @since 2.7.10
+     * @since 2.8.3 Records Store Exporter as the StoreAgent install source.
      * @return \WP_REST_Response|\WP_Error
      */
     public function install_plugin( \WP_REST_Request $request ) {
@@ -251,6 +252,12 @@ class Tools_Controller extends Abstract_Class {
                     __( 'Plugin installed but could not be located. Please activate it manually from the Plugins page.', 'woocommerce-exporter' ),
                     array( 'status' => 500 )
                 );
+            }
+
+            // StoreAgent reads its install source from this option. add_option()
+            // keeps the value that another plugin already wrote.
+            if ( AI_MCP_Controller::STOREAGENT_SLUG === $slug ) {
+                add_option( 'storeagentai_installed_by', 'wse' );
             }
         }
 

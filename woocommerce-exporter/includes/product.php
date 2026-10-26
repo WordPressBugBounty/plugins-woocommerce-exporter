@@ -55,7 +55,9 @@ if ( is_admin() ) {
         update_post_meta( $post_ID, '_filter_product_orderby_field2', ( isset( $_POST['product_filter_orderby_field2'] ) ? sanitize_text_field( $_POST['product_filter_orderby_field2'] ) : false ) );
         update_post_meta( $post_ID, '_filter_product_order_field2', ( isset( $_POST['product_filter_order_field2'] ) ? sanitize_text_field( $_POST['product_filter_order_field2'] ) : false ) );
         update_post_meta( $post_ID, '_filter_product_category', ( isset( $_POST['product_filter_category'] ) ? array_map( 'absint', (array) $_POST['product_filter_category'] ) : false ) );
+        update_post_meta( $post_ID, '_filter_product_category_exclude', ( isset( $_POST['product_filter_category_exclude'] ) ? absint( $_POST['product_filter_category_exclude'] ) : false ) );
         update_post_meta( $post_ID, '_filter_product_tag', ( isset( $_POST['product_filter_tag'] ) ? array_map( 'absint', (array) $_POST['product_filter_tag'] ) : false ) );
+        update_post_meta( $post_ID, '_filter_product_tag_exclude', ( isset( $_POST['product_filter_tag_exclude'] ) ? absint( $_POST['product_filter_tag_exclude'] ) : false ) );
         update_post_meta( $post_ID, '_filter_product_user_role', ( isset( $_POST['product_filter_user_role'] ) ? array_map( 'sanitize_text_field', (array) $_POST['product_filter_user_role'] ) : false ) );
         update_post_meta( $post_ID, '_filter_product_status', ( isset( $_POST['product_filter_status'] ) ? array_map( 'sanitize_text_field', (array) $_POST['product_filter_status'] ) : false ) );
         update_post_meta( $post_ID, '_filter_product_type', ( isset( $_POST['product_filter_type'] ) ? array_map( 'sanitize_text_field', (array) $_POST['product_filter_type'] ) : false ) );
@@ -171,9 +173,9 @@ if ( is_admin() ) {
             unset( $form_data['product_filter_tag'] );
             unset( $form_data['product_filter_tag_exclude'] );
         }
-        // These two gates unset 'product_brand'/'product_vendor', keys nothing ever
-        // reads - $defaults below reads 'product_filter_brand'/'product_filter_vendor'
-        // - so both gates were no-ops in either direction.
+        // These two gates unset 'product_filter_brand'/'product_filter_vendor', the
+        // same keys $defaults below reads, so an off toggle correctly drops the
+        // filter value.
         if ( ! filter_var( $form_data['product_filter_brand_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_filter_brand_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
             unset( $form_data['product_filter_brand'] );
         }
@@ -211,8 +213,17 @@ if ( is_admin() ) {
         // The SPA's Modified Date toggle is named after its own control
         // ('product_modified_dates_filter_enabled'), not derived from the legacy
         // 'product_filter_dates_include' key, so it has to be named explicitly here.
+        // The bounds unset alongside 'product_filter_dates' must be
+        // 'product_dates_from'/'_to' - the keys $defaults below actually reads -
+        // not 'product_filter_dates_from'/'_to', which nothing here reads (the
+        // classic form's own '_filter_dates_from'/'_to' keys instead reach
+        // woo_ce_cron_product_dataset_args()). Unsetting the wrong pair left the
+        // real bounds sitting in $args behind an off toggle. They were inert
+        // there - the preset is unset too, so the reader's switch falls through
+        // and blanks them - but the gate was not doing what it reads as doing,
+        // which is how the sibling brand/vendor gates above became live bugs.
         if ( ! filter_var( $form_data['product_filter_dates_include'] ?? false, FILTER_VALIDATE_BOOLEAN ) && ! filter_var( $form_data['product_modified_dates_filter_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
-            unset( $form_data['product_filter_dates'], $form_data['product_filter_dates_from'], $form_data['product_filter_dates_to'] );
+            unset( $form_data['product_filter_dates'], $form_data['product_dates_from'], $form_data['product_dates_to'] );
         }
 
         // Merge in the form data for this dataset.
@@ -472,7 +483,6 @@ function woo_ce_cron_product_dataset_args( $args, $post_id, $export_type = '', $
         // Modified date.
         $product_filter_date = get_post_meta( $scheduled_export, '_filter_product_date', true );
         if ( $product_filter_date ) {
-            $export->args['product_dates'] = $product_filter_date;
             switch ( $product_filter_date ) {
 
                 case 'variable':
@@ -491,7 +501,6 @@ function woo_ce_cron_product_dataset_args( $args, $post_id, $export_type = '', $
         // Published date.
         $product_filter_published_date = get_post_meta( $scheduled_export, '_filter_product_published_date', true );
         if ( $product_filter_published_date ) {
-            $export->args['product_published_dates'] = $product_filter_published_date;
             switch ( $product_filter_published_date ) {
 
                 case 'variable':
@@ -1131,7 +1140,151 @@ function woo_ce_get_product_field( $name = null, $format = 'name' ) {
     return $output;
 }
 
-// Returns a list of WooCommerce Products.
+/**
+ * Checks whether a Product query is exporting Variations and nothing else.
+ *
+ * Variation rows hold no product_cat or product_tag terms of their own, so a
+ * term filter on such a query is resolved from the parent Product by the
+ * post-query filter in woo_ce_get_products() rather than by the tax_query, and
+ * the tax_query clause is skipped entirely.
+ *
+ * @since 2.8.2
+ *
+ * @param array $args WP_Query arguments built by woo_ce_get_products().
+ * @return bool True when the query asks for Variations only.
+ */
+function woo_ce_is_variation_only_export( $args = array() ) {
+
+    $post_type = ( isset( $args['post_type'] ) ? (array) $args['post_type'] : array() );
+
+    return array( 'product_variation' ) === array_values( $post_type );
+}
+
+/**
+ * Sorts a Product export query by SKU.
+ *
+ * Applies to a query carrying the 'wse_sku_order' query var whose orderby is
+ * still the 'ID' set alongside it, so an orderby a woo_ce_get_products_args
+ * consumer sets in its place is not overridden. The SKU is joined with its key
+ * in the join condition, so Products and Variations with no SKU of their own
+ * are kept and sort as an empty SKU. Sorting on 'meta_key' instead
+ * drops them, and a meta_query clause joins every meta row of each of them.
+ *
+ * @since 2.8.2
+ *
+ * @param array    $clauses The query's SQL clauses.
+ * @param WP_Query $query   The query being run.
+ * @return array The clauses, sorted by SKU when the query asks for it.
+ */
+function woo_ce_products_sku_sort_clauses( $clauses, $query ) {
+
+    global $wpdb;
+
+    // A woo_ce_get_products_args consumer that replaced the 'ID' orderby set
+    // with the 'wse_sku_order' query var keeps its own sort.
+    $sku_order = $query->get( 'wse_sku_order' );
+    if ( ! in_array( $sku_order, array( 'ASC', 'DESC' ), true ) || 'ID' !== $query->get( 'orderby' ) ) {
+        return $clauses;
+    }
+
+    $clauses['join']   .= " LEFT JOIN {$wpdb->postmeta} AS wse_sku ON ( wse_sku.post_id = {$wpdb->posts}.ID AND wse_sku.meta_key = '_sku' )";
+    $clauses['orderby'] = "wse_sku.meta_value {$sku_order}, {$wpdb->posts}.ID ASC";
+    // A Product with more than one SKU row is still returned once.
+    if ( empty( $clauses['groupby'] ) ) {
+        $clauses['groupby'] = "{$wpdb->posts}.ID";
+    }
+
+    return $clauses;
+}
+
+/**
+ * Returns the Term IDs the Parent Product of a Variation carries, memoized for the request.
+ *
+ * A Variation-only export resolves its term filter against the Parent, and every
+ * Variation of a Variable Product shares one Parent, so each sibling row would
+ * otherwise repeat the identical uncached wp_get_object_terms() query - up to
+ * twice per row, once per taxonomy, on every batch.
+ *
+ * @since 2.8.2
+ *
+ * @param int    $parent_id     Parent Product ID.
+ * @param string $term_taxonomy Taxonomy to read, product_cat or product_tag.
+ * @return array Term IDs assigned to the Parent Product.
+ */
+function woo_ce_get_variation_parent_term_ids( $parent_id = 0, $term_taxonomy = 'product_cat' ) {
+
+    static $parent_terms = array();
+
+    $parent_id = absint( $parent_id );
+
+    if ( ! isset( $parent_terms[ $parent_id ][ $term_taxonomy ] ) ) {
+        $parent_terms[ $parent_id ][ $term_taxonomy ] = (
+            'product_cat' === $term_taxonomy
+            ? (array) woo_ce_get_product_assoc_categories( $parent_id, false, $term_taxonomy, 'ids' )
+            : (array) woo_ce_get_product_assoc_tags( $parent_id, $term_taxonomy, 'ids' )
+        );
+    }
+
+    return $parent_terms[ $parent_id ][ $term_taxonomy ];
+}
+
+/**
+ * Returns the given Product Category Term IDs with every descendant Term added, memoized for the request.
+ *
+ * The Products path never needs this: its tax_query clause names the 'id' field,
+ * and WP_Query applies include_children to such a clause, so excluding a Parent
+ * Category also drops the Products in its children. A Variation-only export has
+ * no clause to lean on - it matches the Parent Product's directly assigned
+ * Categories after the query - so the selected Categories are expanded here and
+ * both paths honour the same hierarchy. Product Tags are flat and need
+ * no expansion.
+ *
+ * @since 2.8.2
+ *
+ * @param array  $term_ids      Selected Product Category Term IDs.
+ * @param string $term_taxonomy Category taxonomy.
+ * @return array The Term IDs plus every descendant Term ID.
+ */
+function woo_ce_get_product_category_ids_with_children( $term_ids = array(), $term_taxonomy = 'product_cat' ) {
+
+    static $expanded = array();
+
+    $term_ids  = array_map( 'absint', (array) $term_ids );
+    $cache_key = $term_taxonomy . ':' . implode( ',', $term_ids );
+
+    if ( ! isset( $expanded[ $cache_key ] ) ) {
+        $descendants = array();
+        foreach ( $term_ids as $term_id ) {
+            $children = get_term_children( $term_id, $term_taxonomy );
+            if ( ! is_wp_error( $children ) ) {
+                $descendants = array_merge( $descendants, array_map( 'absint', $children ) );
+            }
+        }
+        $expanded[ $cache_key ] = array_values( array_unique( array_merge( $term_ids, $descendants ) ) );
+    }
+
+    return $expanded[ $cache_key ];
+}
+
+/**
+ * Returns a list of WooCommerce Products.
+ *
+ * Builds a WP_Query from the Product export filters and returns the matching
+ * Product IDs. When Variation is selected alongside other term-based Product
+ * Types (Simple, Variable, Grouped, External), the Variations of the matched
+ * Variable and Variable Subscription Parents are fetched in one batched query,
+ * with the main query's post statuses and sorting, and placed straight after
+ * their Parent. The filters on a Product's own meta and dates then apply to each
+ * Product and each Variation on its own. Downloadable / Virtual narrow the
+ * selected Products and Variations, or the whole catalog when selected alone.
+ *
+ * @since 2.8.2 Variations combined with other Product Types are fetched in one query for every matched Variable Parent and filtered on their own meta and dates, Downloadable / Virtual narrow Variations and apply when selected alone, and a sort by SKU keeps Products without an SKU.
+ *
+ * @param array        $args   Product export arguments, including filters, Limit Volume and Volume Offset.
+ * @param object|array $export The export object, or an empty array to use the $export global.
+ *
+ * @return array The matching Product IDs.
+ */
 function woo_ce_get_products( $args = array(), $export = array() ) {
     if ( empty( $export ) ) {
         global $export;
@@ -1167,11 +1320,11 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
         $offset       = ( isset( $args['offset'] ) ? $args['offset'] : false );
         if ( ! empty( $args['product_category'] ) ) {
             $product_category         = $args['product_category'];
-            $product_category_exclude = $args['product_category_exclude'];
+            $product_category_exclude = ! empty( $args['product_category_exclude'] );
         }
         if ( ! empty( $args['product_tag'] ) ) {
             $product_tag         = $args['product_tag'];
-            $product_tag_exclude = $args['product_tag_exclude'];
+            $product_tag_exclude = ! empty( $args['product_tag_exclude'] );
         }
         $product_brand = ( ! empty( $args['product_brand'] ) ? $args['product_brand'] : false );
         if ( ! empty( $args['product_vendor'] ) ) {
@@ -1185,7 +1338,7 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
         }
         if ( ! empty( $args['product_sku'] ) ) {
             $product_sku         = $args['product_sku'];
-            $product_sku_exclude = $args['product_sku_exclude'];
+            $product_sku_exclude = ! empty( $args['product_sku_exclude'] );
         }
         // Add support for filtering by GTIN
         $product_global_unique_id = ( ! empty( $args['product_global_unique_id'] ) ? $args['product_global_unique_id'] : false );
@@ -1510,33 +1663,36 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
         'suppress_filters' => false,
     );
 
+    // The Product Types whose Products are Variable Parents, and whether Variation
+    // is combined with other Product Types. See the Product Type filter below.
+    $variable_parent_types      = array( 'variable', 'variable-subscription' );
+    $variation_with_other_types = false;
+
     // Filter Products by Product Type.
     if (
         is_array( $product_type ) &&
         ! empty( $product_type )
     ) {
-        // Check if we are just exporting Variations.
-        if (
-            in_array( 'variation', $product_type ) &&
-            count( $product_type ) == 1
-        ) {
-            $args['post_type'] = array( 'product_variation' );
-        }
-        $args['meta_query'] = array(
+        // Downloadable and Virtual are meta flags rather than product_type terms;
+        // a Product carrying either selected flag matches.
+        $type_flag_meta_query = array(
             'relation' => 'OR',
         );
         if ( in_array( 'downloadable', $product_type ) ) {
-            $args['meta_query'][] = array(
+            $type_flag_meta_query[] = array(
                 'key'     => '_downloadable',
                 'value'   => 'yes',
                 'compare' => 'EXISTS',
             );
         }
         if ( in_array( 'virtual', $product_type ) ) {
-            $args['meta_query'][] = array(
+            $type_flag_meta_query[] = array(
                 'key'   => '_virtual',
                 'value' => 'yes',
             );
+        }
+        if ( 1 === count( $type_flag_meta_query ) ) {
+            $type_flag_meta_query = array();
         }
 
         // Remove non-Term based Product Types before we tack on our tax_query.
@@ -1545,6 +1701,28 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
             if ( in_array( $type, array( 'downloadable', 'virtual', 'variation' ) ) ) {
                 unset( $term_product_type[ $key ] );
             }
+        }
+
+        // Variations are collected from their Variable Parents after the query,
+        // so a Variation selected alongside other Product Types needs every kind
+        // of Variable Parent matched too. The Parents of a type that was not
+        // selected are removed again below.
+        $variation_with_other_types = (
+            ! empty( $term_product_type ) &&
+            in_array( 'variation', $product_type, true )
+        );
+        if ( $variation_with_other_types ) {
+            foreach ( $variable_parent_types as $variable_parent_type ) {
+                if ( ! in_array( $variable_parent_type, $term_product_type, true ) ) {
+                    $term_product_type[] = $variable_parent_type;
+                }
+            }
+        }
+
+        // Nested as one clause so the meta filters added further down narrow the
+        // export instead of joining the Downloadable / Virtual OR.
+        if ( ! empty( $type_flag_meta_query ) ) {
+            $args['meta_query'] = array( $type_flag_meta_query );
         }
 
         if ( ! empty( $term_product_type ) ) {
@@ -1559,10 +1737,13 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
                     ),
                 );
             }
-        } else {
-            unset( $args['meta_query'] );
+        } elseif ( in_array( 'variation', $product_type, true ) ) {
+            // Without a term based Product Type, Variation means a Variation-only
+            // export, narrowed by Downloadable / Virtual on the Variations' own meta
+            // when either is selected.
+            $args['post_type'] = array( 'product_variation' );
         }
-        unset( $term_product_type );
+        unset( $term_product_type, $type_flag_meta_query );
     }
 
     // Check if we are doing a Variation export.
@@ -1576,13 +1757,26 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
         if ( ! isset( $args['tax_query'] ) ) {
             $args['tax_query'] = array();
         }
-        $args['tax_query'][] = array(
-            array(
-                'taxonomy' => $term_taxonomy,
-                'field'    => 'id',
-                'terms'    => $product_category,
-            ),
-        );
+        // A Variation-only query gets no clause at all. Its post_type is
+        // 'product_variation', and variation rows carry no product_cat or
+        // product_tag terms - those sit on the parent - so the clause could only
+        // ever match nothing. The post-query filter in the results loop below
+        // resolves the parent's terms instead, and it is the sole authority for
+        // that case.
+        if ( ! woo_ce_is_variation_only_export( $args ) ) {
+            // The 'Filter out' choice sets $product_category_exclude, so the
+            // clause needs 'NOT IN'. Without an explicit operator WP_Query falls
+            // back to 'IN' and the exclude choice was dropped right before the
+            // query ran.
+            $args['tax_query'][] = array(
+                array(
+                    'taxonomy' => $term_taxonomy,
+                    'field'    => 'id',
+                    'terms'    => $product_category,
+                    'operator' => ( $product_category_exclude ? 'NOT IN' : 'IN' ),
+                ),
+            );
+        }
     }
 
     // Filter Products by Product Tag.
@@ -1592,29 +1786,42 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
         if ( ! isset( $args['tax_query'] ) ) {
             $args['tax_query'] = array();
         }
-        $args['tax_query'][] = array(
-            array(
-                'taxonomy' => $term_taxonomy,
-                'field'    => 'id',
-                'terms'    => $product_tag,
-            ),
-        );
+        // See the Product Category clause above - 'Filter out' needs 'NOT IN', and
+        // a Variation-only query is left to the post-query filter.
+        if ( ! woo_ce_is_variation_only_export( $args ) ) {
+            $args['tax_query'][] = array(
+                array(
+                    'taxonomy' => $term_taxonomy,
+                    'field'    => 'id',
+                    'terms'    => $product_tag,
+                    'operator' => ( $product_tag_exclude ? 'NOT IN' : 'IN' ),
+                ),
+            );
+        }
     }
 
     // WooCommerce Brands Addon - http://woothemes.com/woocommerce/
     if ( $product_brand ) {
-        $term_taxonomy = apply_filters( 'woo_ce_brand_term_taxonomy', 'product_brand' );
-        // Check if tax_query has been created.
-        if ( ! isset( $args['tax_query'] ) ) {
-            $args['tax_query'] = array();
+        // Match the saved Brand term IDs against every registered brand taxonomy,
+        // not just the one woo_ce_brand_term_taxonomy currently resolves to. Term
+        // IDs are unique in wp_terms, so a term ID saved before Perfect WooCommerce
+        // Brands detection changed the resolved taxonomy still matches here.
+        $term_taxonomies = woo_ce_get_brand_term_taxonomies( true );
+        if ( ! empty( $term_taxonomies ) ) {
+            // Check if tax_query has been created.
+            if ( ! isset( $args['tax_query'] ) ) {
+                $args['tax_query'] = array();
+            }
+            $brand_tax_query = array( 'relation' => 'OR' );
+            foreach ( $term_taxonomies as $term_taxonomy ) {
+                $brand_tax_query[] = array(
+                    'taxonomy' => $term_taxonomy,
+                    'field'    => 'id',
+                    'terms'    => $product_brand,
+                );
+            }
+            $args['tax_query'][] = $brand_tax_query;
         }
-        $args['tax_query'][] = array(
-            array(
-                'taxonomy' => $term_taxonomy,
-                'field'    => 'id',
-                'terms'    => $product_brand,
-            ),
-        );
     }
 
     // Product Vendors - http://www.woothemes.com/products/product-vendors/
@@ -1739,7 +1946,7 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
     // Filter Products by Product Gallery.
     if ( $product_gallery ) {
         $meta_key = '_product_image_gallery';
-        switch ( $product_featured_image ) {
+        switch ( $product_gallery ) {
 
             case 'yes':
                 $args['meta_query'][] = array(
@@ -1873,240 +2080,420 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
         }
     }
 
-    // Sort Products by SKU.
+    // Sort Products by SKU, through woo_ce_products_sku_sort_clauses(). The
+    // Variations of a combined export are sorted the same way below.
     if ( $orderby == 'sku' ) {
-        $args['orderby']  = 'meta_value';
-        $args['meta_key'] = '_sku';
+        $args['orderby']       = 'ID';
+        $args['wse_sku_order'] = ( 'ASC' === strtoupper( (string) $order ) ? 'ASC' : 'DESC' );
     }
 
     $products = array();
 
-    // Allow other developers to bake in their own filters.
+    /**
+     * Filters the WP_Query arguments of a Product export.
+     *
+     * @since 2.8.2 A sort by SKU arrives as an 'ID' orderby plus the 'wse_sku_order'
+     *              query var, which woo_ce_products_sku_sort_clauses() turns into the
+     *              SKU sort; it needs 'suppress_filters' left false. It used to
+     *              arrive as a 'meta_value' orderby plus a '_sku' meta_key. An
+     *              orderby other than 'ID' set here replaces the SKU sort. With Variation
+     *              combined with other Product Types, the
+     *              meta_query and date_query are applied after the main query rather
+     *              than by it, so an orderby naming a meta_query clause does not apply.
+     *
+     * @param array $args The WP_Query arguments.
+     */
     $args = apply_filters( 'woo_ce_get_products_args', $args );
 
     if ( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_get_products_args', false ) ) {
         woo_ce_error_log( sprintf( 'Debug: %s', 'woo_ce_get_products(), args: ' . print_r( $args, true ) ) );
     }
 
+    // With Variation combined with other Product Types, the filters on a Product's
+    // own meta and dates (Downloadable / Virtual, Stock quantity, Featured Image,
+    // Gallery, custom meta, Published / Modified date) apply to each Product and
+    // each Variation on its own. On the query they would also drop every Variable
+    // Parent that fails them, and with it all of that Parent's Variations, so the
+    // query matches without them: the other Products are checked against them in
+    // one follow-up query, and the Variations in their own query below.
+    $own_filters = array();
+    if ( $variation_with_other_types ) {
+        foreach ( array( 'meta_query', 'date_query' ) as $own_filter ) {
+            if ( ! empty( $args[ $own_filter ] ) ) {
+                $own_filters[ $own_filter ] = $args[ $own_filter ];
+                unset( $args[ $own_filter ] );
+            }
+        }
+    }
+
+    // Limit Volume and Volume Offset are then applied after those filters too, to
+    // the Products and Parents left, so the Limit is not taken up by Products the
+    // filters remove.
+    $window_after_query = false;
+    if ( ! empty( $own_filters ) && (int) $args['posts_per_page'] > 0 ) {
+        $window_after_query     = array( absint( $args['offset'] ), absint( $args['posts_per_page'] ) );
+        $args['posts_per_page'] = -1;
+        $args['offset']         = 0;
+    }
+
+    add_filter( 'posts_clauses', 'woo_ce_products_sku_sort_clauses', 10, 2 );
+
     $product_ids = new WP_Query( $args );
     if ( $product_ids->posts ) {
+        // Check that a WP_Post didn't sneak through, then read every queried ID.
+        $all_ids = array();
         foreach ( $product_ids->posts as $product_id ) {
+            $all_ids[] = ( is_object( $product_id ) && isset( $product_id->ID ) ? absint( $product_id->ID ) : absint( $product_id ) );
+        }
+        $queried_map = array_flip( $all_ids );
 
-            // Check that a WP_Post didn't sneak through...
-            if ( is_object( $product_id ) ) {
-                $product_id = ( isset( $product_id->ID ) ? absint( $product_id->ID ) : $product_id );
+        // Variable Parents skip the Stock filter, which is applied to their
+        // Variations instead. That holds for Variable Subscription Parents only
+        // while their Variations are being exported.
+        $stock_exempt_types = ( is_array( $product_type ) && in_array( 'variation', $product_type, true ) ? $variable_parent_types : 'variable' );
+
+        // The Variable Parent types that were not selected themselves, and are
+        // only matched to reach their Variations.
+        $unselected_parent_types = ( $variation_with_other_types ? array_values( array_diff( $variable_parent_types, $product_type ) ) : array() );
+
+        // With the Limit Volume held back from the query (see above), no Limit
+        // bounds the main query. So the Products are checked in chunks, and the
+        // checks stop once the chunks hold enough Products and Parents to fill
+        // the window. Without it, all the Products are one chunk.
+        $window_end   = ( false !== $window_after_query ? $window_after_query[0] + $window_after_query[1] : 0 );
+        $id_chunks    = ( $window_end > 0 ? array_chunk( $all_ids, max( 2 * $window_end, 200 ) ) : array( $all_ids ) );
+        $all_products = array();
+        $row_anchors  = array();
+        $anchors      = array();
+        foreach ( $id_chunks as $chunk_ids ) {
+            // The Products that pass the held-back own meta and date filters: the main
+            // query run again with them, for this chunk only, without the Limit or
+            // the SKU sort.
+            $passing_ids = false;
+            if ( ! empty( $own_filters ) ) {
+                // Load this chunk's Products, their Product Types and, for the Stock
+                // filter, their meta in one query each, not one per Product in the loop.
+                _prime_post_caches( $chunk_ids, false, (bool) $product_stock );
+                update_object_term_cache( $chunk_ids, 'product' );
+                $passing_args = array_merge(
+                    $args,
+                    $own_filters,
+                    array(
+                        'posts_per_page' => -1,
+                        'offset'         => 0,
+                        'orderby'        => 'none',
+                        'fields'         => 'ids',
+                        'no_found_rows'  => true,
+                    )
+                );
+                unset( $passing_args['wse_sku_order'] );
+                // Check only this chunk when there is more than one.
+                if ( $window_end > 0 ) {
+                    $passing_args['post__in'] = $chunk_ids;
+                }
+                $passing_query = new WP_Query( $passing_args );
+                $passing_ids   = array_flip( $passing_query->posts );
+                unset( $passing_args, $passing_query );
             }
 
-            // Get Product details.
-            $product = get_post( $product_id );
+            $products            = array();
+            $queried_ids         = array();
+            $variable_parent_ids = array();
+            foreach ( $chunk_ids as $product_id ) {
 
-            // Filter out Variations that don't have a Parent Product that exists.
-            if (
-                isset( $product->post_type ) &&
-                $product->post_type == 'product_variation'
-            ) {
+                // Check that a WP_Post didn't sneak through...
+                if ( is_object( $product_id ) ) {
+                    $product_id = ( isset( $product_id->ID ) ? absint( $product_id->ID ) : $product_id );
+                }
+                $queried_ids[] = $product_id;
+
+                // Get Product details.
+                $product = get_post( $product_id );
 
                 // Filter out Variations that don't have a Parent Product that exists.
-                if ( $product->post_parent ) {
-                    // Check if Parent exists.
-                    if ( get_post( $product->post_parent ) == false ) {
-                        if ( WOO_CE_LOGGING ) {
-                            woo_ce_error_log( sprintf( 'Debug: %s', sprintf( 'Filter out Variation #%d as its Parent Product does not exist', $product_id ) ) );
+                if (
+                    isset( $product->post_type ) &&
+                    $product->post_type == 'product_variation'
+                ) {
+
+                    // Filter out Variations that don't have a Parent Product that exists.
+                    if ( $product->post_parent ) {
+                        // Check if Parent exists.
+                        if ( get_post( $product->post_parent ) == false ) {
+                            if ( WOO_CE_LOGGING ) {
+                                woo_ce_error_log( sprintf( 'Debug: %s', sprintf( 'Filter out Variation #%d as its Parent Product does not exist', $product_id ) ) );
+                            }
+                            unset( $product_id, $product );
+                            continue;
                         }
+                    }
+
+                    // Allow filtering Variations by parent Variable filters.
+                    if (
+                        is_array( $product_type ) &&
+                        ! empty( $product_type )
+                    ) {
+                        // Check if we are just exporting Variations.
+                        if ( woo_ce_is_variation_only_export( $args ) ) {
+
+                            // Filter Variations by Product Category.
+                            //
+                            // The Parent carries the terms, so this is where a
+                            // Variation-only export applies them - the tax_query
+                            // clause is skipped for that case. Dropping the Variation
+                            // when the Parent matches is what 'Filter out' means, so
+                            // the test is against the exclude flag rather than a bare
+                            // "no match". The selected Categories are expanded to
+                            // their descendants first, because the clause this path
+                            // replaces carried include_children.
+                            if ( $product_category ) {
+                                $term_taxonomy = 'product_cat';
+                                $matched       = ! empty( array_intersect( woo_ce_get_variation_parent_term_ids( $product->post_parent, $term_taxonomy ), woo_ce_get_product_category_ids_with_children( $product_category, $term_taxonomy ) ) );
+                                if ( $matched === (bool) $product_category_exclude ) {
+                                    unset( $product_id, $product, $matched );
+                                    continue;
+                                }
+                                unset( $matched );
+                            }
+
+                            // Filter Variations by Product Tag.
+                            if ( $product_tag ) {
+                                $term_taxonomy = 'product_tag';
+                                $matched       = ! empty( array_intersect( woo_ce_get_variation_parent_term_ids( $product->post_parent, $term_taxonomy ), $product_tag ) );
+                                if ( $matched === (bool) $product_tag_exclude ) {
+                                    unset( $product_id, $product, $matched );
+                                    continue;
+                                }
+                                unset( $matched );
+                            }
+                        }
+                    }
+                }
+
+                // Filter out Products based on the Stock Status and Quantity.
+                $term_taxonomy = 'product_type';
+                if (
+                    $product_stock &&
+                    has_term( $stock_exempt_types, $term_taxonomy, $product_id ) !== true
+                ) {
+                    $manage_stock = get_post_meta( $product_id, '_manage_stock', true );
+                    $stock_status = get_post_meta( $product_id, '_stock_status', true );
+                    $quantity     = get_post_meta( $product_id, '_stock', true );
+                    $quantity     = ( function_exists( 'wc_stock_amount' ) ? wc_stock_amount( $quantity ) : absint( $quantity ) );
+                    switch ( $product_stock ) {
+
+                        case 'outofstock':
+                            if (
+                                ( $manage_stock == 'yes' && $quantity > 0 ) ||
+                                $stock_status !== 'outofstock'
+                            ) {
+                                unset( $product_id, $product );
+                                continue ( 2 );
+                            }
+                            break;
+
+                        case 'instock':
+                            if (
+                                ( $manage_stock == 'yes' && $quantity == 0 ) ||
+                                $stock_status !== 'instock'
+                            ) {
+                                unset( $product_id, $product );
+                                continue ( 2 );
+                            }
+                            break;
+                    }
+                    unset( $stock_status, $quantity );
+                }
+
+                // Filter Products by Language.
+                if ( $product_language ) {
+                    // Check for corrupt Products.
+                    if ( $product == false ) {
+                        unset( $product_id, $product );
+                        continue;
+                    } elseif ( ! in_array( $product->post_type, array( 'product', 'product_variation' ) ) ) {
                         unset( $product_id, $product );
                         continue;
                     }
                 }
 
-                // Allow filtering Variations by parent Variable filters.
+                // A Variable Parent of a type that was not selected is matched only to
+                // reach its Variations, so it is collected below but not exported. The
+                // other Products are exported when they pass the own meta and date
+                // filters held back from the query, if any. A Parent that fails them is
+                // still collected, so its Variations are checked on their own terms.
                 if (
-                    is_array( $product_type ) &&
-                    ! empty( $product_type )
+                    isset( $product_id ) &&
+                    ! (
+                        ! empty( $unselected_parent_types ) &&
+                        'product' === $product->post_type &&
+                        has_term( $unselected_parent_types, 'product_type', $product_id )
+                    ) &&
+                    ( false === $passing_ids || isset( $passing_ids[ $product_id ] ) )
                 ) {
-                    // Check if we are just exporting Variations.
-                    if (
-                        in_array( 'variation', $product_type ) &&
-                        count( $product_type ) == 1
-                    ) {
-
-                        // Filter Variations by Product Category.
-                        if ( $product_category ) {
-                            $term_taxonomy = 'product_cat';
-                            $response      = array_intersect( woo_ce_get_product_assoc_categories( $product->post_parent, false, $term_taxonomy, 'ids' ), $product_category );
-                            if ( empty( $response ) ) {
-                                unset( $product_id, $product );
-                                continue;
-                            }
-                            unset( $response );
-                        }
-
-                        // Filter Variations by Product Tag.
-                        if ( $product_tag ) {
-                            $term_taxonomy = 'product_tag';
-                            $response      = array_intersect( woo_ce_get_product_assoc_tags( $product->post_parent, $term_taxonomy, 'ids' ), $product_tag );
-                            if ( empty( $response ) ) {
-                                unset( $product_id, $product );
-                                continue;
-                            }
-                            unset( $response );
-                        }
-                    }
+                    $products[] = $product_id;
                 }
-            }
 
-            // Filter out Products based on the Stock Status and Quantity.
-            $term_taxonomy = 'product_type';
-            if (
-                $product_stock &&
-                has_term( 'variable', $term_taxonomy, $product_id ) !== true
-            ) {
-                $manage_stock = get_post_meta( $product_id, '_manage_stock', true );
-                $stock_status = get_post_meta( $product_id, '_stock_status', true );
-                $quantity     = get_post_meta( $product_id, '_stock', true );
-                $quantity     = ( function_exists( 'wc_stock_amount' ) ? wc_stock_amount( $quantity ) : absint( $quantity ) );
-                switch ( $product_stock ) {
-
-                    case 'outofstock':
-                        if (
-                            ( $manage_stock == 'yes' && $quantity > 0 ) ||
-                            $stock_status !== 'outofstock'
-                        ) {
-                            unset( $product_id, $product );
-                            continue ( 2 );
-                        }
-                        break;
-
-                    case 'instock':
-                        if (
-                            ( $manage_stock == 'yes' && $quantity == 0 ) ||
-                            $stock_status !== 'instock'
-                        ) {
-                            unset( $product_id, $product );
-                            continue ( 2 );
-                        }
-                        break;
-                }
-                unset( $stock_status, $quantity );
-            }
-
-            // Filter Products by Language.
-            if ( $product_language ) {
-                // Check for corrupt Products.
-                if ( $product == false ) {
-                    unset( $product_id, $product );
-                    continue;
-                } elseif ( ! in_array( $product->post_type, array( 'product', 'product_variation' ) ) ) {
-                    unset( $product_id, $product );
-                    continue;
-                }
-            }
-
-            if ( isset( $product_id ) ) {
-                $products[] = $product_id;
-            }
-
-            // Include Variables in a new WP_Query if a tax_query filter is used or WPML exists.
-            if (
-                ( isset( $args['tax_query'] ) || woo_ce_detect_wpml() ) &&
-                isset( $product_id )
-            ) {
-                $term_taxonomy = 'product_type';
+                // Collect the Variable Parents, Variable Subscriptions included, whose
+                // Variations are included after the loop.
                 if (
-                    has_term( 'variable', $term_taxonomy, $product_id ) &&
-                    ( $product_type !== false && in_array( 'variation', $product_type ) )
-                ) {
-                    // @mod - Limit Volume and Volume Offset are iffy for this add-on query, needs truncation love. Marked for 2.4+
-                    $variable_args = array(
-                        'post_type'      => 'product_variation',
-                        'orderby'        => $orderby,
-                        'order'          => $order,
-                        'offset'         => $offset,
-                        'posts_per_page' => $limit_volume,
-                        'post_parent'    => $product_id,
-                        'post_status'    => array( 'publish' ),
-                        'fields'         => 'ids',
-                    );
-                    // Filter Products by Post Status.
-                    if ( $product_status ) {
-                        $variable_args['post_status'] = woo_ce_post_statuses( $product_status, true );
-                    }
-                    $variables    = array();
-                    $variable_ids = new WP_Query( $variable_args );
-                    if ( $variable_ids->posts ) {
-                        foreach ( $variable_ids->posts as $variable_id ) {
-
-                            // Filter out Products based on the Stock Status and Quantity.
-                            if ( $product_stock ) {
-                                $manage_stock = get_post_meta( $variable_id, '_manage_stock', true );
-                                $stock_status = get_post_meta( $variable_id, '_stock_status', true );
-                                $quantity     = get_post_meta( $variable_id, '_stock', true );
-                                $quantity     = ( function_exists( 'wc_stock_amount' ) ? wc_stock_amount( $quantity ) : absint( $quantity ) );
-                                switch ( $product_stock ) {
-
-                                    case 'outofstock':
-                                        if (
-                                            ( $manage_stock == 'yes' && $quantity > 0 ) ||
-                                            $stock_status !== 'outofstock'
-                                        ) {
-                                            unset( $variable_id );
-                                            continue ( 2 );
-                                        }
-                                        break;
-
-                                    case 'instock':
-                                        if (
-                                            ( $manage_stock == 'yes' && $quantity == 0 ) ||
-                                            $stock_status !== 'instock'
-                                        ) {
-                                            unset( $variable_id );
-                                            continue ( 2 );
-                                        }
-                                        break;
-                                }
-                                unset( $stock_status, $quantity );
-                            }
-
-                            if ( isset( $variable_id ) ) {
-                                // Check we're not including a duplicate Product ID.
-                                if ( ! in_array( $variable_id, $product_ids->posts ) ) {
-                                    $products[] = $variable_id;
-                                }
-                            }
-                        }
-                    }
-                    unset( $variables, $variable_ids, $variable_args, $variable_id );
-                }
-            }
-
-            // Override for exporting Variations without Variables.
-            if (
-                is_array( $product_type ) &&
-                ! empty( $product_type )
-            ) {
-                if (
-                    in_array( 'variation', $product_type ) &&
-                    in_array( 'variable', $product_type ) == false
+                    ( isset( $args['tax_query'] ) || woo_ce_detect_wpml() ) &&
+                    isset( $product_id )
                 ) {
                     $term_taxonomy = 'product_type';
                     if (
-                        $product->post_type == 'product' &&
-                        has_term( 'variable', $term_taxonomy, $product_id )
+                        has_term( $variable_parent_types, $term_taxonomy, $product_id ) &&
+                        ( $product_type !== false && in_array( 'variation', $product_type ) )
                     ) {
-                        // Remove the Variable Product ID.
-                        $key = array_search( $product_id, $products );
-                        if ( $key !== false ) {
-                            unset( $products[ $key ] );
-                        }
+                        $variable_parent_ids[] = $product_id;
                     }
                 }
             }
+            // Include the Variations of every collected Variable Parent with a single
+            // query rather than one query per Parent, then place each Parent's
+            // Variations straight after it. Limit Volume and Volume Offset pick the
+            // Parents, in the main query or, with the own meta and date filters held
+            // back from it, further down, so every Variation of those Parents is
+            // included instead of that window being applied again to the Variations of
+            // each Parent.
+            //
+            // The Variations take the main query's post statuses and sorting, SKU sort
+            // included, and are narrowed by the own meta and date filters held back
+            // from it, so they match what a Variation-only export returns. Only the
+            // sort itself carries over: a meta sort added through the
+            // woo_ce_get_products_args filter would need its meta_key, whose join drops
+            // every Variation without that key, so such a sort is not applied here.
+            if ( ! empty( $variable_parent_ids ) ) {
+                $variable_args = array(
+                    'post_type'       => 'product_variation',
+                    'orderby'         => $args['orderby'],
+                    'order'           => $args['order'],
+                    'posts_per_page'  => -1,
+                    'post_parent__in' => $variable_parent_ids,
+                    'post_status'     => $args['post_status'],
+                    'fields'          => 'id=>parent',
+                    'no_found_rows'   => true,
+                );
+                if ( ! empty( $own_filters['meta_query'] ) ) {
+                    $variable_args['meta_query'] = array( $own_filters['meta_query'] );
+                }
+                if ( ! empty( $own_filters['date_query'] ) ) {
+                    $variable_args['date_query'] = $own_filters['date_query'];
+                }
+                if ( isset( $args['wse_sku_order'] ) ) {
+                    $variable_args['wse_sku_order'] = $args['wse_sku_order'];
+                }
+                $variables    = array();
+                $variable_ids = new WP_Query( $variable_args );
+                // The Stock filter reads each Variation's meta, so load it in one query
+                // rather than one query per Variation.
+                if (
+                    $product_stock &&
+                    ! empty( $variable_ids->posts )
+                ) {
+                    update_meta_cache( 'post', wp_list_pluck( $variable_ids->posts, 'ID' ) );
+                }
+                // WP_Query can leave posts null for an 'id=>parent' query that matches nothing.
+                foreach ( (array) $variable_ids->posts as $variable ) {
+                    $variable_id = absint( $variable->ID );
+
+                    // Filter out Products based on the Stock Status and Quantity.
+                    if ( $product_stock ) {
+                        $manage_stock = get_post_meta( $variable_id, '_manage_stock', true );
+                        $stock_status = get_post_meta( $variable_id, '_stock_status', true );
+                        $quantity     = get_post_meta( $variable_id, '_stock', true );
+                        $quantity     = ( function_exists( 'wc_stock_amount' ) ? wc_stock_amount( $quantity ) : absint( $quantity ) );
+                        switch ( $product_stock ) {
+
+                            case 'outofstock':
+                                if (
+                                    ( $manage_stock == 'yes' && $quantity > 0 ) ||
+                                    $stock_status !== 'outofstock'
+                                ) {
+                                    unset( $variable_id );
+                                    continue ( 2 );
+                                }
+                                break;
+
+                            case 'instock':
+                                if (
+                                    ( $manage_stock == 'yes' && $quantity == 0 ) ||
+                                    $stock_status !== 'instock'
+                                ) {
+                                    unset( $variable_id );
+                                    continue ( 2 );
+                                }
+                                break;
+                        }
+                        unset( $stock_status, $quantity );
+                    }
+
+                    // Check we're not including a duplicate Product ID.
+                    if ( ! isset( $queried_map[ $variable_id ] ) ) {
+                        $variables[ absint( $variable->post_parent ) ][] = $variable_id;
+                    }
+                }
+
+                // Rebuild the list in the main query order, keeping the Products that
+                // passed the filters above and slotting in each Parent's Variations.
+                // A Parent removed because Variable was not selected still anchors
+                // where its Variations go.
+                $included_ids = array_flip( $products );
+                $products     = array();
+                foreach ( $queried_ids as $product_id ) {
+                    if ( isset( $included_ids[ $product_id ] ) ) {
+                        $products[] = $product_id;
+                    }
+                    if ( isset( $variables[ $product_id ] ) ) {
+                        array_push( $products, ...$variables[ $product_id ] );
+                        foreach ( $variables[ $product_id ] as $variable_id ) {
+                            $row_anchors[ $variable_id ] = $product_id;
+                        }
+                    }
+                }
+                unset( $variables, $variable_ids, $variable_args, $variable, $variable_id, $included_ids );
+            }
+
+            // Count the Products and Parents this chunk adds to the window, and stop
+            // when the window is full.
+            foreach ( $products as $row_id ) {
+                $anchors[ $row_anchors[ $row_id ] ?? $row_id ] = true;
+            }
+            array_push( $all_products, ...$products );
+            if ( $window_end > 0 && count( $anchors ) >= $window_end ) {
+                break;
+            }
         }
+        $products = $all_products;
+        unset( $all_products, $all_ids, $id_chunks, $chunk_ids, $anchors, $queried_map );
+
+        // Apply the Limit Volume and Volume Offset held back from the query. They
+        // count Products and Parents, the same as on the query, and a Parent's
+        // Variations go with it.
+        if ( false !== $window_after_query ) {
+            $window_anchors = array();
+            foreach ( $products as $row_id ) {
+                $window_anchors[ $row_anchors[ $row_id ] ?? $row_id ] = true;
+            }
+            $window_anchors = array_flip( array_slice( array_keys( $window_anchors ), $window_after_query[0], $window_after_query[1] ) );
+            $windowed_rows  = array();
+            foreach ( $products as $row_id ) {
+                if ( isset( $window_anchors[ $row_anchors[ $row_id ] ?? $row_id ] ) ) {
+                    $windowed_rows[] = $row_id;
+                }
+            }
+            $products = $windowed_rows;
+            unset( $window_anchors, $windowed_rows, $row_id );
+        }
+
         // Only populate the $export Global if it is an export.
         if ( isset( $export ) ) {
             $export->total_rows = count( $products );
         }
-        unset( $product_ids, $product_id );
+        unset( $product_ids, $product_id, $queried_ids, $variable_parent_ids, $row_anchors, $stock_exempt_types, $unselected_parent_types, $passing_ids );
     }
+
+    remove_filter( 'posts_clauses', 'woo_ce_products_sku_sort_clauses', 10 );
 
     // Filter Products by Language.
     if ( $product_language ) {
@@ -2458,13 +2845,16 @@ function woo_ce_get_product_data( $product_id = 0, $args = array(), $fields = ar
 
 function woo_ce_wp_query_product_where_override_language( $where ) {
 
-    global $export;
+    global $export, $wpdb;
 
     $condition = '';
-    if ( ! empty( $export->args ) ) {
-        $languages = $export->args['product_language'];
+    if ( ! empty( $export->args ) && ! empty( $export->args['product_language'] ) ) {
+        $languages = array_values( array_filter( array_map( 'sanitize_key', (array) $export->args['product_language'] ) ) );
         if ( ! empty( $languages ) ) {
-            $where = " AND language_code IN ('" . implode( "', '", array_values( $languages ) ) . "')";
+            $placeholders = implode( ', ', array_fill( 0, count( $languages ), '%s' ) );
+            // Appended to, never replacing, the existing clause so the post type, status and ID constraints survive.
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+            $condition = $wpdb->prepare( " AND language_code IN ( {$placeholders} )", $languages );
         }
     }
 
@@ -2821,7 +3211,14 @@ function woo_ce_get_product_assoc_tags( $product_id = 0, $term_taxonomy = 'produ
 
     $category_separator = apply_filters( 'woo_ce_get_product_assoc_tags_separator', $export->category_separator );
 
-    $output = '';
+    // The 'ids' format is consumed as an array by the Variation term filter in
+    // woo_ce_get_products(). It used to be imploded like the 'default' format,
+    // which handed array_intersect() a string; that branch was unreachable while
+    // the tax_query clause emptied every Variation-only query, so the breakage
+    // only surfaced once the clause was skipped for that case.
+    // woo_ce_get_variation_parent_term_ids() is the only 'ids' caller - every
+    // other caller takes the default format.
+    $output = ( 'ids' === $format ? array() : '' );
     $args   = array();
     if ( $format == 'ids' ) {
         $args['fields'] = 'ids';
@@ -2834,7 +3231,7 @@ function woo_ce_get_product_assoc_tags( $product_id = 0, $term_taxonomy = 'produ
 
     $terms = wp_get_object_terms( $product_id, $term_taxonomy, $args );
     if ( ! empty( $terms ) && is_wp_error( $terms ) == false ) {
-        $output = implode( $category_separator, $terms );
+        $output = ( 'ids' === $format ? array_map( 'intval', $terms ) : implode( $category_separator, $terms ) );
         unset( $terms );
     }
 
@@ -3322,12 +3719,12 @@ function woo_ce_get_product_assoc_order_ids( $products = array() ) {
 	$output = false;
 	if ( apply_filters( 'woo_ce_get_product_assoc_order_ids_alternate_query', false ) ) {
         $order_ids_sql = $wpdb->prepare(
-            "SELECT `order_id` FROM `{$wpdb->prefix}woocommerce_order_items` as order_items, `{$wpdb->prefix}swoocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key IN ( '_product_id', '_variation_id' ) AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
+            "SELECT `order_id` FROM `{$wpdb->prefix}woocommerce_order_items` as order_items, `{$wpdb->prefix}woocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key IN ( '_product_id', '_variation_id' ) AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
             ...$products
         );
     } else {
         $order_ids_sql = $wpdb->prepare(
-            "SELECT `order_id` FROM `{$wpdb->prefix}swoocommerce_order_items` as order_items, `{$wpdb->prefix}swoocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key = '_product_id' AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
+            "SELECT `order_id` FROM `{$wpdb->prefix}woocommerce_order_items` as order_items, `{$wpdb->prefix}woocommerce_order_itemmeta` as order_itemmeta WHERE `order_items`.order_item_id = `order_itemmeta`.order_item_id AND `order_itemmeta`.meta_key = '_product_id' AND `order_itemmeta`.meta_value IN ( " . implode( ',', array_fill(0, count($products), '%d') ) . ' )',
             ...$products
         );
     }
@@ -3459,6 +3856,10 @@ function woo_ce_format_product_stock_status( $stock_status = '', $stock = '' ) {
 
             case 'outofstock':
                 $output = __( 'Out of Stock', 'woocommerce-exporter' );
+                break;
+
+            case 'onbackorder':
+                $output = __( 'On Backorder', 'woocommerce-exporter' );
                 break;
         }
     }
@@ -3682,18 +4083,27 @@ function woo_ce_get_product_assoc_brands( $product_id = 0, $parent_id = 0 ) {
 
     global $export;
 
-    $output        = '';
-    $term_taxonomy = apply_filters( 'woo_ce_brand_term_taxonomy', 'product_brand' );
+    $output = '';
     // Return Product Brands of Parent if this is a Variation.
     if ( $parent_id ) {
         $product_id = $parent_id;
     }
-    if ( $product_id ) {
-        $brands = wp_get_object_terms( $product_id, $term_taxonomy );
+    // Read brands from every registered brand taxonomy, not just the one
+    // woo_ce_brand_term_taxonomy resolves to, so a product matched on a second
+    // Brands plugin's taxonomy still shows its brand names.
+    // One query for all brand taxonomies, not one for each taxonomy.
+    $brands          = array();
+    $brand_taxonomies = woo_ce_get_brand_term_taxonomies();
+    if ( $product_id && ! empty( $brand_taxonomies ) ) {
+        $brands = wp_get_object_terms( $product_id, $brand_taxonomies );
+        if ( is_wp_error( $brands ) ) {
+            $brands = array();
+        }
     }
-    if ( ! empty( $brands ) && is_wp_error( $brands ) == false ) {
+    if ( ! empty( $brands ) ) {
         $size = count( $brands );
         for ( $i = 0; $i < $size; $i++ ) {
+            $term_taxonomy = $brands[ $i ]->taxonomy;
             if ( $brands[ $i ]->parent == '0' ) {
                 $output .= $brands[ $i ]->name . $export->category_separator;
             } else {

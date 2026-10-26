@@ -133,7 +133,7 @@ function woo_cd_template_header( $title = '', $icon = 'woocommerce' ) {
  * @return string[]
  */
 function woo_ce_spa_tabs() {
-	return array( 'overview', 'export_items', 'quick_export', 'scheduled_export', 'export_template', 'archive', 'settings', 'tools', 'custom_meta_fields', 'audit_log' );
+	return array( 'overview', 'export_items', 'quick_export', 'scheduled_export', 'export_template', 'archive', 'settings', 'tools', 'custom_meta_fields', 'audit_log', 'ai_mcp' );
 }
 
 /**

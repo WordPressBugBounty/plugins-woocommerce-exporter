@@ -140,12 +140,27 @@ function onReorder (names) {
   localSelected.value = names.map(n => map.get(n)).filter(Boolean)
 }
 
+// The label a field was registered with, so a cleared rename can be told apart
+// from a real one. Falls back to the slug only when the definition is not
+// loaded, which is also what onConfirm() assumed before this was shared.
+function defaultLabelFor (name) {
+  for (const g of (currentFields.value?.groups ?? [])) {
+    const def = g.fields.find(gf => gf.name === name)
+    if (def) return def.label
+  }
+  return name
+}
+
 function onSetLabel (name, label) {
   const f = localSelected.value.find(f => f.name === name && !f._isMeta)
-  if (f) {
-    f.label = label || f.label
-    if (label) toasts.push(`Field renamed to "${label}"`)
-  }
+  if (!f) return
+
+  // An empty label means "undo the rename", so put the field default back rather
+  // than keeping the row's current text. onConfirm() then sees label ===
+  // default and clears the stored override, matching the inline chip. Keeping
+  // the current text would re-save the override the user just cleared.
+  f.label = label || defaultLabelFor(name)
+  if (label) toasts.push(`Field renamed to "${label}"`)
 }
 
 function onSelectAllVisible (fields) {
@@ -204,15 +219,11 @@ function onConfirm () {
   fieldOrder.value[type] = regularEntries.map(f => f.name)
 
   // Persist inline label renames: only when label differs from the field default.
+  // A label back at the default clears any override the store still holds, so
+  // clearing a rename here removes it instead of leaving the old one in place.
   regularEntries.forEach(f => {
-    let defaultLabel = f.name
-    for (const g of (currentFields.value?.groups ?? [])) {
-      const def = g.fields.find(gf => gf.name === f.name)
-      if (def) { defaultLabel = def.label; break }
-    }
-    if (f.label && f.label !== defaultLabel) {
-      store.setFieldLabel(type, f.name, f.label)
-    }
+    const defaultLabel = defaultLabelFor(f.name)
+    store.setFieldLabel(type, f.name, f.label && f.label !== defaultLabel ? f.label : '')
   })
 
   // Apply meta key selections — save each definition's keys to its own storage key.
@@ -274,6 +285,7 @@ function onClose () {
             type="button"
             class="flex items-center gap-2 w-full px-4 py-[10px] bg-white border-none border-b border-gray-100 cursor-pointer text-left transition-colors hover:bg-gray-50"
             :aria-expanded="String(!!expandedDefs[def.name])"
+            :data-qe-meta-def="def.name"
             @click="expandedDefs[def.name] = !expandedDefs[def.name]"
           >
             <component
@@ -295,6 +307,8 @@ function onClose () {
                 v-for="key in def.meta_keys"
                 :key="key"
                 class="flex items-center gap-[10px] py-[7px] pr-4 pl-[38px] cursor-pointer transition-colors hover:bg-gray-50"
+                :data-qe-meta-key="key"
+                :data-qe-meta-selected="String(isCustomKeySelected(key, def.name))"
                 @click="toggleCustomKey(key, def.name)"
               >
                 <span

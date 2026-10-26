@@ -134,6 +134,50 @@ abstract class Abstract_Exporter {
     const HEADER_FORMATTING_EXCLUDED = array( '0', 'exclude' );
 
     /**
+     * The Escape formatting modes the delimited writer understands.
+     *
+     * The single source of truth for the setting's vocabulary. Every surface —
+     * the export engine, both settings screens and the Settings REST route —
+     * resolves through normalize_escape_formatting(), so a fourth mode belongs
+     * here plus its own radio, and nowhere else.
+     *
+     * The modes control *quoting only*, and only for CSV and TSV:
+     *  - `all`   wrap every cell, doubling any embedded quote.
+     *  - `excel` quote only where the delimiter, a quote or a newline forces it.
+     *  - `none`  write the raw value, quoting nothing.
+     *
+     * @since 2.8.2
+     * @var array
+     */
+    const ESCAPE_FORMATTING_MODES = array( 'all', 'excel', 'none' );
+
+    /**
+     * The Escape formatting mode an unset, empty or unrecognised value resolves to.
+     *
+     * `all` matches the default the settings screens have always advertised, and
+     * is the fail-safe of the three: quoting every cell keeps a file parseable
+     * whatever it contains, where `none` can produce a corrupt one.
+     *
+     * @since 2.8.2
+     * @var string
+     */
+    const DEFAULT_ESCAPE_FORMATTING = 'all';
+
+    /**
+     * Option key the Settings SPA has been writing this control to.
+     *
+     * Not the key anything reads. The SPA bound its radios to `field_escape`
+     * while every read path — the engine and the legacy settings screen — uses
+     * `escape_formatting`, so a store that has only ever used the SPA has its
+     * choice stranded under this key. stored_escape_formatting() adopts it when
+     * the canonical option was never written.
+     *
+     * @since 2.8.2
+     * @var string
+     */
+    const ESCAPE_FORMATTING_LEGACY_SPA_OPTION = 'field_escape';
+
+    /**
      * The exporter.
      *
      * @var object
@@ -153,6 +197,18 @@ abstract class Abstract_Exporter {
      * @var object
      */
     protected $export_settings;
+
+    /**
+     * Whether $export_settings belongs to the file this instance serves.
+     *
+     * A download can run while a newer export is in progress. The shared settings
+     * transient then holds that newer export's run stats, which must not be
+     * written into the archive meta of the downloaded file.
+     *
+     * @since 2.8.2
+     * @var bool
+     */
+    protected $settings_match_file = true;
 
     /**
      * Batch to export.
@@ -273,11 +329,7 @@ abstract class Abstract_Exporter {
                     $headers = array_map( array( $this, 'escape_formula_value' ), $headers );
                 }
 
-                // PHP 8.4 deprecates calling fputcsv() without $escape. The
-                // historical default is a backslash, so it is passed explicitly to
-                // keep the written file byte-identical on every supported version.
-                // Passing "" instead would silently change the escaping rules.
-                $write = fputcsv( $this->file, $headers, $this->_get_delimiter(), '"', '\\' );
+                $write = $this->write_delimited_row( $headers, $this->delimited_escape_mode(), $this->escapes_delimited_formulas() );
                 if ( false === $write ) {
                     // translators: %s: file path.
                     throw new Exception( sprintf( esc_html__( 'Failed to write headers to file %s.', 'woocommerce-exporter' ), esc_html( $this->file_path ) ) );
@@ -320,16 +372,16 @@ abstract class Abstract_Exporter {
 
             // Neutralise spreadsheet formula injection unless Excel-formula
             // export is explicitly enabled.
+            // Both are read once per chunk, not once per row or cell.
             $escape_formulas = $this->escapes_delimited_formulas();
+            $escape_mode     = $this->delimited_escape_mode();
 
             // Write the data to the file.
             foreach ( $dataset as $data ) {
                 if ( $escape_formulas ) {
                     $data = array_map( array( $this, 'escape_formula_value' ), $data );
                 }
-                // $escape is passed explicitly for the same reason as in
-                // prepare_file(): PHP 8.4 deprecates omitting it.
-                $write = fputcsv( $this->file, $data, $this->_get_delimiter(), '"', '\\' );
+                $this->write_delimited_row( $data, $escape_mode, $escape_formulas );
             }
 
             // Close the file.
@@ -613,13 +665,18 @@ abstract class Abstract_Exporter {
         self::clear_attachment_guid( (int) $post_id );
 
         add_post_meta( $post_id, '_woo_export_type', $this->export_type );
-        add_post_meta( $post_id, '_woo_start_time', $this->export_settings->start_time );
         add_post_meta( $post_id, '_woo_end_time', microtime( true ) );
-        add_post_meta( $post_id, '_woo_idle_memory_start', $this->export_settings->idle_memory_start );
-        add_post_meta( $post_id, '_woo_data_memory_start', $this->export_settings->data_memory_start );
-        add_post_meta( $post_id, '_woo_idle_memory_end', Helper::get_current_memory_usage() - $this->export_settings->idle_memory_start );
-        add_post_meta( $post_id, '_woo_columns', $this->export_settings->total_columns );
         add_post_meta( $post_id, '_woo_rows', $this->total_rows );
+
+        // The run stats come from the settings. When they belong to another
+        // export, they are left out rather than written against this file.
+        if ( $this->settings_match_file ) {
+            add_post_meta( $post_id, '_woo_start_time', $this->export_settings->start_time );
+            add_post_meta( $post_id, '_woo_idle_memory_start', $this->export_settings->idle_memory_start );
+            add_post_meta( $post_id, '_woo_data_memory_start', $this->export_settings->data_memory_start );
+            add_post_meta( $post_id, '_woo_idle_memory_end', Helper::get_current_memory_usage() - $this->export_settings->idle_memory_start );
+            add_post_meta( $post_id, '_woo_columns', $this->export_settings->total_columns );
+        }
 
         return (int) $post_id;
     }
@@ -800,6 +857,154 @@ abstract class Abstract_Exporter {
     }
 
     /**
+     * Resolve any stored or posted Escape formatting value to one of the known modes.
+     *
+     * Mirrors normalize_header_formatting(): called once in
+     * setup_export_settings() rather than at each write site, so every surface
+     * agrees about what a stored value means — including what an unset option
+     * defaults to.
+     *
+     * Idempotent, so a caller may safely re-feed it its own result.
+     *
+     * Unknown values fail safe to DEFAULT_ESCAPE_FORMATTING rather than falling
+     * through to the permissive `none`: a hand-edited option or a bad REST client
+     * must never be the thing that turns quoting off and starts writing corrupt
+     * delimited files.
+     *
+     * `self::` deliberately, not `static::`. The external caller
+     * (Settings_Controller) names Abstract_Exporter explicitly, so a subclass
+     * override would reach Quick Export but not the settings screens — the exact
+     * cross-surface disagreement this normaliser exists to eliminate.
+     *
+     * @since 2.8.2
+     * @access public
+     *
+     * @param mixed $value The per-export value, or an empty string to fall back to the stored setting.
+     * @return string One of ESCAPE_FORMATTING_MODES.
+     */
+    public static function normalize_escape_formatting( $value ) {
+        // A non-scalar (a stray `escape_formatting[]` in the posted form data) or
+        // an empty value means "not specified" — fall back to the stored setting.
+        if ( ! is_scalar( $value ) || '' === $value ) {
+            return self::stored_escape_formatting();
+        }
+
+        return self::match_escape_formatting_mode( $value );
+    }
+
+    /**
+     * Match one non-empty scalar against the known Escape formatting modes.
+     *
+     * Extracted so normalize_escape_formatting() and stored_escape_formatting()
+     * share one definition of what counts as a mode rather than each carrying a
+     * copy that could drift — and so neither has to call the other, which would
+     * put a mutual recursion one careless guard-edit away.
+     *
+     * Case and surrounding whitespace are forgiven because a hand-edited option
+     * can reach here; anything still unrecognised resolves to the fail-safe
+     * default.
+     *
+     * @since 2.8.2
+     * @access private
+     *
+     * @param scalar $value A non-empty scalar to match.
+     * @return string One of ESCAPE_FORMATTING_MODES.
+     */
+    private static function match_escape_formatting_mode( $value ) {
+        $value = strtolower( trim( (string) $value ) );
+
+        return in_array( $value, self::ESCAPE_FORMATTING_MODES, true ) ? $value : self::DEFAULT_ESCAPE_FORMATTING;
+    }
+
+    /**
+     * The stored global Escape formatting mode.
+     *
+     * A named wrapper over the "no per-export value" case, whose bare empty
+     * string reads as a placeholder at the call site rather than as "fall back to
+     * the stored setting". Keeps the option keys and the default in one place.
+     *
+     * Reconciles the two option keys this control has been split across. The
+     * canonical `escape_formatting` wins whenever it holds a value, because it is
+     * the key the legacy settings screen writes. Only when it was never written
+     * does the SPA's orphan `field_escape` apply — such a store has never used
+     * the legacy settings screen, so there is no competing intent to override,
+     * and adopting it is what makes the SPA control work at all. The orphan is
+     * adopted only when it holds `all` or `excel`; an orphan `none` falls back
+     * to the default.
+     *
+     * @since 2.8.2
+     * @access public
+     *
+     * @return string One of ESCAPE_FORMATTING_MODES.
+     */
+    public static function stored_escape_formatting() {
+        // woo_ce_get_option() collapses a missing option and one stored as an
+        // empty string to the supplied default, so '' means "never written" for
+        // both keys without a second get_option() round trip.
+        $stored = woo_ce_get_option( 'escape_formatting', '' );
+
+        if ( '' === $stored ) {
+            $stored = woo_ce_get_option( self::ESCAPE_FORMATTING_LEGACY_SPA_OPTION, '' );
+
+            // The orphan value never had an effect, so it is weak evidence of
+            // intent. Adopt it only when it is a safe mode. `none` can corrupt a
+            // row that holds the delimiter, so a store must choose it again on
+            // purpose.
+            if ( ! in_array( $stored, array( 'all', 'excel' ), true ) ) {
+                $stored = '';
+            }
+        }
+
+        if ( ! is_scalar( $stored ) || '' === $stored ) {
+            return self::DEFAULT_ESCAPE_FORMATTING;
+        }
+
+        return self::match_escape_formatting_mode( $stored );
+    }
+
+    /**
+     * Sanitize a map of per-field column-label overrides.
+     *
+     * Keys are export-field slugs and values are the store owner's replacement
+     * column headers, so both sides are cleaned as free text. The key is not put
+     * through sanitize_key(): registered field names are case-sensitive — the
+     * Review type exports `comment_ID` and `comment_author_IP` — and
+     * lower-casing them would stop the override matching its column at all. An
+     * entry whose label reduces to an empty string is dropped rather than kept,
+     * because a blank header is never what a rename meant and the field's
+     * default label is the correct fallback.
+     *
+     * @since 2.8.2
+     * @access private
+     *
+     * @param mixed $labels Raw overrides, keyed by field slug. Anything but an array yields an empty map.
+     * @return array Sanitized overrides, keyed by field slug.
+     */
+    private static function sanitize_field_labels( $labels ) {
+        if ( ! is_array( $labels ) ) {
+            return array();
+        }
+
+        $sanitized = array();
+
+        foreach ( $labels as $name => $label ) {
+            if ( ! is_scalar( $label ) ) {
+                continue;
+            }
+
+            $label = sanitize_text_field( (string) $label );
+
+            if ( '' === $label ) {
+                continue;
+            }
+
+            $sanitized[ sanitize_text_field( (string) $name ) ] = $label;
+        }
+
+        return $sanitized;
+    }
+
+    /**
      * Neutralise a cell value that a spreadsheet application would interpret as a
      * formula.
      *
@@ -881,6 +1086,127 @@ abstract class Abstract_Exporter {
     }
 
     /**
+     * Write one CSV/TSV row, honouring the Escape formatting setting.
+     *
+     * Every mode goes through this one writer. fputcsv() is not used: with a
+     * backslash escape character it does not double a quote that follows a
+     * backslash, so `a\",=HYPERLINK(...)` ended the cell early for an RFC 4180
+     * reader and put the formula at the start of a new cell. Here every
+     * embedded quote is doubled and the backslash has no special meaning.
+     *
+     * The line terminator is "\n" in every mode, matching what fputcsv() wrote,
+     * so switching modes changes quoting and nothing else.
+     *
+     * @since 2.8.2
+     * @access protected
+     *
+     * @param array  $fields          The row's cell values, in column order.
+     * @param string $mode            One of ESCAPE_FORMATTING_MODES, from delimited_escape_mode().
+     * @param bool   $escape_formulas Whether to neutralise formula pieces of an unenclosed `none` cell.
+     * @return bool True on success, false if the write failed.
+     */
+    protected function write_delimited_row( $fields, $mode, $escape_formulas ) {
+        $delimiter = $this->_get_delimiter();
+        $cells     = array();
+
+        // `excel` keeps the cells fputcsv() quoted: the delimiter, a quote, a
+        // backslash, a line break, a tab or a space. `none` quotes only a quote
+        // or a line break (see below). `all` quotes every cell.
+        $excel_triggers = $delimiter . "\"\\\r\n\t ";
+        $none_triggers  = "\"\r\n";
+
+        foreach ( $fields as $field ) {
+            $field = (string) $field;
+
+            if ( 'all' === $mode ) {
+                $must_enclose = true;
+            } elseif ( 'excel' === $mode ) {
+                $must_enclose = '' !== $field && false !== strpbrk( $field, $excel_triggers );
+            } else {
+                // SECURITY: in `none`, a value that carries a line break or a
+                // quote is still enclosed. escape_formula_value() only tests the
+                // FIRST character of a cell. A raw line break ends the record, and
+                // a raw quote opens a quoted field that the next enclosed cell's
+                // quote closes. Either way, text the offset-0 test never saw lands
+                // at the start of a new record or cell and evaluates on open.
+                // Enclosing keeps the payload inside one cell.
+                //
+                // Enclosing rather than neutralising is deliberate: it leaves the
+                // bytes exactly as stored, which is what "do not escape any cells"
+                // promises, where inserting an apostrophe would not.
+                //
+                // A cell containing only the delimiter is still written raw and will
+                // still split the row. That is the documented, data-preserving hazard
+                // of the mode and the reason both settings screens caution against it.
+                $must_enclose = false !== strpbrk( $field, $none_triggers );
+
+                // An unenclosed cell is read by a spreadsheet as several fields
+                // when it carries the delimiter. Each piece is a new cell start the
+                // offset-0 test never saw, so every piece is neutralised on its own.
+                if ( ! $must_enclose && $escape_formulas ) {
+                    $field = $this->escape_formula_pieces( $field, $delimiter );
+                }
+            }
+
+            // Doubling the embedded quote before wrapping (RFC 4180) is what stops
+            // a quoted cell terminating early, so the file stays parseable.
+            $cells[] = $must_enclose ? '"' . str_replace( '"', '""', $field ) . '"' : $field;
+        }
+
+        // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+        $written = fwrite( $this->file, implode( $delimiter, $cells ) . "\n" );
+        // phpcs:enable WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+
+        return false !== $written;
+    }
+
+    /**
+     * The Escape formatting mode for this export's delimited writer.
+     *
+     * Resolved here rather than read straight off the settings object, which is
+     * not guaranteed to have been through setup_export_settings(): a batch
+     * resumed from the settings transient (which may have been written by an
+     * earlier plugin version) or a third-party `wsed_export_settings` filter can
+     * both put a raw or empty value on the property. Left untested, an empty
+     * value would miss the `excel` and `all` branches and silently write the
+     * whole file unquoted — the one mode that can corrupt it.
+     *
+     * Callers read it once per header or chunk, not once per row.
+     *
+     * @since 2.8.2
+     * @access protected
+     *
+     * @return string One of ESCAPE_FORMATTING_MODES.
+     */
+    protected function delimited_escape_mode() {
+        return self::normalize_escape_formatting( $this->export_settings->escape_formatting ?? '' );
+    }
+
+    /**
+     * Neutralise every piece of an unenclosed cell that a spreadsheet would read
+     * as the start of a field.
+     *
+     * Splits on the delimiter, then runs each piece through
+     * escape_formula_value(). A cell without the delimiter is one piece, so the
+     * result matches escape_formula_value() for it. An unenclosed cell never
+     * holds a quote, because write_delimited_row() encloses any cell that does.
+     *
+     * @since 2.8.2
+     * @access private
+     *
+     * @param string $value     Cell value.
+     * @param string $delimiter Column delimiter.
+     * @return string Cell value with each piece neutralised.
+     */
+    private function escape_formula_pieces( $value, $delimiter ) {
+        if ( '' === $delimiter || false === strpos( $value, $delimiter ) ) {
+            return $this->escape_formula_value( $value );
+        }
+
+        return implode( $delimiter, array_map( array( $this, 'escape_formula_value' ), explode( $delimiter, $value ) ) );
+    }
+
+    /**
      * Setup export settings.
      *
      * @since 2.7.3
@@ -893,6 +1219,15 @@ abstract class Abstract_Exporter {
      *              normalize_header_formatting(). It previously carried the raw
      *              stored value (the `include`/`exclude` slug or the legacy
      *              `1`/`0`), so integrations comparing it strictly need updating.
+     * @since 2.8.2 `$export->escape_formatting` is now guaranteed to be one of
+     *              `all`, `excel` or `none`. It previously carried the raw
+     *              stored value, which could be an empty string or any
+     *              hand-edited text. Resolve a value of your own through
+     *              Abstract_Exporter::normalize_escape_formatting().
+     * @since 2.8.2 `$export->field_labels` is new: the per-export column-label
+     *              overrides the caller sent, keyed by field slug and already
+     *              applied to `$export->columns`. Empty when the caller sent
+     *              none.
      *
      * @param array $settings The settings to be exported.
      *                        Obtained from the form data via quick export or the post data and meta via scheduled export.
@@ -914,7 +1249,7 @@ abstract class Abstract_Exporter {
         $export->header_formatting  = self::normalize_header_formatting( $settings['header_formatting'] ?? '' );
         $export->delimiter          = $settings['delimiter'] ?? get_option( WOO_CE_PREFIX . '_delimiter', ',' );
         $export->category_separator = $settings['category_separator'] ?? get_option( WOO_CE_PREFIX . '_category_separator', '|' );
-        $export->escape_formatting  = $settings['escape_formatting'] ?? get_option( WOO_CE_PREFIX . '_escape_formatting', 'all' );
+        $export->escape_formatting  = self::normalize_escape_formatting( $settings['escape_formatting'] ?? '' );
         $export->batch_size         = $settings['batch_size'] ?? get_option( WOO_CE_PREFIX . '_batch_size', WSED_DEFAULT_BATCH_SIZE );
         $export->export_template    = ( isset( $settings['export_template'] ) ? absint( $settings['export_template'] ) : false );
         $export->type               = ( isset( $settings['dataset'] ) ? sanitize_text_field( $settings['dataset'] ) : false );
@@ -922,6 +1257,7 @@ abstract class Abstract_Exporter {
         $export->offset             = ( isset( $settings['offset'] ) ? sanitize_text_field( $settings['offset'] ) : '' );
         $export->fields             = ( isset( $settings[ $export->type . '_fields' ] ) && is_array( $settings[ $export->type . '_fields' ] ) ? array_map( 'sanitize_text_field', $settings[ $export->type . '_fields' ] ) : array() );
         $export->fields_order       = ( isset( $settings[ $export->type . '_fields_order' ] ) && is_array( $settings[ $export->type . '_fields_order' ] ) ? array_map( 'absint', $settings[ $export->type . '_fields_order' ] ) : false );
+        $export->field_labels       = self::sanitize_field_labels( $settings[ $export->type . '_labels' ] ?? array() );
 
         // Force the batch size to default if it's empty.
         $export->batch_size = empty( $export->batch_size ) ? WSED_DEFAULT_BATCH_SIZE : $export->batch_size;
@@ -955,7 +1291,7 @@ abstract class Abstract_Exporter {
             'limit_volume' => $export->limit_volume,
             'offset'       => $export->offset,
             'encoding'     => $export->encoding,
-            'date_format'  => get_option( WOO_CE_PREFIX . '_date_format', 'd/m/Y' ),
+            'date_format'  => \VisserLabs\WSE\Helpers\Export::get_date_format(),
         );
         $export->args        = apply_filters( 'wsed_extend_export_dataset_args', $export_dataset_args, $export, $settings );
 
@@ -976,6 +1312,13 @@ abstract class Abstract_Exporter {
      * Get export columns.
      *
      * @since 2.7.3
+     * @since 2.8.2 Applies `$export->field_labels`, the per-export column-label
+     *              overrides, on top of any the Export Template has stored — and
+     *              does so AFTER `wsed_override_export_columns`, so a consumer of
+     *              that filter which rebuilds the column map cannot discard the
+     *              rename. An integration that needs the last word on a column
+     *              label must therefore hook `wsed_export_settings` and edit
+     *              `$export->field_labels` instead.
      * @access public
      *
      * @param array  $fields The default fields.
@@ -1018,7 +1361,92 @@ abstract class Abstract_Exporter {
             }
         }
 
-        return apply_filters( 'wsed_override_export_columns', $columns, $fields, $export );
+        $columns = apply_filters( 'wsed_override_export_columns', $columns, $fields, $export );
+
+        // Override labels the caller renamed for this export only.
+        //
+        // Applied last, after the filter above, for two reasons.
+        //
+        // A consumer of that filter can rebuild $columns from the field defaults
+        // rather than edit what it was handed — Order does so for its item
+        // columns ({@see \VisserLabs\WSE\Classes\Export\Order::export_columns()}).
+        // An override applied before the filter is discarded on that path.
+        //
+        // Running last also keeps the rename ahead of the Export Template block
+        // above, which is the right way round: the Quick Export SPA populates
+        // this map only from the store owner's own inline chip rename or Manage
+        // Fields edit, made after the template was loaded, so it is the later
+        // and more specific instruction.
+        //
+        // Without any of this the rename reached the server and was silently
+        // dropped, and the file kept the field's default header.
+        if ( ! empty( $export->field_labels ) ) {
+            $export_format = isset( $export->export_format ) ? $export->export_format : '';
+
+            foreach ( $export->field_labels as $key => $label ) {
+                // A nested value is a column GROUP a filter consumer built, never
+                // a single header one rename can stand in for.
+                //
+                // Item columns are the known gap here: the Order exporter re-keys
+                // them (`order_items_sku` becomes `order_items_1_sku`), so a rename
+                // on one has no matching key left to find.
+                if ( ! isset( $columns[ $key ] ) || is_array( $columns[ $key ] ) ) {
+                    continue;
+                }
+
+                // Keep the field's default label when this format's writer would
+                // derive a broken identifier from the rename. Silently, because
+                // that is exactly the behaviour before this override existed —
+                // those writers only ever saw the default label — so no export
+                // that works today starts failing.
+                if ( ! self::label_is_usable_by_writer( $label, $export_format ) ) {
+                    continue;
+                }
+
+                $columns[ $key ] = $label;
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Whether a column label can serve as an identifier for the given format's writer.
+     *
+     * The XML, RSS and JSON writers do not print the column label — they turn it
+     * into an element name or an object key with sanitize_key() — so a label that
+     * reduces to something unusable there breaks the file rather than merely
+     * reading oddly:
+     *
+     * - A label carrying no ASCII alphanumerics, `商品名` for one, reduces to an
+     *   empty string. SimpleXMLElement::addChild() throws a ValueError on that,
+     *   and a JSON export collapses every such column onto the `""` key.
+     * - A label opening with a digit or a hyphen, `2024 Total` for one, reduces
+     *   to `2024total`, which is not a valid XML name.
+     *
+     * Every other format prints the label verbatim and constrains it in no way.
+     *
+     * @since 2.8.2
+     * @access private
+     *
+     * @param string $label         The replacement column label.
+     * @param string $export_format The export format slug.
+     * @return bool False only when the format derives an identifier from the label and this label cannot form a valid one.
+     */
+    private static function label_is_usable_by_writer( $label, $export_format ) {
+        $key = sanitize_key( $label );
+
+        switch ( $export_format ) {
+            case 'xml':
+            case 'rss':
+                // An XML element name has to open with a letter or an underscore,
+                // and sanitize_key() has already reduced the label to [a-z0-9_-].
+                return 1 === preg_match( '/^[a-z_]/', $key );
+            case 'json':
+                return '' !== $key;
+            default:
+                return true;
+        }
     }
 
     /**
@@ -1161,6 +1589,18 @@ abstract class Abstract_Exporter {
      */
     public function set_export_settings( $export_settings ) {
         $this->export_settings = $export_settings;
+    }
+
+    /**
+     * Set whether the export settings belong to the file this instance serves.
+     *
+     * @since 2.8.2
+     * @access public
+     *
+     * @param bool $matches False when the settings belong to another export.
+     */
+    public function set_settings_match_file( $matches ) {
+        $this->settings_match_file = (bool) $matches;
     }
 
     /**

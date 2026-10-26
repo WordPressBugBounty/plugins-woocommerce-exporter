@@ -11,6 +11,7 @@ use DateTime;
 use DateTimeZone;
 use WC_DateTime;
 use WC_Countries;
+use VisserLabs\WSE\Helpers\Export as Export_Helper;
 
 /**
  * Stripe class.
@@ -61,6 +62,10 @@ class Formatting {
      * string inputs via the store-configured date format to avoid fatal errors
      * on slash-delimited (d/m/Y) strings whose day value exceeds 12.
      *
+     * @since 2.8.2 Coerces a corrupted store date-format option. A stored '' was returned
+     *              verbatim by get_option(), and format('') is '', so every exported date
+     *              column came out blank.
+     *
      * @param string|int|\DateTimeInterface $date   Date.
      * @param string                        $format Date format. Defaults to the store-configured date format option.
      * @param bool                          $time   Whether to append wc_time_format() to the output.
@@ -71,7 +76,18 @@ class Formatting {
             return '';
         }
 
-        $store_format = get_option( WOO_CE_PREFIX . '_date_format', 'Y-m-d H:i:s' );
+        /*
+         * Coerced, not read raw. `get_option()`'s default applies only when the option
+         * ROW IS ABSENT, so a row holding '' came back as '' and every exported date
+         * column rendered as an empty string (`$datetime->format('')` is ''). A
+         * store that has never saved the setting keeps this method's historical
+         * 'Y-m-d H:i:s', so its exported date columns do not change. A corrupt row
+         * falls back to Export_Helper::DEFAULT_DATE_FORMAT, the same value that
+         * Activation::repair_corrupt_date_format() writes over it.
+         */
+        $store_format = Export_Helper::coerce_date_format(
+            get_option( WOO_CE_PREFIX . '_date_format', 'Y-m-d H:i:s' )
+        );
 
         if ( $date instanceof \DateTimeInterface ) {
             // Preserve the input's timezone so format() outputs in the same offset the
@@ -121,17 +137,22 @@ class Formatting {
     }
 
     /**
-     * Format a date.
+     * Normalise a submitted date string to ISO `Y-m-d`.
+     *
+     * @since 2.7.3
+     * @since 2.8.2 Reads the store format through `Export_Helper::get_date_format()`, so a
+     *              corrupted option can no longer make every bound sanitize to ''. Also
+     *              accepts ISO input as a fallback.
      *
      * @param string $date_string Date string.
-     * @return string
+     * @return string ISO date, or '' when the value cannot be read.
      */
     public static function sanitize_date( $date_string ) {
         if ( '' === $date_string ) {
             return '';
         }
 
-        $date_format = get_option( WOO_CE_PREFIX . '_date_format', 'd/m/Y' );
+        $date_format = Export_Helper::get_date_format();
 
         // Replace pipe (|) with slash (/).
         if ( strpos( $date_string, '|' ) !== false ) {
@@ -141,13 +162,27 @@ class Formatting {
             $date_format = str_replace( '|', '/', $date_format );
         }
 
-        $date = DateTime::createFromFormat( $date_format, sanitize_text_field( $date_string ) );
+        $date_string = sanitize_text_field( $date_string );
 
-        if ( $date instanceof DateTime ) {
-            return $date->format( 'Y-m-d' );
-        } else {
-            return '';
+        /*
+         * The store format first, then ISO — the same order, and for the same reason, as
+         * Export_Helper::parse_filter_date(). The ISO fallback covers a bound that reached
+         * this method in the shape the native date picker emits rather than in the store's
+         * display format; without it such a bound became '', and the caller then handed an
+         * empty string to the date filter, which read it as "now".
+         */
+        foreach ( array( $date_format, 'Y-m-d' ) as $format ) {
+            $date   = DateTime::createFromFormat( $format, $date_string );
+            $errors = DateTime::getLastErrors();
+            // A date that overflows, such as 31/02/2024, is a warning, not a
+            // failure. It is rejected here, not rolled over to 2024-03-02.
+            // getLastErrors() returns false on PHP 8.2+ when there are no issues.
+            if ( $date instanceof DateTime && ! ( $errors && ( $errors['warning_count'] || $errors['error_count'] ) ) ) {
+                return $date->format( 'Y-m-d' );
+            }
         }
+
+        return '';
     }
 
     /**

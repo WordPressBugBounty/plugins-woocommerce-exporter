@@ -412,9 +412,7 @@ function woo_ce_orders_custom_fields_extra_product_options() {
     }
 
     $custom_extra_product_options = woo_ce_get_option( 'custom_extra_product_options', '' );
-    if ( $custom_extra_product_options ) {
-        $custom_extra_product_options = implode( "\n", $custom_extra_product_options );
-    }
+    $custom_extra_product_options = woo_ce_format_custom_meta_lines( $custom_extra_product_options );
 
     ob_start();
     ?>
@@ -445,9 +443,7 @@ function woo_ce_orders_custom_fields_product_addons() {
     }
 
     $custom_product_addons = woo_ce_get_option( 'custom_product_addons', '' );
-    if ( $custom_product_addons ) {
-        $custom_product_addons = implode( "\n", $custom_product_addons );
-    }
+    $custom_product_addons = woo_ce_format_custom_meta_lines( $custom_product_addons );
 
     ob_start();
     ?>

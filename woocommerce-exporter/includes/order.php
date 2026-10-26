@@ -1426,7 +1426,16 @@ function woo_ce_get_orders( $export_type = 'order', $args = array(), $export = a
                 break;
 
             case 'manual':
-                $date_format = woo_ce_get_option( 'date_format', 'd/m/Y' );
+                /*
+                 * Read through the helper, not woo_ce_get_option(). The wrapper coerces a
+                 * stored '' to the default but passes '1' and 'custom' straight through,
+                 * and this branch cannot survive either: woo_ce_validate_order_date() then
+                 * fails for both bounds and the code below falls back to
+                 * strtotime( $bound, current_time( 'timestamp' ) ), which returns NOW for
+                 * an unreadable bound. A store holding '1' saw its selected range become
+                 * today.
+                 */
+                $date_format = \VisserLabs\WSE\Helpers\Export::get_date_format();
 
                 // Populate empty from or to dates.
                 if ( ! empty( $args['order_dates_from'] ) ) {
@@ -1701,7 +1710,10 @@ function woo_ce_get_orders( $export_type = 'order', $args = array(), $export = a
                 break;
 
             case 'manual':
-                $date_format = woo_ce_get_option( 'date_format', 'd/m/Y' );
+                // Same reason as the Order Created Dates branch above: read the format
+                // through the helper so a corrupt option cannot turn this range into
+                // "today".
+                $date_format = \VisserLabs\WSE\Helpers\Export::get_date_format();
 
                 // Populate empty from or to dates.
                 if ( ! empty( $args['order_modified_dates_from'] ) ) {
@@ -2276,7 +2288,9 @@ function woo_ce_get_orders( $export_type = 'order', $args = array(), $export = a
             // Filter Orders by Product Brand.
             if ( ! empty( $product_brand ) ) {
                 if ( ! empty( $order_items ) ) {
-                    $term_taxonomy = apply_filters( 'woo_ce_brand_term_taxonomy', 'product_brand' );
+                    // Match every taxonomy the Brand dropdowns list, not only
+                    // the one woo_ce_brand_term_taxonomy resolves to.
+                    $term_taxonomy = woo_ce_get_brand_term_taxonomies( true );
                     $args          = array(
                         'fields' => 'ids',
                     );

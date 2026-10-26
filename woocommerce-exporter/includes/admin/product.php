@@ -938,12 +938,8 @@ function woo_ce_products_description_excerpt_formatting() {
  */
 function woo_ce_products_custom_fields() {
 
-    if ( $custom_products = woo_ce_get_option( 'custom_products', '' ) ) {
-        $custom_products = implode( "\n", $custom_products );
-    }
-    if ( $custom_attributes = woo_ce_get_option( 'custom_attributes', '' ) ) {
-        $custom_attributes = implode( "\n", $custom_attributes );
-    }
+    $custom_products   = woo_ce_format_custom_meta_lines( woo_ce_get_option( 'custom_products', '' ) );
+    $custom_attributes = woo_ce_format_custom_meta_lines( woo_ce_get_option( 'custom_attributes', '' ) );
 
     $troubleshooting_url = woo_ce_get_kb_url();
 
@@ -1115,7 +1111,8 @@ function woo_ce_scheduled_export_product_filter_by_product_category( $post_ID = 
     if ( apply_filters( 'woo_ce_override_products_filter_by_product_category', true ) ) {
         $product_categories = woo_ce_get_product_categories( $args );
     }
-    $types = get_post_meta( $post_ID, '_filter_product_category', true );
+    $types   = get_post_meta( $post_ID, '_filter_product_category', true );
+    $exclude = absint( get_post_meta( $post_ID, '_filter_product_category_exclude', true ) );
 
     ob_start();
     ?>
@@ -1131,6 +1128,11 @@ function woo_ce_scheduled_export_product_filter_by_product_category( $post_ID = 
         <?php } else { ?>
             <?php esc_html_e( 'No Product Categories were found linked to Products.', 'woocommerce-exporter' ); ?>
         <?php } ?>
+    </p>
+    <p class="form-field discount_type_field">
+        <label for="product_filter_category_exclude"><?php esc_html_e( '(continued)', 'woocommerce-exporter' ); ?></label>
+        <input type="radio" name="product_filter_category_exclude" value="0" <?php checked( $exclude, 0 ); ?> /> <?php esc_html_e( 'Include only Products in these selected Product Categories', 'woocommerce-exporter' ); ?><br />
+        <input type="radio" id="product_filter_category_exclude" name="product_filter_category_exclude" value="1" <?php checked( $exclude, 1 ); ?> /> <?php esc_html_e( 'Filter out Products in these selected Product Categories', 'woocommerce-exporter' ); ?>
     </p>
 <?php
     ob_end_flush();
@@ -1150,7 +1152,8 @@ function woo_ce_scheduled_export_product_filter_by_product_tag( $post_ID = 0 ) {
     if ( apply_filters( 'woo_ce_override_products_filter_by_product_tag', true ) ) {
         $product_tags = woo_ce_get_product_tags( $args );
     }
-    $types = get_post_meta( $post_ID, '_filter_product_tag', true );
+    $types   = get_post_meta( $post_ID, '_filter_product_tag', true );
+    $exclude = absint( get_post_meta( $post_ID, '_filter_product_tag_exclude', true ) );
 
     ob_start();
     ?>
@@ -1166,6 +1169,11 @@ function woo_ce_scheduled_export_product_filter_by_product_tag( $post_ID = 0 ) {
         <?php } else { ?>
             <?php esc_html_e( 'No Product Tags were found linked to Products.', 'woocommerce-exporter' ); ?>
         <?php } ?>
+    </p>
+    <p class="form-field discount_type_field">
+        <label for="product_filter_tag_exclude"><?php esc_html_e( '(continued)', 'woocommerce-exporter' ); ?></label>
+        <input type="radio" name="product_filter_tag_exclude" value="0" <?php checked( $exclude, 0 ); ?> /> <?php esc_html_e( 'Include only Products with these selected Product Tags', 'woocommerce-exporter' ); ?><br />
+        <input type="radio" id="product_filter_tag_exclude" name="product_filter_tag_exclude" value="1" <?php checked( $exclude, 1 ); ?> /> <?php esc_html_e( 'Filter out Products with these selected Product Tags', 'woocommerce-exporter' ); ?>
     </p>
 <?php
     ob_end_flush();

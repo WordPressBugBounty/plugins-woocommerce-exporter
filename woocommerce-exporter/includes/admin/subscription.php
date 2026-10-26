@@ -336,9 +336,7 @@ function woo_ce_subscriptions_custom_fields_link() {
  */
 function woo_ce_subscriptions_custom_fields() {
 
-    if ( $custom_subscriptions = woo_ce_get_option( 'custom_subscriptions', '' ) ) {
-        $custom_subscriptions = implode( "\n", $custom_subscriptions );
-    }
+    $custom_subscriptions = woo_ce_format_custom_meta_lines( woo_ce_get_option( 'custom_subscriptions', '' ) );
 
     $troubleshooting_url = woo_ce_get_kb_url();
 

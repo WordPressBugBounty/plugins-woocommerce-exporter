@@ -7,6 +7,14 @@ import { useUpsellStore } from './upsell'
 // Steps: type → fields → filters → options
 export const STEPS = ['type', 'fields', 'filters', 'options']
 
+// Custom meta definitions whose export field name is NOT the meta key.
+// custom_order_items and custom_order_products register their fields as
+// `order_items_<sanitize_key(key)>`, custom_attributes as `attribute_<slug>`.
+// The browser cannot reproduce sanitize_key() faithfully, so naming those
+// columns here would invent a field name the engine then drops. They keep the
+// behaviour they have today and are left to a follow-up.
+const PREFIXED_META_DEFINITIONS = ['custom_order_items', 'custom_order_products', 'custom_attributes']
+
 export const useQuickExportStore = defineStore('quickExport', () => {
   const upsell = useUpsellStore()
 
@@ -539,6 +547,51 @@ export const useQuickExportStore = defineStore('quickExport', () => {
 
   // ─── Internal ────────────────────────────────────────────────────────────
 
+  /**
+   * Split one custom meta textarea value into its keys.
+   *
+   * @param {string} raw Newline- or comma-separated meta keys.
+   * @return {string[]} The trimmed, non-empty keys.
+   */
+  function parseMetaKeys (raw) {
+    return String(raw ?? '')
+      .split(/[\n,]+/)
+      .map(k => k.trim())
+      .filter(Boolean)
+  }
+
+  /**
+   * The export field names for the custom meta keys ticked for this type.
+   *
+   * Ordered by the definitions as `customMetaValues` holds them, and within a
+   * definition by the order the keys were ticked.
+   *
+   * Keyed off `selectedType`, the same source `enabledFieldNames` reads, so
+   * the meta keys and the dedupe set can never come from different types.
+   *
+   * @return {string[]} Field names to ask the engine for.
+   */
+  function selectedCustomMetaFieldNames () {
+    const metaValues = customMetaValues.value[selectedType.value] ?? {}
+    const alreadyAsked = new Set(enabledFieldNames.value)
+    const names = []
+
+    Object.entries(metaValues).forEach(([definition, raw]) => {
+      if (PREFIXED_META_DEFINITIONS.includes(definition)) return
+      parseMetaKeys(raw).forEach((key) => {
+        // Every export type but order also serves its saved meta keys as
+        // ordinary fields, so the same key can arrive from both places. It
+        // cannot reach the file twice — the params are a map keyed by field
+        // name — but asking twice would leave a gap in the fields_order
+        // sequence, so the key is only ever added once.
+        if (alreadyAsked.has(key) || names.includes(key)) return
+        names.push(key)
+      })
+    })
+
+    return names
+  }
+
   function buildFormData (type) {
     const params = new URLSearchParams()
     params.set('dataset', type)
@@ -549,7 +602,20 @@ export const useQuickExportStore = defineStore('quickExport', () => {
     if (exportOffset.value) params.set('offset', exportOffset.value)
     if (exportBatchSize.value) params.set('batch_size', exportBatchSize.value)
 
-    const names = enabledFieldNames.value
+    // Regular fields first, then the custom meta keys the user ticked in the
+    // Manage Fields popup. A meta key can never come through enabledFieldNames:
+    // that reads the served field groups, and the Quick Export field list is
+    // built by the legacy woo_ce_get_<type>_fields(), which does not carry the
+    // saved custom meta keys for every type (order in particular). So the key
+    // is added here, from the only place that knows it was ticked.
+    //
+    // The engine is already able to build the column. A definition's keys are
+    // saved to the woo_ce_<definition> option, and the export type's
+    // get_default_fields() registers each of them as a real field under that
+    // exact name, which is what get_export_columns() matches a posted field
+    // name against. Before this the browser simply never asked for it, so the
+    // column was not blank — it was never created at all.
+    const names = [...enabledFieldNames.value, ...selectedCustomMetaFieldNames()]
     const labels = fieldLabels.value[type] ?? {}
     names.forEach((name, i) => {
       params.set(`${type}_fields[${name}]`, 'on')
@@ -561,10 +627,7 @@ export const useQuickExportStore = defineStore('quickExport', () => {
 
     // Legacy "${type}_custom_fields[]" — only set when the user typed keys in
     // the generic textarea (kept for backwards compatibility).
-    const metaKeys = customMetaKeys.value
-      .split(/[\n,]+/)
-      .map(k => k.trim())
-      .filter(Boolean)
+    const metaKeys = parseMetaKeys(customMetaKeys.value)
     metaKeys.forEach((key, i) => {
       params.set(`${type}_custom_fields[${i}]`, key)
     })
@@ -572,11 +635,7 @@ export const useQuickExportStore = defineStore('quickExport', () => {
     // Type-specific custom meta textareas (custom_products, custom_orders, …)
     const metaValues = customMetaValues.value[type] ?? {}
     Object.entries(metaValues).forEach(([name, raw]) => {
-      const keys = String(raw ?? '')
-        .split(/[\n,]+/)
-        .map(k => k.trim())
-        .filter(Boolean)
-      keys.forEach((key, i) => {
+      parseMetaKeys(raw).forEach((key, i) => {
         params.set(`${name}[${i}]`, key)
       })
     })

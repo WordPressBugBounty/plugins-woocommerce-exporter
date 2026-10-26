@@ -83,12 +83,10 @@ function woo_ce_export_settings_general() {
     $delete_file    = woo_ce_get_option( 'delete_file', 1 );
     $file_encodings = ( function_exists( 'mb_list_encodings' ) ? mb_list_encodings() : false );
     $encoding       = woo_ce_get_option( 'encoding', 'UTF-8' );
-    $date_format    = woo_ce_get_option( 'date_format', 'd/m/Y' );
-    // Reset the Date Format if corrupted.
-    if ( '1' === $date_format || '' === $date_format || false === $date_format ) {
-    $date_format = 'd/m/Y';
-    }
-    $escape_formatting    = woo_ce_get_option( 'escape_formatting', 'all' );
+    // Coerced by the helper, which also covers 'custom' — a value this screen's own
+    // save path used to persist and which the local guard here never caught.
+    $date_format          = \VisserLabs\WSE\Helpers\Export::get_date_format();
+    $escape_formatting    = \VisserLabs\WSE\Abstracts\Abstract_Exporter::stored_escape_formatting();
     $excel_formulas       = woo_ce_get_option( 'excel_formulas', 0 );
     $csv_formula_escaping = woo_ce_get_option( 'csv_formula_escaping', 1 );
     $timeout              = woo_ce_get_option( 'timeout', 0 );
@@ -168,11 +166,11 @@ function woo_ce_export_settings_general() {
     </th>
     <td>
         <ul style="margin-top:0.2em;">
-        <li><label><input type="radio" name="escape_formatting" value="all" <?php checked( $escape_formatting, 'all' ); ?> />&nbsp;<?php esc_html_e( 'Escape all cells', 'woocommerce-exporter' ); ?> - <span class="description"><?php esc_html_e( 'This will write field data exactly as it is saved in the database, regardless of the field type/format.', 'woocommerce-exporter' ); ?></span></label></li>
-        <li><label><input type="radio" name="escape_formatting" value="excel" <?php checked( $escape_formatting, 'excel' ); ?> />&nbsp;<?php esc_html_e( 'Escape cells as Excel would', 'woocommerce-exporter' ); ?> - <span class="description"><?php esc_html_e( 'This will change field data when writing to export file, just the same way Excel changes field data when you import CSV into Excel (Caution: this may mess up phone numbers and postcodes with leading zeroes).', 'woocommerce-exporter' ); ?></span></label></li>
-        <li><label><input type="radio" name="escape_formatting" value="none" <?php checked( $escape_formatting, 'none' ); ?> />&nbsp;<?php esc_html_e( 'Do not escape any cells', 'woocommerce-exporter' ); ?> - <span class="description"><?php esc_html_e( 'This will not change any field data when writing to export file (Caution: this may mess up text fields containing the delimiter character).', 'woocommerce-exporter' ); ?></span></label></li>
+        <li><label><input type="radio" name="escape_formatting" value="all" <?php checked( $escape_formatting, 'all' ); ?> />&nbsp;<?php esc_html_e( 'Escape all cells', 'woocommerce-exporter' ); ?> - <span class="description"><?php esc_html_e( 'This wraps every cell in quotes, so field data is written exactly as it is saved in the database.', 'woocommerce-exporter' ); ?></span></label></li>
+        <li><label><input type="radio" name="escape_formatting" value="excel" <?php checked( $escape_formatting, 'excel' ); ?> />&nbsp;<?php esc_html_e( 'Escape cells as Excel would', 'woocommerce-exporter' ); ?> - <span class="description"><?php esc_html_e( 'This quotes a cell only where a delimiter, quote or line break makes it necessary, the same way Excel writes a CSV.', 'woocommerce-exporter' ); ?></span></label></li>
+        <li><label><input type="radio" name="escape_formatting" value="none" <?php checked( $escape_formatting, 'none' ); ?> />&nbsp;<?php esc_html_e( 'Do not escape any cells', 'woocommerce-exporter' ); ?> - <span class="description"><?php esc_html_e( 'This quotes nothing, except a field containing a line break (Caution: this corrupts any field containing the delimiter character).', 'woocommerce-exporter' ); ?></span></label></li>
         </ul>
-        <p class="description"><?php esc_html_e( 'Choose the field escape format that suits your spreadsheet software (e.g. Excel).', 'woocommerce-exporter' ); ?></p>
+        <p class="description"><?php esc_html_e( 'Choose how cells are quoted in CSV and TSV exports. Excel formats (XLS, XLSX) are not affected.', 'woocommerce-exporter' ); ?></p>
     </td>
     </tr>
 
@@ -967,7 +965,7 @@ function woo_ce_export_settings_save() {
     woo_ce_update_option( 'category_separator', isset( $_POST['category_separator'] ) ? sanitize_text_field( wp_unslash( $_POST['category_separator'] ) ) : '' );
     woo_ce_update_option( 'line_ending_formatting', isset( $_POST['line_ending'] ) ? sanitize_text_field( wp_unslash( $_POST['line_ending'] ) ) : '' );
     woo_ce_update_option( 'bom', isset( $_POST['bom'] ) ? absint( $_POST['bom'] ) : '' );
-    woo_ce_update_option( 'escape_formatting', isset( $_POST['escape_formatting'] ) ? sanitize_text_field( wp_unslash( $_POST['escape_formatting'] ) ) : '' );
+    woo_ce_update_option( 'escape_formatting', \VisserLabs\WSE\Abstracts\Abstract_Exporter::normalize_escape_formatting( isset( $_POST['escape_formatting'] ) ? sanitize_text_field( wp_unslash( $_POST['escape_formatting'] ) ) : '' ) );
     woo_ce_update_option( 'excel_formulas', isset( $_POST['excel_formulas'] ) ? absint( $_POST['excel_formulas'] ) : '' );
     // Falls back to the stored value rather than '' when absent: the control is
     // disabled while Excel formulas is Yes, and a disabled select submits nothing,
@@ -977,25 +975,73 @@ function woo_ce_export_settings_save() {
     woo_ce_update_option( 'flush_cache', isset( $_POST['flush_cache'] ) ? absint( $_POST['flush_cache'] ) : '' );
     woo_ce_update_option( 'timeout', isset( $_POST['timeout'] ) ? absint( $_POST['timeout'] ) : '' );
 
-    $date_format        = woo_ce_get_option( 'date_format', 'd/m/Y' );
+    $date_format = \VisserLabs\WSE\Helpers\Export::get_date_format();
+
+    /*
+     * Resolve what the form is actually asking for. The Custom radio is not itself a
+     * date format — it means "use the text box beside me" — so it is swapped for that
+     * box's value before anything else looks at it.
+     */
     $posted_date_format = isset( $_POST['date_format'] ) ? sanitize_text_field( wp_unslash( $_POST['date_format'] ) ) : '';
-    if ( 'custom' === $posted_date_format && ! empty( $_POST['date_format_custom'] ) ) {
-        if ( $posted_date_format !== $date_format ) {
-            woo_ce_update_option( 'date_format', sanitize_text_field( wp_unslash( $_POST['date_format_custom'] ) ) );
-        }
-    } elseif ( $posted_date_format !== $date_format ) {
-        // Update the date format on scheduled exports.
+    if ( 'custom' === $posted_date_format ) {
+        $posted_date_format = isset( $_POST['date_format_custom'] ) ? sanitize_text_field( wp_unslash( $_POST['date_format_custom'] ) ) : '';
+    }
+
+    /*
+     * Never persist a value that cannot express a date. This block used to compare the
+     * literal string 'custom' against the stored format, which had three consequences:
+     *
+     *   - selecting Custom with an empty text box stored the word 'custom' itself;
+     *   - once 'custom' was stored, that same comparison was false forever, so the
+     *     setting could no longer be repaired from the screen that broke it;
+     *   - a save-settings POST that omitted the field stored '' — after rewriting every
+     *     schedule's bounds with gmdate( '', ... ).
+     */
+    if ( ! \VisserLabs\WSE\Helpers\Export::is_valid_date_format( $posted_date_format ) ) {
+        $posted_date_format = '';
+    }
+
+    /*
+     * Compared against the RAW stored value, not the coerced one. On a store whose row
+     * holds '1', the screen renders the d/m/Y radio checked (because the reader coerces),
+     * so comparing against the coerced value made "save d/m/Y" a no-op and left the
+     * corrupt row in place.
+     */
+    $stored_date_format = (string) get_option( WOO_CE_PREFIX . '_date_format', '' );
+
+    if ( '' !== $posted_date_format && $posted_date_format !== $stored_date_format ) {
+        // Restate every scheduled export's stored bounds in the new format.
         $scheduled_exports = woo_ce_get_scheduled_exports();
         if ( ! empty( $scheduled_exports ) ) {
+            /*
+             * Every date-filter bound the plugin stores, not just the Order pair. The
+             * subscription and user readers parse with the store format alone, so a bound
+             * left in the old format after a format change fails to parse and its filter
+             * is dropped.
+             */
+            $bound_keys = array();
+            foreach ( \VisserLabs\WSE\Helpers\Export::DATE_FILTER_BOUNDS as $bounds ) {
+                $bound_keys = array_merge( $bound_keys, $bounds );
+            }
+
             foreach ( $scheduled_exports as $scheduled_export ) {
-                $order_dates_from = get_post_meta( $scheduled_export, '_filter_order_dates_from', true );
-                $order_dates_to   = get_post_meta( $scheduled_export, '_filter_order_dates_to', true );
-                // Format date to new format.
-                if ( ! empty( $order_dates_from ) ) {
-                    update_post_meta( $scheduled_export, '_filter_order_dates_from', gmdate( $posted_date_format, strtotime( $order_dates_from ) ) );
-                }
-                if ( ! empty( $order_dates_to ) ) {
-                    update_post_meta( $scheduled_export, '_filter_order_dates_to', gmdate( $posted_date_format, strtotime( $order_dates_to ) ) );
+                foreach ( $bound_keys as $bound_key ) {
+                    $stored = get_post_meta( $scheduled_export, $bound_key, true );
+                    if ( empty( $stored ) ) {
+                        continue;
+                    }
+
+                    /*
+                     * Parsed with the OLD format, not with strtotime(). strtotime() cannot
+                     * read the plugin's own d/m/Y default and returns false, and
+                     * gmdate( $format, false ) then wrote 1 Jan 1970 over the admin's real
+                     * dates on every legitimate format change. '' means the bound could not
+                     * be read, so it is left exactly as it is rather than overwritten.
+                     */
+                    $converted = \VisserLabs\WSE\Helpers\Export::reformat_date_bound( $stored, $date_format, $posted_date_format );
+                    if ( '' !== $converted ) {
+                        update_post_meta( $scheduled_export, $bound_key, $converted );
+                    }
                 }
             }
         }

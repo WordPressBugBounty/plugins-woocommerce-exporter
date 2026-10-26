@@ -148,7 +148,6 @@ function woo_ce_extend_tag_item( $tag ) {
 						$tag->wpseo_twitter_description = ( isset( $meta[$term_id]['wpseo_twitter-description'] ) ? $meta[$term_id]['wpseo_twitter-description'] : '' );
 						$tag->wpseo_twitter_image = ( isset( $meta[$term_id]['wpseo_twitter-image'] ) ? $meta[$term_id]['wpseo_twitter-image'] : '' );
 					}
-					unset( $term_id );
 				}
 			}
 		}

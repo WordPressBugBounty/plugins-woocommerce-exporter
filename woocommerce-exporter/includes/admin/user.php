@@ -319,9 +319,7 @@ function woo_ce_user_sorting() {
  */
 function woo_ce_users_custom_fields() {
 
-    if ( $custom_users = woo_ce_get_option( 'custom_users', '' ) ) {
-        $custom_users = implode( "\n", $custom_users );
-    }
+    $custom_users = woo_ce_format_custom_meta_lines( woo_ce_get_option( 'custom_users', '' ) );
 
     $troubleshooting_url = woo_ce_get_kb_url();
 

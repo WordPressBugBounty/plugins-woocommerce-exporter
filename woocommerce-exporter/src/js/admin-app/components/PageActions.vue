@@ -3,15 +3,16 @@
  * PageActions — global Help button, fixed top-right of the SPA.
  *
  * Reads the current route's meta.helpUrl for the Help button link.
- * To change the help URL for a page, update meta.helpUrl in router.js.
+ * To change the help URL for a page, update docLinks.js or meta.helpUrl in router.js.
  */
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { HelpCircle } from 'lucide-vue-next'
+import { KB_HUB_URL } from '../docLinks'
 
 const route = useRoute()
 
-const helpUrl = computed(() => route.meta?.helpUrl ?? 'https://visser.com.au/kb-categories/woocommerce-store-exporter-deluxe/')
+const helpUrl = computed(() => route.meta?.helpUrl ?? KB_HUB_URL)
 </script>
 
 <template>
