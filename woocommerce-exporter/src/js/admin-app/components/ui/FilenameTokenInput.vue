@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, useAttrs } from 'vue'
 import { Copy, RotateCcw } from 'lucide-vue-next'
+import { __ } from '@wordpress/i18n'
 
 defineOptions({ inheritAttrs: false })
 
@@ -51,7 +52,7 @@ function insertToken (token) {
       <button
         type="button"
         class="inline-flex items-center justify-center flex-shrink-0 w-9 h-9 border border-gray-200 rounded-lg bg-white text-gray-400 cursor-pointer hover:border-gray-300 hover:text-gray-600 transition-colors"
-        title="Copy filename pattern"
+        :title="__('Copy filename pattern', 'woocommerce-exporter')"
         @click="navigator.clipboard?.writeText(modelValue)"
       >
         <Copy :size="14" :stroke-width="1.75" />
@@ -61,7 +62,7 @@ function insertToken (token) {
         type="button"
         class="inline-flex items-center justify-center flex-shrink-0 w-9 h-9 border border-gray-200 rounded-lg bg-white text-gray-400 cursor-pointer hover:border-gray-300 hover:text-gray-600 transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
         :disabled="modelValue === defaultValue"
-        title="Reset to default filename"
+        :title="__('Reset to default filename', 'woocommerce-exporter')"
         @click="emit('update:modelValue', defaultValue)"
       >
         <RotateCcw :size="14" :stroke-width="1.75" />

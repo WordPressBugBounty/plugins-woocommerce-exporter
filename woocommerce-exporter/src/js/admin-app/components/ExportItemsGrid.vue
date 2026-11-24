@@ -1,6 +1,7 @@
 <script setup>
 import { ArrowRight, Lock } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import { __, _x } from '@wordpress/i18n'
 import { useQuickExportStore } from '../stores/quickExport'
 import { useUpsellStore } from '../stores/upsell'
 import { TYPE_VISUALS, DEFAULT_VISUAL } from '../exportTypeVisuals'
@@ -58,10 +59,10 @@ async function onCardClick (item) {
       <p class="text-xs text-gray-500 m-0 leading-[1.5] flex-1 line-clamp-3">{{ item.description }}</p>
 
       <span v-if="item.premium" class="inline-flex items-center gap-[4px] text-xs font-semibold text-amber-700 mt-auto" data-testid="export-type-premium-label">
-        <Lock :size="11" :stroke-width="2.5" /> Available in Deluxe
+        <Lock :size="11" :stroke-width="2.5" /> {{ __('Available in Deluxe', 'woocommerce-exporter') }}
       </span>
       <span v-else class="inline-flex items-center gap-[3px] text-xs font-medium text-indigo-600 mt-auto">
-        Export <ArrowRight :size="12" :stroke-width="2" />
+        {{ _x('Export', 'button label', 'woocommerce-exporter') }} <ArrowRight :size="12" :stroke-width="2" />
       </span>
     </a>
   </div>

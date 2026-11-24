@@ -1661,6 +1661,30 @@ function woo_ce_extend_product_fields( $fields = array() ) {
 }
 add_filter( 'woo_ce_product_fields', 'woo_ce_extend_product_fields' );
 
+/**
+ * Resolve the key a Product stores an Attribute under in its _product_attributes.
+ *
+ * Global Attributes are matched on attribute_name. A custom Attribute (attribute_id 0)
+ * is defined by the sanitize_key() of its name, while WooCommerce keys it on the
+ * Product by the sanitize_title() of its name, so a name with spaces or capitals is
+ * matched on that form when attribute_name is not found.
+ *
+ * @since 2.8.3
+ * @param object $attribute          Attribute definition from woo_ce_get_product_attributes().
+ * @param mixed  $product_attributes The Product's _product_attributes.
+ * @return string
+ */
+function woo_ce_get_product_attribute_storage_key( $attribute, $product_attributes ) {
+    $attribute_key = $attribute->attribute_name;
+    if ( empty( $attribute->attribute_id ) && is_array( $product_attributes ) && ! isset( $product_attributes[ $attribute_key ] ) ) {
+        $title_key = sanitize_title( $attribute->attribute_label );
+        if ( isset( $product_attributes[ $title_key ] ) ) {
+            $attribute_key = $title_key;
+        }
+    }
+    return $attribute_key;
+}
+
 function woo_ce_extend_product_item( $product, $product_id, $_product = false ) {
 
 	global $export;
@@ -1696,6 +1720,10 @@ function woo_ce_extend_product_item( $product, $product_id, $_product = false ) 
 						// Desperate times call for desperate measures...
 						$attribute_value = get_post_meta( $product_id, sprintf( 'attribute_pa_%s', $attribute->attribute_name ), true );
 					}
+                    // A custom Attribute is stored on the Variation under the sanitize_title() of its name.
+                    if ( empty( $attribute_value ) && empty( $attribute->attribute_id ) ) {
+                        $attribute_value = get_post_meta( $product_id, sprintf( 'attribute_%s', sanitize_title( $attribute->attribute_label ) ), true );
+                    }
 				} else {
 					$attribute_value = get_post_meta( $product_id, sprintf( 'attribute_pa_%s', $attribute->attribute_name ), true );
 				}
@@ -1756,8 +1784,10 @@ function woo_ce_extend_product_item( $product, $product_id, $_product = false ) 
 							}
 						}
 
+                        $product_attribute_key = woo_ce_get_product_attribute_storage_key( $attribute, $product->attributes );
+
 						// Time to do some WooCommerce 2.6 vs 3.0 magic
-						if( isset( $product->attributes[sprintf( 'pa_%s', $attribute->attribute_name )] ) || isset( $product->attributes[$attribute->attribute_name] ) ) {
+						if( isset( $product->attributes[sprintf( 'pa_%s', $attribute->attribute_name )] ) || isset( $product->attributes[$product_attribute_key] ) ) {
 							// Check for WooCommerce 2.6
 							if( isset( $product->attributes[sprintf( 'pa_%s', $attribute->attribute_name )] ) ) {
 								$args = array(
@@ -1776,9 +1806,9 @@ function woo_ce_extend_product_item( $product, $product_id, $_product = false ) 
 								}
 							}
 							// Check for WooCommerce 3.0+
-							if( isset( $product->attributes[$attribute->attribute_name] ) ) {
+							if( isset( $product->attributes[$product_attribute_key] ) ) {
 								$args = array(
-									'attribute' => $product->attributes[$attribute->attribute_name],
+									'attribute' => $product->attributes[$product_attribute_key],
 									'type' => 'product'
 								);
 								// Advanced Product Attribute support can be disabled where FORM limits are being hit or just cluttering the Quick Export/Export Template screen
@@ -1786,10 +1816,10 @@ function woo_ce_extend_product_item( $product, $product_id, $_product = false ) 
 									apply_filters( 'woo_ce_enable_advanced_product_attributes', false ) ||
 									woo_ce_detect_export_plugin( 'wc_product_importer_deluxe' )
 								) {
-									$product->{sprintf( 'attribute_%s_position', $attribute->attribute_name )} = $product->attributes[$attribute->attribute_name]['position'];
-									$product->{sprintf( 'attribute_%s_visible', $attribute->attribute_name )} = woo_ce_format_switch( $product->attributes[$attribute->attribute_name]['is_visible'] );
-									$product->{sprintf( 'attribute_%s_variation', $attribute->attribute_name )} = woo_ce_format_switch( $product->attributes[$attribute->attribute_name]['is_variation'] );
-									$product->{sprintf( 'attribute_%s_taxonomy', $attribute->attribute_name )} = woo_ce_format_switch( $product->attributes[$attribute->attribute_name]['is_taxonomy'] );
+									$product->{sprintf( 'attribute_%s_position', $attribute->attribute_name )} = $product->attributes[$product_attribute_key]['position'];
+									$product->{sprintf( 'attribute_%s_visible', $attribute->attribute_name )} = woo_ce_format_switch( $product->attributes[$product_attribute_key]['is_visible'] );
+									$product->{sprintf( 'attribute_%s_variation', $attribute->attribute_name )} = woo_ce_format_switch( $product->attributes[$product_attribute_key]['is_variation'] );
+									$product->{sprintf( 'attribute_%s_taxonomy', $attribute->attribute_name )} = woo_ce_format_switch( $product->attributes[$product_attribute_key]['is_taxonomy'] );
 								}
 							}
 							if( WOO_CE_LOGGING && apply_filters( 'woo_ce_debug_product_attributes', false ) )
@@ -1844,7 +1874,7 @@ function woo_ce_extend_product_item( $product, $product_id, $_product = false ) 
 	$term_taxonomies = woo_ce_get_product_custom_term_taxonomies();
 	if( !empty( $term_taxonomies ) ) {
 		foreach( $term_taxonomies as $key => $term_taxonomy ) {
-			// Check if we are dealing with a hierachial Term Taxonomy
+            // Check if we are dealing with a hierarchical Term Taxonomy.
 			if( $term_taxonomy->hierarchical )
 				$product->{sprintf( 'term_taxonomy_%s', $key )} = woo_ce_get_product_assoc_categories( $product_id, $product->parent_id, $key );
 			else
@@ -2760,7 +2790,7 @@ function woo_ce_extend_product_item( $product, $product_id, $_product = false ) 
 		global $wpdb;
 
 		// Check the adsw_ali_meta table exists
-		if( $wpdb->get_var( "SHOW TABLES LIKE '" . $wpdb->prefix . "adsw_ali_meta'" ) ) {
+		if ( woo_ce_table_exists( $wpdb->prefix . 'adsw_ali_meta' ) ) {
 			// Override if Variation Formatting is enabled
 			if( $product->post_type == 'product_variation' && woo_ce_get_option( 'variation_formatting', 0 ) )
 				$meta_sql = "SELECT * FROM `" . $wpdb->prefix . "adsw_ali_meta` WHERE `post_id` = " . absint( $product->parent_id );

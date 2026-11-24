@@ -401,8 +401,9 @@ function woo_ce_get_ticket_data( $ticket_id = 0, $args = array(), $fields = arra
 
 	$ticket->post_id = $ticket->ID;
 
-	// Allow Plugin/Theme authors to add support for additional Ticket columns
-	$ticket = apply_filters( 'woo_ce_ticket_item', $ticket, $ticket_id );
+	// Allow Plugin/Theme authors to add support for additional Ticket columns, passing the
+	// requested fields so a callback can skip resolving a column the trim below discards.
+	$ticket = apply_filters( 'woo_ce_ticket_item', $ticket, $ticket_id, $fields );
 
 	// Trim back the Ticket just to requested export fields
 	if( !empty( $fields ) ) {

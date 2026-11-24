@@ -6,6 +6,7 @@
  * To change the help URL for a page, update docLinks.js or meta.helpUrl in router.js.
  */
 import { computed } from 'vue'
+import { __ } from '@wordpress/i18n'
 import { useRoute } from 'vue-router'
 import { HelpCircle } from 'lucide-vue-next'
 import { KB_HUB_URL } from '../docLinks'
@@ -23,10 +24,10 @@ const helpUrl = computed(() => route.meta?.helpUrl ?? KB_HUB_URL)
       target="_blank"
       rel="noopener noreferrer"
       class="wse-page-actions__help"
-      aria-label="Help documentation"
+      :aria-label="__('Help documentation', 'woocommerce-exporter')"
     >
       <HelpCircle :size="14" :stroke-width="1.75" />
-      <span>Help</span>
+      <span>{{ __('Help', 'woocommerce-exporter') }}</span>
     </a>
   </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __ } from '@wordpress/i18n'
 import {
   AlertCircle,
   ArrowRight,
@@ -55,6 +56,7 @@ const labels = computed(() => data.value?.labels ?? {})
 const cta = computed(() => data.value?.cta ?? {})
 const writeAccess = computed(() => data.value?.write_access ?? {})
 const endpoint = computed(() => data.value?.endpoint ?? {})
+const pageTitle = computed(() => (labels.value.title ? labels.value.title : __('AI / MCP', 'woocommerce-exporter')))
 
 /**
  * Split the intro text into plain parts and one StoreAgent link part.
@@ -165,7 +167,7 @@ async function copyEndpoint () {
 
     <div class="wse-header">
       <div>
-        <h1 class="wse-page-title">{{ labels.title ?? 'AI / MCP' }}</h1>
+        <h1 class="wse-page-title">{{ pageTitle }}</h1>
         <p v-if="labels.subtitle" class="wse-page-sub">{{ labels.subtitle }}</p>
       </div>
       <PageActions />

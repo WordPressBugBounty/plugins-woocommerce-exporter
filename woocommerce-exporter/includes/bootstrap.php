@@ -5,6 +5,25 @@ do_action( 'woo_ce_loaded' );
 
 require_once WOO_CE_PATH . 'includes/functions.php';
 
+// Drop the cached list of active modules when a Plugin is activated or
+// de-activated, leaving the next request to rebuild it. Registered on every
+// request, not only in WP Admin, so a Plugin toggled over WP-CLI or the REST
+// API does not leave a stale module list behind.
+//
+// The list is invalidated rather than rebuilt here because WordPress fires
+// `deactivated_plugin` while the de-activated Plugin's code is still loaded,
+// so a rebuild would cache it as active for another day.
+//
+// `update_option_active_plugins` is not a duplicate of the two Plugin hooks:
+// core writes that option outside its `if ( ! $silent )` blocks, so a silent
+// toggle (a Plugin update, a bulk upgrade) fires only the option hook. The
+// callback takes no arguments because the option hooks pass theirs in a
+// different order to each other.
+add_action( 'activated_plugin', 'woo_ce_invalidate_modules_cache' );
+add_action( 'deactivated_plugin', 'woo_ce_invalidate_modules_cache' );
+add_action( 'update_option_active_plugins', 'woo_ce_invalidate_modules_cache' );
+add_action( 'update_site_option_active_sitewide_plugins', 'woo_ce_invalidate_modules_cache' );
+
 if ( is_admin() ) {
 
     /* Start of: WordPress Administration */

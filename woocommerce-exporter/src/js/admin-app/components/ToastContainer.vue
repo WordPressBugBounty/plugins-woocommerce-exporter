@@ -1,5 +1,6 @@
 <script setup>
 import { storeToRefs } from 'pinia'
+import { __ } from '@wordpress/i18n'
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-vue-next'
 import { useToastsStore } from '../stores/toasts'
 
@@ -41,7 +42,7 @@ const TYPE_CLASSES = {
         <button
           class="bg-transparent border-0 cursor-pointer text-gray-400 p-0.5 rounded flex items-center hover:text-gray-700 hover:bg-gray-100"
           @click="store.dismiss(t.id)"
-          aria-label="Dismiss"
+          :aria-label="__('Dismiss', 'woocommerce-exporter')"
         >
           <X :size="13" :stroke-width="2" />
         </button>

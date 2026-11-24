@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __, sprintf } from '@wordpress/i18n'
 import { Check, FileText, Plus, ChevronRight, Info, Lock } from 'lucide-vue-next'
 import { useQuickExportStore } from '../../../stores/quickExport'
 import { useToastsStore } from '../../../stores/toasts'
@@ -22,6 +23,11 @@ const formats   = computed(() => config.value?.formats ?? [])
 const templates = computed(() => config.value?.templates ?? [])
 const extraOptions = computed(() => currentFilters.value?.extraOptions ?? [])
 
+function premiumFormatLabel (fmt) {
+  /* translators: %s: file format name */
+  return sprintf(__('%s — available in Store Exporter Deluxe', 'woocommerce-exporter'), fmt.label)
+}
+
 function onFormatTileClick (fmt) {
   if (fmt.premium) {
     upsell.open({ label: fmt.label, url: fmt.upsell_url })
@@ -39,13 +45,13 @@ function onLimitSelectChange (value) {
 }
 
 const templateOptions = computed(() => [
-  { value: '', label: 'Choose an Export Template…' },
+  { value: '', label: __('Choose an Export Template…', 'woocommerce-exporter') },
   ...templates.value.map(t => ({ value: String(t.id), label: t.label })),
 ])
 
 const limitOptions = computed(() => [
   ...LIMIT_PRESETS,
-  { value: '__custom__', label: 'Custom…' },
+  { value: '__custom__', label: __('Custom…', 'woocommerce-exporter') },
 ])
 
 function setExtraOption (type, key, value) {
@@ -63,8 +69,8 @@ const manageTemplatesUrl = computed(() => {
   <div class="pt-1 px-[18px] pb-4 border-t border-gray-50">
     <!-- File Format -->
     <div class="mt-2">
-      <h4 class="text-[13.5px] font-semibold text-gray-900 m-0 mb-0.5">File Format</h4>
-      <p class="text-xs text-gray-500 m-0 mb-3">Choose the format of the exported file.</p>
+      <h4 class="text-[13.5px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('File Format', 'woocommerce-exporter') }}</h4>
+      <p class="text-xs text-gray-500 m-0 mb-3">{{ __('Choose the format of the exported file.', 'woocommerce-exporter') }}</p>
       <div class="grid gap-2.5" style="grid-template-columns: repeat(5, 1fr)">
         <button
           v-for="fmt in formats"
@@ -78,8 +84,8 @@ const manageTemplatesUrl = computed(() => {
               : 'border-gray-200 hover:border-indigo-300',
             !fmt.premium && exportFormat === fmt.value ? 'border-indigo-600 bg-[#F5F3FF] shadow-[0_0_0_3px_rgba(108,123,255,0.08)]' : ''
           ]"
-          :title="fmt.premium ? 'Available in Store Exporter Deluxe' : ''"
-          :aria-label="fmt.premium ? `${fmt.label} — available in Store Exporter Deluxe` : null"
+          :title="fmt.premium ? __('Available in Store Exporter Deluxe', 'woocommerce-exporter') : ''"
+          :aria-label="fmt.premium ? premiumFormatLabel(fmt) : null"
           @click="onFormatTileClick(fmt)"
         >
           <span v-if="fmt.premium" class="absolute top-2 right-2 w-[18px] h-[18px] rounded-full bg-amber-100 flex items-center justify-center">
@@ -94,7 +100,7 @@ const manageTemplatesUrl = computed(() => {
           </span>
           <span class="text-[12.5px] font-semibold" :class="fmt.premium ? 'text-gray-600' : (exportFormat === fmt.value ? 'text-gray-900' : 'text-gray-700')">{{ fmt.label }}</span>
           <span v-if="fmt.premium" class="inline-flex items-center gap-[3px] text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-[5px] py-[1px] px-1.5">
-            Deluxe
+            {{ __('Deluxe', 'woocommerce-exporter') }}
           </span>
         </button>
       </div>
@@ -103,32 +109,32 @@ const manageTemplatesUrl = computed(() => {
     <!-- Template + Batch Settings -->
     <div class="grid mt-[22px] bg-white border-[1.5px] border-gray-200 rounded-xl overflow-hidden qev-opts-split" style="grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.5fr)">
       <div class="min-w-0 flex flex-col p-5">
-        <h4 class="text-sm font-bold text-gray-900 m-0 mb-0.5">Export Template</h4>
-        <p class="text-[12.5px] text-gray-500 m-0 mb-3.5">Save time by using or creating a template.</p>
+        <h4 class="text-sm font-bold text-gray-900 m-0 mb-0.5">{{ __('Export Template', 'woocommerce-exporter') }}</h4>
+        <p class="text-[12.5px] text-gray-500 m-0 mb-3.5">{{ __('Save time by using or creating a template.', 'woocommerce-exporter') }}</p>
         <template v-if="templates.length">
           <BaseSelect variant="form" :options="templateOptions" v-model="store.exportTemplate" />
           <a class="inline-flex items-center gap-2 mt-3 self-start py-2 px-3.5 border-[1.5px] border-gray-200 rounded-[9px] text-[12.5px] font-medium text-gray-700 bg-white no-underline transition-[background,border-color,color] hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700" :href="manageTemplatesUrl">
-            Manage Templates
+            {{ __('Manage Templates', 'woocommerce-exporter') }}
           </a>
         </template>
         <div v-else class="flex flex-col items-center text-center gap-1.5 py-[22px] px-4 bg-gray-50 border-[1.5px] border-dashed border-gray-300 rounded-[10px]">
           <span class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center mb-0.5">
             <FileText :size="18" color="#6C7BFF" :stroke-width="1.75" />
           </span>
-          <p class="text-[13px] font-semibold text-gray-900 m-0">No templates yet</p>
-          <p class="text-xs text-gray-500 m-0">Create a template to reuse this configuration in future exports.</p>
+          <p class="text-[13px] font-semibold text-gray-900 m-0">{{ __('No templates yet', 'woocommerce-exporter') }}</p>
+          <p class="text-xs text-gray-500 m-0">{{ __('Create a template to reuse this configuration in future exports.', 'woocommerce-exporter') }}</p>
           <a class="inline-flex items-center gap-1.5 mt-2 py-2 px-4 bg-indigo-600 border-none rounded-lg text-[12.5px] font-semibold text-white no-underline cursor-pointer transition-colors hover:bg-indigo-700 hover:text-white" :href="manageTemplatesUrl">
             <Plus :size="13" :stroke-width="2" />
-            Create Template
+            {{ __('Create Template', 'woocommerce-exporter') }}
           </a>
         </div>
       </div>
       <div class="min-w-0 flex flex-col p-5 border-l border-l-gray-100">
-        <h4 class="text-sm font-bold text-gray-900 m-0 mb-0.5">Batch Settings</h4>
-        <p class="text-[12.5px] text-gray-500 m-0 mb-3.5">Control how many records are processed per batch.</p>
+        <h4 class="text-sm font-bold text-gray-900 m-0 mb-0.5">{{ __('Batch Settings', 'woocommerce-exporter') }}</h4>
+        <p class="text-[12.5px] text-gray-500 m-0 mb-3.5">{{ __('Control how many records are processed per batch.', 'woocommerce-exporter') }}</p>
         <div class="grid gap-2 items-end" style="grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr)">
           <div class="flex flex-col gap-1.5 min-w-0">
-            <label class="inline-flex items-center gap-[5px] text-[12.5px] font-semibold text-gray-900">Limit <Info :size="11" color="#9CA3AF" :stroke-width="1.75" /></label>
+            <label class="inline-flex items-center gap-[5px] text-[12.5px] font-semibold text-gray-900">{{ __('Limit', 'woocommerce-exporter') }} <Info :size="11" color="#9CA3AF" :stroke-width="1.75" /></label>
             <BaseSelect
               v-if="limitIsPreset"
               variant="form"
@@ -141,17 +147,17 @@ const manageTemplatesUrl = computed(() => {
               v-model="store.exportLimit"
               type="number"
               min="0"
-              placeholder="All Records"
+              :placeholder="__('All Records', 'woocommerce-exporter')"
               class="w-full py-[10px] px-3.5 border-[1.5px] border-gray-200 rounded-[9px] text-[13px] text-gray-900 outline-none focus:border-indigo-400"
               @blur="store.exportLimit = String(store.exportLimit ?? '').trim()"
             />
           </div>
           <div class="flex flex-col gap-1.5 min-w-0">
-            <label class="inline-flex items-center gap-[5px] text-[12.5px] font-semibold text-gray-900">Offset <Info :size="11" color="#9CA3AF" :stroke-width="1.75" /></label>
+            <label class="inline-flex items-center gap-[5px] text-[12.5px] font-semibold text-gray-900">{{ __('Offset', 'woocommerce-exporter') }} <Info :size="11" color="#9CA3AF" :stroke-width="1.75" /></label>
             <input v-model="store.exportOffset" type="number" min="0" placeholder="0" class="w-full py-[10px] px-3.5 border-[1.5px] border-gray-200 rounded-[9px] text-[13px] text-gray-900 outline-none focus:border-indigo-400" />
           </div>
           <div class="flex flex-col gap-1.5 min-w-0">
-            <label class="inline-flex items-center gap-[5px] text-[12.5px] font-semibold text-gray-900">Batch Size <Info :size="11" color="#9CA3AF" :stroke-width="1.75" /></label>
+            <label class="inline-flex items-center gap-[5px] text-[12.5px] font-semibold text-gray-900">{{ __('Batch Size', 'woocommerce-exporter') }} <Info :size="11" color="#9CA3AF" :stroke-width="1.75" /></label>
             <input v-model="store.exportBatchSize" type="number" min="1" placeholder="100" class="w-full py-[10px] px-3.5 border-[1.5px] border-gray-200 rounded-[9px] text-[13px] text-gray-900 outline-none focus:border-indigo-400" />
           </div>
         </div>
@@ -180,14 +186,14 @@ const manageTemplatesUrl = computed(() => {
       </div>
       <div v-if="opt.key === 'product_image_formatting'" class="flex items-center gap-2 mt-3 py-2.5 px-3 bg-indigo-50 rounded-lg text-xs text-indigo-800">
         <Info :size="14" color="#6C7BFF" :stroke-width="1.75" />
-        <span>The product featured image is serialized in the export.</span>
+        <span>{{ __('The product featured image is serialized in the export.', 'woocommerce-exporter') }}</span>
       </div>
     </div>
 
     <div class="flex items-center justify-end gap-2 pt-3.5">
-      <button class="wse-qe-step-cancel inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100" @click="store.setExpandedStep('')">Cancel</button>
-      <button class="wse-qe-options-continue inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-indigo-600 text-white border-none hover:bg-indigo-700" @click="store.confirmOptions(); toasts.push('Export options saved')">
-        Continue <ChevronRight :size="13" :stroke-width="2" />
+      <button class="wse-qe-step-cancel inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100" @click="store.setExpandedStep('')">{{ __('Cancel', 'woocommerce-exporter') }}</button>
+      <button class="wse-qe-options-continue inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-indigo-600 text-white border-none hover:bg-indigo-700" @click="store.confirmOptions(); toasts.push(__('Export options saved', 'woocommerce-exporter'))">
+        {{ __('Continue', 'woocommerce-exporter') }} <ChevronRight :size="13" :stroke-width="2" />
       </button>
     </div>
   </div>

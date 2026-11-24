@@ -42,8 +42,20 @@ if( is_admin() ) {
 	}
 	add_action( 'woo_ce_extend_scheduled_export_save', 'woo_ce_tag_scheduled_export_save' );
 
+    /**
+     * Merge the Tag export form data into the export dataset arguments.
+     *
+     * @since 2.8.3 Reads the passed Quick Export form data instead of discarding it.
+     *
+     * @param array  $args        The existing arguments.
+     * @param string $export_type The export type.
+     * @param array  $form_data   Parsed Quick Export form data.
+     * @return array The updated arguments.
+     */
 	function woo_ce_tag_dataset_args( $args, $export_type = '', $form_data = array() ) {
-		if ( ! empty( $form_data ) ) {
+        // Fall back to $_POST only when the caller passed no form data.
+        if ( empty( $form_data ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verification handled by parent function.
 			$form_data = $_POST;
 		}
 
@@ -53,9 +65,9 @@ if( is_admin() ) {
 
 		// Merge in the form data for this dataset
 		$defaults = array(
-			'tag_language' => ( isset( $form_data['tag_filter_language'] ) ? array_map( 'sanitize_text_field', (array)$form_data['tag_filter_language'] ) : false ),
-			'tag_orderby' => ( isset( $form_data['tag_orderby'] ) ? sanitize_text_field( $form_data['tag_orderby'] ) : false ),
-			'tag_order' => ( isset( $form_data['tag_order'] ) ? sanitize_text_field( $form_data['tag_order'] ) : false )
+            'tag_language' => ( isset( $form_data['tag_filter_language'] ) ? array_map( 'sanitize_text_field', wp_unslash( (array) $form_data['tag_filter_language'] ) ) : false ),
+            'tag_orderby'  => ( isset( $form_data['tag_orderby'] ) ? sanitize_text_field( wp_unslash( $form_data['tag_orderby'] ) ) : false ),
+            'tag_order'    => ( isset( $form_data['tag_order'] ) ? sanitize_text_field( wp_unslash( $form_data['tag_order'] ) ) : false ),
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -268,22 +280,29 @@ function woo_ce_get_tag_field( $name = null, $format = 'name' ) {
 function woo_ce_get_product_tags( $args = array() ) {
 
 	$term_taxonomy = 'product_tag';
-	$defaults = array(
-		'orderby' => 'name',
-		'order' => 'ASC',
-		'hide_empty' => 0
+    $defaults      = array(
+        'orderby'    => 'name',
+        'order'      => 'ASC',
+        'hide_empty' => 0,
+        'number'     => 0,
+        'offset'     => 0,
 	);
-	$args = wp_parse_args( $args, $defaults );
+    $args          = woo_ce_get_term_export_query_args( wp_parse_args( $args, $defaults ), 'tag' );
 
 	// Allow other developers to bake in their own filters
 	$args = apply_filters( 'woo_ce_get_product_tags_args', $args );
 
-	$tags = get_terms( $term_taxonomy, $args );
+    $tags = woo_ce_get_terms_in_languages(
+        array_merge( $args, array( 'taxonomy' => $term_taxonomy ) ),
+        isset( $args['tag_language'] ) ? $args['tag_language'] : array()
+    );
 	if( !empty( $tags ) && is_wp_error( $tags ) == false ) {
 		$size = count( $tags );
 		for( $i = 0; $i < $size; $i++ ) {
 			$tags[$i]->term_url = get_term_link( $tags[$i], $term_taxonomy );
-			$tags[$i]->description = woo_ce_format_description_excerpt( $tags[$i]->description );
+            // WordPress stores term names and descriptions entity-encoded; export them as plain text.
+            $tags[ $i ]->name        = wp_specialchars_decode( $tags[ $i ]->name, ENT_QUOTES );
+            $tags[ $i ]->description = wp_specialchars_decode( woo_ce_format_description_excerpt( $tags[ $i ]->description ), ENT_QUOTES );
 			$tags[$i]->disabled = 0;
 			if( $tags[$i]->count == 0 )
 				$tags[$i]->disabled = 1;
@@ -302,11 +321,8 @@ if( !function_exists( 'woo_ce_export_dataset_override_tag' ) ) {
 
 		global $export;
 
-		$args = array(
-			'orderby' => ( isset( $export->args['tag_orderby'] ) ? $export->args['tag_orderby'] : 'ID' ),
-			'order' => ( isset( $export->args['tag_order'] ) ? $export->args['tag_order'] : 'ASC' ),
-		);
-		if( $tags = woo_ce_get_product_tags( $args ) ) {
+        $tags = woo_ce_get_product_tags( $export->args );
+        if ( $tags ) {
 			$export->total_rows = count( $tags );
 			// XML, RSS and JSON export
 			if( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {
@@ -353,11 +369,8 @@ function woo_ce_export_dataset_multisite_override_tag( $output = null, $export_t
 	if( !empty( $sites ) ) {
 		foreach( $sites as $site ) {
 			switch_to_blog( $site->blog_id );
-			$args = array(
-				'orderby' => ( isset( $export->args['tag_orderby'] ) ? $export->args['tag_orderby'] : 'ID' ),
-				'order' => ( isset( $export->args['tag_order'] ) ? $export->args['tag_order'] : 'ASC' ),
-			);
-			if( $tags = woo_ce_get_product_tags( $args ) ) {
+            $tags = woo_ce_get_product_tags( $export->args );
+            if ( $tags ) {
 				$export->total_rows = count( $tags );
 				// XML, RSS and JSON export
 				if( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {

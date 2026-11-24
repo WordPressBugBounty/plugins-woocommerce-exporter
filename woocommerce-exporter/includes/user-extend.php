@@ -73,9 +73,9 @@ if( is_admin() ) {
 			if( !empty( $export_args['user_membership'] ) ) {
 				// Get a list of User ID's with the Membership Plans linked to them
 				$user_ids = woo_ce_get_user_membership_assoc_users( $export_args['user_membership'] );
-				$args['include'] = array();
-				if( !empty( $user_ids ) )
-					$args['include'] = $user_ids;
+				// An empty `include` makes get_users() return every user, so fall back to the
+				// impossible ID 0 when the selected plans have no members.
+				$args['include'] = ! empty( $user_ids ) ? $user_ids : array( 0 );
 			}
 		}
 
@@ -238,8 +238,9 @@ function woo_ce_user_extend( $user ) {
 		$show_fields = $admin_profile->get_customer_meta_fields();
 		if( !empty( $show_fields ) ) {
 			foreach( $show_fields as $fieldset ) {
+                // Exported as stored, not HTML-escaped: the export file is not HTML.
 				foreach( $fieldset['fields'] as $key => $field )
-					$user->{$key} = esc_attr( get_user_meta( $user->ID, $key, true ) );
+                    $user->{$key} = get_user_meta( $user->ID, $key, true );
 			}
 		}
 		unset( $show_fields, $fieldset, $field );

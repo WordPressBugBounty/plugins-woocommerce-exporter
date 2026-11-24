@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { __ } from '@wordpress/i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Home,
@@ -43,12 +44,12 @@ function isActive (...names) {
     <div v-if="!collapsed" class="flex items-center gap-3 px-4 pt-5 pb-4">
       <img :src="mascotUrl" alt="" class="w-12 h-12 flex-shrink-0 rounded-xl ring-1 ring-gray-900/[0.06] shadow-sm" />
       <div class="flex flex-col gap-[6px]">
-        <span class="text-[14px] font-bold uppercase text-gray-900 leading-none tracking-[0.01em]">Store Exporter</span>
-        <span class="self-start text-[9px] font-bold uppercase tracking-[0.14em] text-white bg-gradient-to-r from-indigo-600 to-violet-600 px-2 py-[3px] rounded-full leading-none shadow-sm">Free</span>
+        <span class="text-[14px] font-bold uppercase text-gray-900 leading-none tracking-[0.01em]">{{ __('Store Exporter', 'woocommerce-exporter') }}</span>
+        <span class="self-start text-[9px] font-bold uppercase tracking-[0.14em] text-white bg-gradient-to-r from-indigo-600 to-violet-600 px-2 py-[3px] rounded-full leading-none shadow-sm">{{ __('Free', 'woocommerce-exporter') }}</span>
       </div>
     </div>
     <div v-else class="flex justify-center pt-5 pb-4">
-      <img :src="mascotUrl" alt="Store Exporter for WooCommerce" class="w-12 h-12 rounded-xl ring-1 ring-gray-900/[0.06] shadow-sm" />
+      <img :src="mascotUrl" :alt="__('Store Exporter for WooCommerce', 'woocommerce-exporter')" class="w-12 h-12 rounded-xl ring-1 ring-gray-900/[0.06] shadow-sm" />
     </div>
 
     <!-- Quick Export CTA -->
@@ -60,7 +61,7 @@ function isActive (...names) {
         @click.prevent="router.push('/quick-export')"
       >
         <Zap :size="15" :stroke-width="2" fill="currentColor" class="flex-shrink-0" />
-        <span v-if="!collapsed">Quick Export</span>
+        <span v-if="!collapsed">{{ __('Quick Export', 'woocommerce-exporter') }}</span>
       </a>
     </div>
 
@@ -74,7 +75,7 @@ function isActive (...names) {
       <div
         class="text-[11px] font-semibold text-gray-500 tracking-[0.09em] uppercase px-3 pt-0 pb-3"
         :class="collapsed && 'hidden'"
-      >EXPORTS</div>
+      >{{ __('Exports', 'woocommerce-exporter') }}</div>
 
       <a
         class="wse-nav-link mb-[2px]"
@@ -83,7 +84,7 @@ function isActive (...names) {
         @click.prevent="router.push('/')"
       >
         <Home :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Overview</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Overview', 'woocommerce-exporter') }}</span>
       </a>
 
       <a
@@ -93,7 +94,7 @@ function isActive (...names) {
         @click.prevent="router.push('/scheduled-exports')"
       >
         <Clock :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Scheduled Exports</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Scheduled Exports', 'woocommerce-exporter') }}</span>
         <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
@@ -104,7 +105,7 @@ function isActive (...names) {
         @click.prevent="router.push('/export-templates')"
       >
         <FileText :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Export Templates</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Export Templates', 'woocommerce-exporter') }}</span>
         <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
@@ -115,7 +116,7 @@ function isActive (...names) {
         @click.prevent="router.push('/archives')"
       >
         <Archive :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Archives</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Archives', 'woocommerce-exporter') }}</span>
         <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
@@ -124,7 +125,7 @@ function isActive (...names) {
       <div
         class="text-[11px] font-semibold text-gray-500 tracking-[0.09em] uppercase px-3 pt-3 pb-3"
         :class="collapsed && 'hidden'"
-      >TOOLS</div>
+      >{{ __('Tools', 'woocommerce-exporter') }}</div>
 
       <a
         class="wse-nav-link mb-[2px]"
@@ -133,7 +134,7 @@ function isActive (...names) {
         @click.prevent="router.push('/custom-meta-fields')"
       >
         <Wrench :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Custom Meta Fields</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Custom Meta Fields', 'woocommerce-exporter') }}</span>
       </a>
 
       <a
@@ -143,7 +144,7 @@ function isActive (...names) {
         @click.prevent="router.push('/tools')"
       >
         <LayoutGrid :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Export Modules</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Export Modules', 'woocommerce-exporter') }}</span>
       </a>
 
       <!-- SYSTEM group -->
@@ -151,7 +152,7 @@ function isActive (...names) {
       <div
         class="text-[11px] font-semibold text-gray-500 tracking-[0.09em] uppercase px-3 pt-3 pb-3"
         :class="collapsed && 'hidden'"
-      >SYSTEM</div>
+      >{{ __('System', 'woocommerce-exporter') }}</div>
 
       <a
         class="wse-nav-link mb-[2px]"
@@ -160,7 +161,7 @@ function isActive (...names) {
         @click.prevent="router.push('/audit-log')"
       >
         <ScrollText :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Audit Log</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Audit Log', 'woocommerce-exporter') }}</span>
         <Lock v-if="!collapsed" :size="12" :stroke-width="2" class="flex-shrink-0 text-amber-500" data-testid="sidebar-lock-icon" />
       </a>
 
@@ -171,11 +172,11 @@ function isActive (...names) {
         @click.prevent="router.push('/ai-mcp')"
       >
         <Sparkles :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">AI / MCP</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('AI / MCP', 'woocommerce-exporter') }}</span>
         <span
           v-if="!collapsed"
           class="text-[10px] font-semibold uppercase px-[6px] py-[2px] rounded-full leading-none flex-shrink-0 bg-indigo-100 text-indigo-700"
-        >New</span>
+        >{{ __('New', 'woocommerce-exporter') }}</span>
       </a>
 
       <a
@@ -185,7 +186,7 @@ function isActive (...names) {
         @click.prevent="router.push('/settings')"
       >
         <Settings :size="16" :stroke-width="1.75" />
-        <span v-if="!collapsed" class="flex-1">Settings</span>
+        <span v-if="!collapsed" class="flex-1">{{ __('Settings', 'woocommerce-exporter') }}</span>
       </a>
 
     </nav>
@@ -195,7 +196,7 @@ function isActive (...names) {
       type="button"
       class="flex items-center gap-1.5 px-[18px] py-3.5 mt-auto border-0 border-t border-gray-200 bg-transparent text-gray-500 text-xs font-medium cursor-pointer text-left transition-all hover:text-gray-900 hover:bg-gray-50"
       :class="collapsed && 'justify-center px-0'"
-      :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+      :aria-label="collapsed ? __('Expand sidebar', 'woocommerce-exporter') : __('Collapse sidebar', 'woocommerce-exporter')"
       @click="toggleCollapsed"
     >
       <component
@@ -203,7 +204,7 @@ function isActive (...names) {
         :size="14"
         :stroke-width="1.75"
       />
-      <span v-if="!collapsed">Collapse</span>
+      <span v-if="!collapsed">{{ __('Collapse', 'woocommerce-exporter') }}</span>
     </button>
 
   </aside>

@@ -1,15 +1,28 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref } from 'vue'
+import { __, _n, sprintf } from '@wordpress/i18n'
 import { X, Download } from 'lucide-vue-next'
 import { BaseButton } from '../ui/index'
 import { storeToRefs } from 'pinia'
 import { useQuickExportStore } from '../../stores/quickExport'
+import { formatCount } from '../../lib/formatWpDate'
+import UpgradePromptCard from './UpgradePromptCard.vue'
 
 const store = useQuickExportStore()
 const {
   exportState, exportProgress, exportTotal, exportProcessed,
-  exportError, exportDiagnostics, exportDownloadUrl, currentTypeConfig
+  exportError, exportDiagnostics, exportDownloadUrl, currentTypeConfig,
+  postExportPrompt, upgradeUrl
 } = storeToRefs(store)
+
+// "Maybe later" removes the focused button with the card, so move focus to
+// Done. Otherwise focus drops to the page behind the dialog.
+const doneButton = ref(null)
+async function dismissUpgradePrompt () {
+  store.dismissPostExportPrompt()
+  await nextTick()
+  doneButton.value?.focus()
+}
 
 const RADIUS = 40
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
@@ -25,6 +38,12 @@ const progressColor = computed(() => {
   return '#6C7BFF'
 })
 
+const dialogTitle = computed(() => {
+  if (exportState.value === 'done') return __('Export Complete', 'woocommerce-exporter')
+  if (exportState.value === 'error') return __('Export Failed', 'woocommerce-exporter')
+  return __('Export in Progress', 'woocommerce-exporter')
+})
+
 // Steps mirroring the Figma design
 const steps = computed(() => {
   const state = exportState.value
@@ -33,31 +52,32 @@ const steps = computed(() => {
 
   return [
     {
-      label: 'Initializing Export',
+      label: __('Initializing Export', 'woocommerce-exporter'),
       status: 'idle' === state ? 'pending' : 'done'
     },
     {
       label: processed > 0 && total > 0
-        ? `Fetching Data (${processed.toLocaleString()} / ${total.toLocaleString()} rows)`
-        : 'Fetching Data',
+        /* translators: 1: number of rows processed so far, 2: total number of rows */
+        ? sprintf(_n('Fetching Data (%1$s / %2$s row)', 'Fetching Data (%1$s / %2$s rows)', total, 'woocommerce-exporter'), formatCount(processed), formatCount(total))
+        : __('Fetching Data', 'woocommerce-exporter'),
       status: 'preparing' === state
         ? 'active'
         : ('idle' === state ? 'pending' : 'done')
     },
     {
-      label: 'Preparing File',
+      label: __('Preparing File', 'woocommerce-exporter'),
       status: ['idle', 'preparing'].includes(state)
         ? 'pending'
         : ('exporting' === state ? 'active' : 'done')
     },
     {
-      label: 'Generating File',
+      label: __('Generating File', 'woocommerce-exporter'),
       status: ['idle', 'preparing', 'exporting'].includes(state)
         ? 'pending'
         : ('done' === state || 'error' === state ? 'done' : 'pending')
     },
     {
-      label: 'Finalizing Export',
+      label: __('Finalizing Export', 'woocommerce-exporter'),
       status: 'done' === state ? 'done' : 'pending'
     }
   ]
@@ -70,19 +90,19 @@ const steps = computed(() => {
     @click.self="exportState === 'done' || exportState === 'error' ? store.closeExportProgress() : null"
   >
     <div
-      class="wse-qe-progress bg-white rounded-2xl w-full max-w-[420px] px-7 pt-7 pb-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)] flex flex-col items-center gap-[14px]"
+      class="wse-qe-progress bg-white rounded-2xl w-full max-w-[420px] max-h-full overflow-y-auto px-7 pt-7 pb-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)] flex flex-col items-center gap-[14px]"
       :class="`wse-qe-progress--${exportState}`"
       role="dialog"
       aria-modal="true"
-      aria-label="Export in Progress"
+      :aria-label="dialogTitle"
     >
       <!-- Header -->
       <div class="w-full flex items-center justify-between">
-        <h2 class="text-base font-bold text-gray-900 m-0">Export in Progress</h2>
+        <h2 class="text-base font-bold text-gray-900 m-0">{{ dialogTitle }}</h2>
         <button
           v-if="exportState === 'done' || exportState === 'error'"
           class="bg-none border-none cursor-pointer p-1 text-gray-400 rounded-md flex items-center hover:bg-gray-100 hover:text-gray-700"
-          aria-label="Close"
+          :aria-label="__('Close', 'woocommerce-exporter')"
           @click="store.closeExportProgress()"
         >
           <X :size="18" :stroke-width="1.75" />
@@ -112,13 +132,13 @@ const steps = computed(() => {
       <!-- Status text -->
       <p class="text-[13px] text-gray-500 text-center m-0 leading-[1.5] max-w-[280px]">
         <template v-if="exportState === 'done'">
-          Your export is complete and ready to download.
+          {{ __('Your export is complete and ready to download.', 'woocommerce-exporter') }}
         </template>
         <template v-else-if="exportState === 'error'">
-          An error occurred during the export.
+          {{ __('An error occurred during the export.', 'woocommerce-exporter') }}
         </template>
         <template v-else>
-          Please don't close this window, your export is being prepared.
+          {{ __("Please don't close this window, your export is being prepared.", 'woocommerce-exporter') }}
         </template>
       </p>
 
@@ -157,9 +177,9 @@ const steps = computed(() => {
           <span
             v-if="step.status === 'active'"
             class="text-[10px] font-bold tracking-[0.04em] text-indigo-600 bg-indigo-50 rounded px-[6px] py-[2px] flex-shrink-0"
-          >IN PROGRESS</span>
-          <span v-else-if="step.status === 'done'" class="text-[11px] text-green-500 flex-shrink-0">Completed</span>
-          <span v-else class="text-[11px] text-gray-400 flex-shrink-0">Pending</span>
+          >{{ __('IN PROGRESS', 'woocommerce-exporter') }}</span>
+          <span v-else-if="step.status === 'done'" class="text-[11px] text-green-500 flex-shrink-0">{{ __('Completed', 'woocommerce-exporter') }}</span>
+          <span v-else class="text-[11px] text-gray-400 flex-shrink-0">{{ __('Pending', 'woocommerce-exporter') }}</span>
         </li>
       </ul>
 
@@ -182,27 +202,35 @@ const steps = computed(() => {
         <template v-if="exportState === 'done'">
           <BaseButton v-if="exportDownloadUrl" class="wse-qe-download" tag="a" :href="exportDownloadUrl" download>
             <template #icon><Download :size="14" :stroke-width="2" /></template>
-            Download File
+            {{ __('Download File', 'woocommerce-exporter') }}
           </BaseButton>
           <button
+            ref="doneButton"
             class="wse-qe-progress-done inline-flex items-center gap-[6px] rounded-lg text-[13px] font-semibold py-2 px-[18px] cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100"
             @click="store.closeExportProgress()"
-          >Done</button>
+          >{{ __('Done', 'woocommerce-exporter') }}</button>
         </template>
         <template v-else-if="exportState !== 'error'">
           <button
             class="inline-flex items-center gap-[6px] rounded-lg text-[13px] font-semibold py-2 px-[18px] cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100"
             @click="store.cancelExport()"
-          >Cancel Export</button>
+          >{{ __('Cancel Export', 'woocommerce-exporter') }}</button>
         </template>
         <template v-else>
-          <BaseButton @click="store.startExport()">Retry</BaseButton>
+          <BaseButton @click="store.startExport()">{{ __('Retry', 'woocommerce-exporter') }}</BaseButton>
           <button
             class="inline-flex items-center gap-[6px] rounded-lg text-[13px] font-semibold py-2 px-[18px] cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100"
             @click="store.cancelExport()"
-          >Cancel</button>
+          >{{ __('Cancel', 'woocommerce-exporter') }}</button>
         </template>
       </div>
+
+      <!-- Upgrade card on the 1st and every 10th successful Quick Export -->
+      <UpgradePromptCard
+        v-if="exportState === 'done' && postExportPrompt === 'upgrade' && upgradeUrl"
+        :url="upgradeUrl"
+        @dismiss="dismissUpgradePrompt"
+      />
     </div>
   </div>
 </template>

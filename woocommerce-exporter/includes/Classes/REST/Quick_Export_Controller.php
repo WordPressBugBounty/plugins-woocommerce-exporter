@@ -10,7 +10,9 @@ namespace VisserLabs\WSE\Classes\REST;
 
 use VisserLabs\WSE\Abstracts\Abstract_Class;
 use VisserLabs\WSE\Classes\Export\Field_Registry;
+use VisserLabs\WSE\Classes\Export\Order as Order_Export;
 use VisserLabs\WSE\Helpers\Export as Export_Helper;
+use VisserLabs\WSE\Helpers\Helper;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -19,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Provides REST endpoints consumed by the Quick Export Vue widget:
  *   GET /wse/v1/quick-export/config          – export types, formats, templates, nonce
- *   GET /wse/v1/quick-export/fields?type=X   – grouped field list for a given type
+ *   GET /wse/v1/quick-export/fields?type=X   – grouped field list (plus custom_meta_fields) for a given type
  *   GET /wse/v1/quick-export/filters?type=X  – filter / sort options for a given type
  *
  * @since 5.6.0
@@ -36,6 +38,31 @@ class Quick_Export_Controller extends Abstract_Class {
      * @since 2.8.2
      */
     const CHOICE_LIMIT = 200;
+
+    /**
+     * `context` value the Quick Export wizard sends to /filters.
+     *
+     * Keep in sync with the request in src/js/admin-app/stores/quickExport.js.
+     *
+     * @since 2.8.3
+     */
+    const QUICK_EXPORT_CONTEXT = 'quick-export';
+
+    /**
+     * The "Available In" flag each requesting surface is gated on.
+     *
+     * Only the `context` parameter tells the callers of /filters apart. A
+     * request with no context — or one this map does not know — is left
+     * ungated, so a viewer running a cached pre-upgrade bundle keeps the
+     * filters it already had. The flag scopes where a custom meta definition
+     * is offered; it is not a security boundary.
+     *
+     * @since 2.8.3
+     * @var array<string, string>
+     */
+    private const CONTEXT_AVAILABILITY_FLAGS = array(
+        self::QUICK_EXPORT_CONTEXT => Custom_Meta_Fields_Controller::AREA_QUICK_EXPORT,
+    );
 
     /**
      * Register hooks.
@@ -160,11 +187,44 @@ class Quick_Export_Controller extends Abstract_Class {
      *
      * Returns the field list for the given export type, grouped by logical
      * section (e.g. "Billing Address", "Shipping Address").  Each field carries
-     * a `selected` flag derived from the saved per-type option.
+     * a `selected` flag derived from the saved per-type option. Registered
+     * custom meta keys are not part of the groups; they are returned separately
+     * as `custom_meta_fields` (name, definition, column_key, selected, available).
+     *
+     * The field names the type defaults to are returned as `default_fields`:
+     * the curated set for the type, or every served field name when the type
+     * has no curated set that matches one of its fields. It is the same list
+     * the `selected` flags follow when nothing is saved.
+     *
+     * `meta_field_names` maps the keys of the prefixed custom meta definitions
+     * (order item meta, attributes) to the export field name the engine
+     * registers for them, keyed by definition, so the SPA can post a key ticked
+     * in their section.
+     *
+     * `field_order` lists every field name, custom meta keys included, in the
+     * order the groups served them before the meta keys were stripped. The SPA
+     * seeds its column order from it, so a saved meta column keeps the position
+     * it had when it was still served as an ordinary field.
+     *
+     * `saved_field_order` is the column order the store owner last exported
+     * with, flat and across groups, or an empty array when they have never run
+     * an export of this type. The groups cannot carry it: group_fields()
+     * buckets the fields into categories, which keeps the order within a group
+     * but loses it between groups.
+     *
+     * Both order lists name a column the way the Manage Fields screen holds its
+     * position: by the meta key for a prefixed definition the type does not
+     * serve as an ordinary field, and by the field name for everything else.
+     * The one exception is a bare key a plain definition registers as well:
+     * the two export different columns, so the prefixed one stays under its
+     * derived field name and each column keeps a slot of its own. Every picker
+     * row carries the name its column is held under as `column_key`, so the SPA
+     * places and labels it under the same one.
      *
      * @param \WP_REST_Request $request The REST request.
      *
      * @since 5.6.0
+     * @since 2.8.3 Adds `custom_meta_fields`, `field_order`, `saved_field_order` and `default_fields`.
      * @return \WP_REST_Response|\WP_Error
      */
     public function get_fields( $request ) {
@@ -188,14 +248,242 @@ class Quick_Export_Controller extends Abstract_Class {
         }
 
         $saved_fields = $this->get_saved_field_keys( $type );
-        $groups       = $this->group_fields( $type, $fields, $saved_fields );
+        $definitions  = Custom_Meta_Fields_Controller::get_picker_definitions( $type );
+        $field_names  = Custom_Meta_Fields_Controller::get_prefixed_field_names( $type );
+        $meta_columns = $this->unserved_meta_column_keys( $fields, $definitions, $field_names );
+        $saved_order  = $this->get_saved_field_order( $type, $fields, $definitions, $meta_columns );
+        $field_order  = $this->flatten_group_names( $this->group_fields( $type, $fields, $saved_fields ) );
+        $field_order  = $this->to_column_keys( $meta_columns, $field_order );
+        $saved_order  = $this->to_column_keys( $meta_columns, $saved_order );
+        $fields       = Custom_Meta_Fields_Controller::strip_picker_meta_fields( $type, $fields );
+        $groups       = $this->add_group_display_labels( $this->group_fields( $type, $fields, $saved_fields ) );
+
+        // The picker lists the plain definitions plus the prefixed keys this
+        // type does not serve as ordinary fields — the only place a ticked
+        // Order Item Meta column can be seeded back from on a page load.
+        $picker_definitions = array_merge(
+            $definitions,
+            $this->unserved_prefixed_definitions( $type, $meta_columns, $field_names )
+        );
 
         return rest_ensure_response(
             array(
-                'type'   => $type,
-                'groups' => $groups,
+                'type'               => $type,
+                'groups'             => $groups,
+                'custom_meta_fields' => $this->get_custom_meta_fields_for_picker( $picker_definitions, $saved_fields, $field_names, $meta_columns ),
+                'meta_field_names'   => (object) $field_names,
+                'field_order'        => $field_order,
+                'saved_field_order'  => $saved_order,
+                'default_fields'     => $this->resolve_default_field_keys( $type, $fields ),
             )
         );
+    }
+
+    /**
+     * Custom meta keys listed in the dedicated Manage Fields section.
+     *
+     * Every picker definition is returned. A key is `selected` when it is part
+     * of the user's last saved selection, and `available` when its definition
+     * is enabled for Quick Export.
+     *
+     * The saved selection names a column the way the EXPORT posted it, which
+     * for a key this type does not serve as an ordinary field is the derived
+     * field name (`order_items_<key>`) and not the bare meta key the picker
+     * lists it under. Matching the bare key alone would leave the row unticked
+     * on the next visit, so the column would be dropped from the next export.
+     *
+     * De-duplication follows the same name: two definitions that resolve a key
+     * to the same exported column get one row, mirroring the `fields.has(name)`
+     * rule the SPA applies in `selectedCustomMetaFields()`. A plain definition
+     * and a prefixed one that merely share a bare key export different
+     * columns, so both keep a row.
+     *
+     * `column_key` is the name the Manage Fields screen holds the row's
+     * position and label override under — the same name `field_order` and
+     * `saved_field_order` list it by. It is the bare meta key, except for a
+     * prefixed row whose key a plain definition registers as well: that row
+     * keeps its derived field name, so the two stop sharing one slot.
+     *
+     * @param array                              $definitions  Picker definitions, plain ones first.
+     * @param string[]                           $saved_keys   Column names the user previously saved as enabled.
+     * @param array<string,array<string,string>> $field_names  From Custom_Meta_Fields_Controller::get_prefixed_field_names().
+     * @param array<string,string>               $meta_columns From unserved_meta_column_keys().
+     *
+     * @since 2.8.3
+     * @return array<array{name:string,definition:string,column_key:string,selected:bool,available:bool}>
+     */
+    private function get_custom_meta_fields_for_picker( array $definitions, array $saved_keys, array $field_names, array $meta_columns ): array {
+        $result       = array();
+        $seen         = array();
+        $saved_lookup = array_flip( $saved_keys );
+
+        foreach ( $definitions as $def ) {
+            // Absent for a plain definition, whose keys are saved under the bare key.
+            $derived = $field_names[ $def['name'] ] ?? null;
+
+            foreach ( $def['meta_keys'] as $key ) {
+                $column = null === $derived ? $key : ( $derived[ $key ] ?? '' );
+
+                if ( '' === $column || isset( $seen[ $column ] ) ) {
+                    continue;
+                }
+
+                // Only a prefixed row can be held under anything but its bare
+                // key; reading the map for a plain one could pick up the entry
+                // of a prefixed column whose derived name equals that key.
+                $column_key = null === $derived ? (string) $key : ( $meta_columns[ $column ] ?? (string) $key );
+
+                $seen[ $column ] = true;
+                $result[]        = array(
+                    'name'       => $key,
+                    'definition' => $def['name'],
+                    'column_key' => $column_key,
+                    'selected'   => isset( $saved_lookup[ $column ] ),
+                    'available'  => ! empty( $def['availability'][ Custom_Meta_Fields_Controller::AREA_QUICK_EXPORT ] ),
+                );
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Flatten grouped fields into their field names, in served order.
+     *
+     * @param array $groups Groups from group_fields().
+     *
+     * @since 2.8.3
+     * @return string[]
+     */
+    private function flatten_group_names( array $groups ): array {
+        $names = array();
+
+        foreach ( $groups as $group ) {
+            foreach ( $group['fields'] as $field ) {
+                $names[] = $field['name'];
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * A prefixed definition's columns the type does NOT serve as ordinary fields.
+     *
+     * The engine registers an Order Item Meta, Order Item Product Meta or
+     * Attribute key under a derived field name (`order_items_<key>`,
+     * `attribute_<slug>`). Whether the Manage Fields screen then holds that
+     * column under the derived name or under the meta key depends on whether
+     * the type's own field list carries it:
+     *
+     * - It does not for the Order Item definitions, so the picker lists those
+     *   keys in its own Custom Meta Fields section and saves a row's position
+     *   under the bare meta key.
+     * - It DOES for Product attributes: `woo_ce_extend_product_fields()`
+     *   appends an ordinary `attribute_<slug>` field for every stored key, and
+     *   `strip_picker_meta_fields()` leaves it in place, so the SPA orders it
+     *   by that name like any other field.
+     *
+     * Only the first case is returned. A key a plain definition registers as
+     * well is the exception: such a column stays under its derived field name,
+     * which no other column can claim.
+     *
+     * @param array                              $fields      Flat field list from load_fields_for_type().
+     * @param array                              $definitions The type's PLAIN picker definitions.
+     * @param array<string,array<string,string>> $field_names From Custom_Meta_Fields_Controller::get_prefixed_field_names().
+     *
+     * @since 2.8.3
+     * @return array<string,string> The name each derived field name is held under.
+     */
+    private function unserved_meta_column_keys( array $fields, array $definitions, array $field_names ): array {
+        $served = array_fill_keys( array_column( $fields, 'name' ), true );
+        $keys   = array();
+        $plain  = array();
+
+        foreach ( $definitions as $def ) {
+            foreach ( $def['meta_keys'] as $plain_key ) {
+                $plain[ (string) $plain_key ] = true;
+            }
+        }
+
+        foreach ( $field_names as $by_key ) {
+            foreach ( $by_key as $key => $field_name ) {
+                if ( isset( $served[ $field_name ] ) ) {
+                    continue;
+                }
+                $keys[ $field_name ] = isset( $plain[ (string) $key ] ) ? (string) $field_name : (string) $key;
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * A type's prefixed definitions, carrying only the keys it does not serve.
+     *
+     * A Product attribute is served as an ordinary `attribute_<slug>` field and
+     * is restored from the groups like any other, so listing its key here as
+     * well would put a second row for the same column in Manage Fields. An
+     * Order Item Meta key is not served, so this is the only place the screen
+     * can learn that it is ticked.
+     *
+     * @param string                             $type          Export type slug.
+     * @param array<string,string>               $meta_columns  From unserved_meta_column_keys().
+     * @param array<string,array<string,string>> $by_definition From Custom_Meta_Fields_Controller::get_prefixed_field_names().
+     *
+     * @since 2.8.3
+     * @return array<array{name:string,meta_keys:string[],availability:array<string,bool>}>
+     */
+    private function unserved_prefixed_definitions( string $type, array $meta_columns, array $by_definition ): array {
+        $definitions = array();
+
+        foreach ( Custom_Meta_Fields_Controller::get_prefixed_picker_definitions( $type, $by_definition ) as $definition ) {
+            $field_names = $by_definition[ $definition['name'] ] ?? array();
+
+            $definition['meta_keys'] = array_values(
+                array_filter(
+                    $definition['meta_keys'],
+                    static function ( $key ) use ( $field_names, $meta_columns ) {
+                        return isset( $meta_columns[ $field_names[ $key ] ?? '' ] );
+                    }
+                )
+            );
+
+            if ( ! empty( $definition['meta_keys'] ) ) {
+                $definitions[] = $definition;
+            }
+        }
+
+        return $definitions;
+    }
+
+    /**
+     * Name each column of an order list the way the SPA holds its position.
+     *
+     * A derived field name in `$meta_columns` becomes the name it is held under;
+     * every other name passes through. A name that collides with another keeps
+     * only its first position, so one column cannot occupy two slots.
+     *
+     * @param array<string,string> $meta_columns From unserved_meta_column_keys().
+     * @param string[]             $names        Field names in column order.
+     *
+     * @since 2.8.3
+     * @return string[]
+     */
+    private function to_column_keys( array $meta_columns, array $names ): array {
+        $columns = array();
+        $seen    = array();
+
+        foreach ( $names as $name ) {
+            $column = $meta_columns[ $name ] ?? $name;
+            if ( isset( $seen[ $column ] ) ) {
+                continue;
+            }
+            $seen[ $column ] = true;
+            $columns[]       = $column;
+        }
+
+        return $columns;
     }
 
     /**
@@ -207,6 +495,7 @@ class Quick_Export_Controller extends Abstract_Class {
      * @param \WP_REST_Request $request The REST request.
      *
      * @since 5.6.0
+     * @since 2.8.3 Gates the custom-meta filter on the requesting surface's "Available In" flag.
      * @return \WP_REST_Response|\WP_Error
      */
     public function get_filters( $request ) {
@@ -224,11 +513,13 @@ class Quick_Export_Controller extends Abstract_Class {
             woo_ce_load_export_types();
         }
 
-        $sort = $this->get_type_sort_options( $type );
+        $context           = (string) $request->get_param( 'context' );
+        $availability_flag = self::CONTEXT_AVAILABILITY_FLAGS[ $context ] ?? '';
+        $sort              = $this->get_type_sort_options( $type );
         return rest_ensure_response(
             array(
                 'type'          => $type,
-                'filters'       => $this->get_type_filters( $type ),
+                'filters'       => $this->get_type_filters( $type, $availability_flag ),
                 'sort'          => $sort,
                 'sort_fields'   => $sort ? $sort['options'] : array(),
                 'custom_meta'   => $this->get_type_custom_meta_fields( $type ),
@@ -262,18 +553,31 @@ class Quick_Export_Controller extends Abstract_Class {
      * card shape, differing only by option name, key, label and group - hence
      * the single helper.
      *
+     * The definition's "Available In" selection gates the card: unticking an
+     * area withholds the card — and with it every per-key value input — from
+     * that area alone. The flag is empty for a request that named no surface,
+     * which leaves the card offered as before.
+     *
      * @since 2.8.1
-     * @param array  $filters Filter definitions, appended by reference.
-     * @param string $type    Export type slug.
+     * @since 2.8.3 Added the $availability_flag parameter.
+     * @param array  $filters           Filter definitions, appended by reference.
+     * @param string $type              Export type slug.
+     * @param string $availability_flag "Available In" flag the requesting surface is gated on,
+     *                                  or '' to leave the card ungated.
      * @return void
      */
-    private function maybe_add_custom_meta_filter( &$filters, $type ) {
+    private function maybe_add_custom_meta_filter( &$filters, $type, $availability_flag = '' ) {
         $is_product = 'product' === $type;
         if ( ! $is_product && 'order' !== $type ) {
             return;
         }
         $option_name = $is_product ? 'custom_products' : 'custom_orders';
         if ( empty( $this->get_registered_custom_meta_keys( $option_name ) ) ) {
+            return;
+        }
+        if ( '' !== $availability_flag
+            && ! Custom_Meta_Fields_Controller::is_definition_available( $option_name, $availability_flag )
+        ) {
             return;
         }
         $filters[] = array(
@@ -703,6 +1007,132 @@ class Quick_Export_Controller extends Abstract_Class {
     }
 
     /**
+     * The flat column order the store owner last exported this type with.
+     *
+     * Every export writes the column positions it ran with to the
+     * woo_ce_{type}_sorting option ({@see \VisserLabs\WSE\Classes\Exporter::save_export_fields()}).
+     * That order cannot be read back off the served groups: group_fields()
+     * buckets the fields into Field_Registry categories, so an order move
+     * within a group survives but a move between groups does not. The SPA
+     * seeds its column order from this list instead.
+     *
+     * The saved columns come first, in the order they were exported in,
+     * followed by every other served field in the order the export type lists
+     * them — so a field the owner ticks next keeps a sensible position.
+     *
+     * A saved column need not be one of `$fields`. An Order Item Meta key is
+     * exported under a derived field name the type's field list does not carry
+     * — the picker lists it in its own Manage Fields section instead — so those
+     * names are placed from the picker's own key list.
+     *
+     * Returns an empty array when the owner has never run an export of this
+     * type, or when the saved order names nothing the screen can still place:
+     * the SPA then keeps the grouped order rather than reshuffling the columns.
+     *
+     * @param string               $type         Export type slug.
+     * @param array                $fields       Flat field list from load_fields_for_type().
+     * @param array                $definitions  Picker definitions for the type.
+     * @param array<string,string> $meta_columns From unserved_meta_column_keys().
+     *
+     * @since 2.8.3
+     * @return string[]
+     */
+    private function get_saved_field_order( string $type, array $fields, array $definitions, array $meta_columns ): array {
+        $sorting = woo_ce_get_option( $type . '_sorting', array() );
+        if ( ! is_array( $sorting ) || empty( $sorting ) ) {
+            return array();
+        }
+
+        // The field names this type serves, de-duplicated, in served order.
+        $served = array();
+        $seen   = array();
+        foreach ( $fields as $field ) {
+            $name = isset( $field['name'] ) ? (string) $field['name'] : '';
+            if ( '' === $name || isset( $seen[ $name ] ) ) {
+                continue;
+            }
+            $seen[ $name ] = true;
+            $served[]      = $name;
+        }
+
+        $placeable = $this->placeable_column_names( $served, $definitions, $meta_columns );
+
+        // A name the screen can no longer place is dropped: keeping it would
+        // only push the columns that follow it one slot down the saved order.
+        $saved = array();
+        $index = 0;
+        foreach ( $sorting as $name => $position ) {
+            $name = (string) $name;
+            if ( isset( $placeable[ $name ] ) ) {
+                $saved[] = array(
+                    'name'     => $name,
+                    'position' => (int) $position,
+                    'index'    => $index,
+                );
+            }
+            ++$index;
+        }
+
+        if ( empty( $saved ) ) {
+            return array();
+        }
+
+        // The saved order's own order breaks a tie, so two columns stored at
+        // the same position cannot swap between requests (usort is only stable
+        // on PHP 8.0+).
+        usort(
+            $saved,
+            function ( $a, $b ) {
+                if ( $a['position'] === $b['position'] ) {
+                    return $a['index'] <=> $b['index'];
+                }
+                return $a['position'] <=> $b['position'];
+            }
+        );
+
+        $order   = array_column( $saved, 'name' );
+        $ordered = array_flip( $order );
+        foreach ( $served as $name ) {
+            if ( ! isset( $ordered[ $name ] ) ) {
+                $order[] = $name;
+            }
+        }
+
+        return $order;
+    }
+
+    /**
+     * The column names the Manage Fields screen can still give a position to.
+     *
+     * Every served field, plus the registered custom meta keys the picker
+     * lists in their own section and the derived field names an export posts
+     * those keys under. Anything else in the saved order names a column the
+     * screen no longer has.
+     *
+     * @param string[]             $served       The field names the type serves.
+     * @param array                $definitions  Picker definitions for the type.
+     * @param array<string,string> $meta_columns From unserved_meta_column_keys().
+     *
+     * @since 2.8.3
+     * @return array<string,true> A lookup set, keyed by column name.
+     */
+    private function placeable_column_names( array $served, array $definitions, array $meta_columns ): array {
+        $placeable = array_fill_keys( $served, true );
+
+        foreach ( $definitions as $def ) {
+            foreach ( $def['meta_keys'] as $key ) {
+                $placeable[ (string) $key ] = true;
+            }
+        }
+
+        foreach ( array_keys( $meta_columns ) as $field_name ) {
+            $placeable[ (string) $field_name ] = true;
+        }
+
+        return $placeable;
+    }
+
+    /**
      * Group a flat field list into logical sections using Field_Registry categories.
      *
      * Each returned group is: { label: string, fields: [{ name, label, selected, order }] }
@@ -712,14 +1142,15 @@ class Quick_Export_Controller extends Abstract_Class {
      * @param string[] $saved_keys Keys the user previously saved as enabled.
      *
      * @since 5.6.0
+     * @since 2.8.3 Selects every field when the type has no matching curated set,
+     *              instead of the first 10 by position.
      * @return array
      */
     private function group_fields( $type, array $fields, array $saved_keys ) {
         $groups         = array();
         $order          = 1;
         $has_saved      = ! empty( $saved_keys );
-        $default_keys   = $this->get_default_field_keys( $type );
-        $default_lookup = array_flip( $default_keys );
+        $default_lookup = array_flip( $this->resolve_default_field_keys( $type, $fields ) );
 
         foreach ( $fields as $field ) {
             $name        = isset( $field['name'] ) ? $field['name'] : '';
@@ -733,18 +1164,13 @@ class Quick_Export_Controller extends Abstract_Class {
                 );
             }
 
-            // Selection rule:
-            // - If the user has previously saved a selection, honour it.
-            // - Otherwise default to the curated "common" set for this export type.
-            // - If we don't have a curated set for this type, fall back to the first
-            // 10 fields so the export is usable without overwhelming the user.
-            if ( $has_saved ) {
-                $selected = in_array( $name, $saved_keys, true );
-            } elseif ( ! empty( $default_keys ) ) {
-                $selected = isset( $default_lookup[ $name ] );
-            } else {
-                $selected = $order <= 10;
-            }
+            // Selection rule: a saved selection always wins; otherwise the field
+            // is selected when resolve_default_field_keys() lists it, which is
+            // the curated set for the type, or every field when the type has no
+            // curated set that matches one of its fields.
+            $selected = $has_saved
+                ? in_array( $name, $saved_keys, true )
+                : isset( $default_lookup[ $name ] );
 
             $groups[ $group_label ]['fields'][] = array(
                 'name'     => $name,
@@ -755,6 +1181,31 @@ class Quick_Export_Controller extends Abstract_Class {
         }
 
         return array_values( $groups );
+    }
+
+    /**
+     * Add each group's heading, translated into the user's language.
+     *
+     * This request runs in the site locale, because field labels are saved as
+     * export headers. The group headings only display, so they follow the
+     * user's language like the rest of the screen. `label` stays the stable
+     * English category key.
+     *
+     * @param array $groups Groups from group_fields().
+     *
+     * @since 2.8.3
+     * @return array Groups with a `display_label` added.
+     */
+    private function add_group_display_labels( array $groups ) {
+        return Helper::in_user_locale(
+            function () use ( $groups ) {
+                foreach ( $groups as &$group ) {
+                    $group['display_label'] = Field_Registry::get_category_label( $group['label'] );
+                }
+                unset( $group );
+                return $groups;
+            }
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -768,12 +1219,15 @@ class Quick_Export_Controller extends Abstract_Class {
      * The `key` maps directly to the form_data field name accepted by
      * the AJAX export handler.
      *
-     * @param string $type Export type slug.
+     * @param string $type              Export type slug.
+     * @param string $availability_flag "Available In" flag the requesting surface is gated on,
+     *                                  or '' to leave the custom-meta filter ungated.
      *
      * @since 5.6.0
+     * @since 2.8.3 Added the $availability_flag parameter.
      * @return array
      */
-    private function get_type_filters( $type ) {
+    private function get_type_filters( $type, $availability_flag = '' ) {
         $definitions = array(
             'product'        => array(
                 // Product Filters.
@@ -1035,12 +1489,16 @@ class Quick_Export_Controller extends Abstract_Class {
         // Custom-meta VALUE filters. The classic Quick Export screen exposed a
         // per-key value input plumbed into product_custom_meta / order_custom_meta;
         // re-add it here so the SPA can scope by custom meta. Only offered when
-        // meta keys are registered.
-        $this->maybe_add_custom_meta_filter( $filters, $type );
+        // meta keys are registered and the definition is available in the
+        // requesting surface.
+        $this->maybe_add_custom_meta_filter( $filters, $type, $availability_flag );
 
         // Plugin-gated filters. Each is only offered when its dependency is
         // active AND its option list is non-empty, so no empty card renders.
         $this->maybe_add_plugin_gated_filters( $filters, $type );
+
+        // Term Language filter for the Category and Tag exports.
+        $this->maybe_add_term_language_filter( $filters, $type );
 
         foreach ( $filters as &$filter ) {
             $filter['enabled']     = false;
@@ -1050,10 +1508,91 @@ class Quick_Export_Controller extends Abstract_Class {
             if ( ! isset( $filter['group'] ) ) {
                 $filter['group'] = '';
             }
+            $filter['group_label'] = $this->get_group_label( (string) $filter['group'] );
         }
         unset( $filter );
 
         return $filters;
+    }
+
+    /**
+     * Translated display label for a filter group.
+     *
+     * The English group name stays the stable key (the SPA groups and looks up
+     * descriptions by it); this is only the label to render.
+     *
+     * @param string $group Filter group key.
+     *
+     * @since 2.8.3
+     * @return string Translated label; unknown groups are returned unchanged.
+     */
+    private function get_group_label( string $group ): string {
+        switch ( $group ) {
+            case 'Booking Filters':
+                return __( 'Booking Filters', 'woocommerce-exporter' );
+            case 'Category Filters':
+                return __( 'Category Filters', 'woocommerce-exporter' );
+            case 'Coupon Filters':
+                return __( 'Coupon Filters', 'woocommerce-exporter' );
+            case 'Date Filters':
+                return __( 'Date Filters', 'woocommerce-exporter' );
+            case 'Formatting':
+                return __( 'Formatting', 'woocommerce-exporter' );
+            case 'Inventory Filters':
+                return __( 'Inventory Filters', 'woocommerce-exporter' );
+            case 'Order Filters':
+                return __( 'Order Filters', 'woocommerce-exporter' );
+            case 'Product Filters':
+                return __( 'Product Filters', 'woocommerce-exporter' );
+            case 'Review Filters':
+                return __( 'Review Filters', 'woocommerce-exporter' );
+            case 'Subscription Filters':
+                return __( 'Subscription Filters', 'woocommerce-exporter' );
+            case 'Tag Filters':
+                return __( 'Tag Filters', 'woocommerce-exporter' );
+            case 'User Filters':
+                return __( 'User Filters', 'woocommerce-exporter' );
+            default:
+                return $group;
+        }
+    }
+
+    /**
+     * Append the Language filter card for a Category or Tag export when a
+     * multilingual plugin (Polylang or WPML) offers more than one language
+     * and translates the export's taxonomy - otherwise the selection would
+     * be ignored (Polylang) or match no terms (WPML).
+     *
+     * @since 2.8.3
+     * @param array  $filters Filter definitions, appended by reference.
+     * @param string $type    Export type slug.
+     * @return void
+     */
+    private function maybe_add_term_language_filter( &$filters, $type ) {
+        $groups     = array(
+            'category' => 'Category Filters',
+            'tag'      => 'Tag Filters',
+        );
+        $taxonomies = array(
+            'category' => 'product_cat',
+            'tag'      => 'product_tag',
+        );
+        if ( ! isset( $groups[ $type ] ) || ! function_exists( 'woo_ce_get_multilingual_languages' ) ) {
+            return;
+        }
+
+        // Polylang first: its WPML compatibility layer would otherwise answer the WPML filter.
+        $is_translated = function_exists( 'pll_is_translated_taxonomy' )
+            ? pll_is_translated_taxonomy( $taxonomies[ $type ] )
+            : (bool) apply_filters( 'wpml_is_translated_taxonomy', false, $taxonomies[ $type ] );
+
+        if ( $is_translated && count( woo_ce_get_multilingual_languages() ) > 1 ) {
+            $filters[] = array(
+                'key'   => "{$type}_filter_language_include",
+                'label' => __( 'Language', 'woocommerce-exporter' ),
+                'group' => $groups[ $type ],
+            );
+        }
     }
 
     /**
@@ -1122,6 +1661,8 @@ class Quick_Export_Controller extends Abstract_Class {
             'product_filter_shipping_class_enabled' => __( 'Include products from specific shipping classes.', 'woocommerce-exporter' ),
             'product_filter_sku_include'            => __( 'Include or exclude specific products, by SKU.', 'woocommerce-exporter' ),
             'product_filter_language_include'       => __( 'Include products in a specific WPML language.', 'woocommerce-exporter' ),
+            'category_filter_language_include'      => __( 'Include categories in specific languages.', 'woocommerce-exporter' ),
+            'tag_filter_language_include'           => __( 'Include tags in specific languages.', 'woocommerce-exporter' ),
             'product_filter_vendor_include'         => __( 'Include products from specific vendors.', 'woocommerce-exporter' ),
             // Order filters.
             'orders_filters[status]'                => __( 'Include orders by status.', 'woocommerce-exporter' ),
@@ -1203,6 +1744,8 @@ class Quick_Export_Controller extends Abstract_Class {
             'product_filter_shipping_class_enabled' => 'Truck',
             'product_filter_sku_include'            => 'Barcode',
             'product_filter_language_include'       => 'Languages',
+            'category_filter_language_include'      => 'Languages',
+            'tag_filter_language_include'           => 'Languages',
             'product_filter_vendor_include'         => 'Store',
             // Order.
             'orders_filters[status]'                => 'CheckCircle2',
@@ -1317,6 +1860,11 @@ class Quick_Export_Controller extends Abstract_Class {
                         'label'   => __( 'Categories', 'woocommerce-exporter' ),
                         'options' => $options,
                     ),
+                    $this->get_match_type_control(
+                        'product_filter_category_exclude',
+                        __( 'Include selected categories', 'woocommerce-exporter' ),
+                        __( 'Filter out selected categories', 'woocommerce-exporter' )
+                    ),
                 );
 
             case 'product_filter_tag_enabled':
@@ -1327,6 +1875,11 @@ class Quick_Export_Controller extends Abstract_Class {
                         'name'    => 'product_filter_tag[]',
                         'label'   => __( 'Tags', 'woocommerce-exporter' ),
                         'options' => $options,
+                    ),
+                    $this->get_match_type_control(
+                        'product_filter_tag_exclude',
+                        __( 'Include selected tags', 'woocommerce-exporter' ),
+                        __( 'Filter out selected tags', 'woocommerce-exporter' )
                     ),
                 );
 
@@ -1577,21 +2130,10 @@ class Quick_Export_Controller extends Abstract_Class {
                         'label'   => __( 'Products', 'woocommerce-exporter' ),
                         'options' => $this->get_product_choices(),
                     ),
-                    array(
-                        'type'    => 'radio_group',
-                        'name'    => 'product_filter_sku_exclude',
-                        'label'   => __( 'Match type', 'woocommerce-exporter' ),
-                        'default' => '0',
-                        'options' => array(
-                            array(
-                                'value' => '0',
-                                'label' => __( 'Include selected products', 'woocommerce-exporter' ),
-                            ),
-                            array(
-                                'value' => '1',
-                                'label' => __( 'Exclude selected products', 'woocommerce-exporter' ),
-                            ),
-                        ),
+                    $this->get_match_type_control(
+                        'product_filter_sku_exclude',
+                        __( 'Include selected products', 'woocommerce-exporter' ),
+                        __( 'Exclude selected products', 'woocommerce-exporter' )
                     ),
                 );
 
@@ -1610,6 +2152,26 @@ class Quick_Export_Controller extends Abstract_Class {
                     array(
                         'type'    => 'multiselect',
                         'name'    => 'product_filter_language[]',
+                        'label'   => __( 'Languages', 'woocommerce-exporter' ),
+                        'options' => $options,
+                    ),
+                );
+
+            case 'category_filter_language_include':
+            case 'tag_filter_language_include':
+                $options = array();
+                if ( function_exists( 'woo_ce_get_multilingual_languages' ) ) {
+                    foreach ( woo_ce_get_multilingual_languages() as $code => $label ) {
+                        $options[] = array(
+                            'value' => (string) $code,
+                            'label' => (string) $label,
+                        );
+                    }
+                }
+                return array(
+                    array(
+                        'type'    => 'multiselect',
+                        'name'    => 0 === strpos( $filter_key, 'tag_' ) ? 'tag_filter_language[]' : 'category_filter_language[]',
                         'label'   => __( 'Languages', 'woocommerce-exporter' ),
                         'options' => $options,
                     ),
@@ -1797,7 +2359,9 @@ class Quick_Export_Controller extends Abstract_Class {
                         'type'    => 'radio_group',
                         'name'    => 'order_filter_items',
                         'label'   => __( 'Items formatting', 'woocommerce-exporter' ),
-                        'default' => 'combined',
+                        // The wizard submits nothing when the declared default is picked, so the
+                        // default must be the format the export falls back to.
+                        'default' => Order_Export::get_fallback_order_items_format(),
                         'options' => array(
                             array(
                                 'value' => 'combined',
@@ -2145,12 +2709,46 @@ class Quick_Export_Controller extends Abstract_Class {
         }
         $options = array();
         foreach ( $terms as $term ) {
+            // Term names are stored entity-encoded; the multiselect prints the label as text.
             $options[] = array(
                 'value' => (string) $term->term_id,
-                'label' => (string) $term->name,
+                'label' => wp_specialchars_decode( (string) $term->name, ENT_QUOTES ),
             );
         }
         return $options;
+    }
+
+    /**
+     * Build the "Match type" radio that flips a card's selection between
+     * including and filtering out the selected items.
+     *
+     * '0' includes, '1' filters out: the value the engine's `*_exclude` flags
+     * read (includes/product.php).
+     *
+     * @param string $name          Control name, e.g. `product_filter_category_exclude`.
+     * @param string $include_label Label of the include choice.
+     * @param string $exclude_label Label of the filter-out choice.
+     *
+     * @since 2.8.3
+     * @return array The radio_group control.
+     */
+    private function get_match_type_control( $name, $include_label, $exclude_label ) {
+        return array(
+            'type'    => 'radio_group',
+            'name'    => $name,
+            'label'   => __( 'Match type', 'woocommerce-exporter' ),
+            'default' => '0',
+            'options' => array(
+                array(
+                    'value' => '0',
+                    'label' => $include_label,
+                ),
+                array(
+                    'value' => '1',
+                    'label' => $exclude_label,
+                ),
+            ),
+        );
     }
 
     /**
@@ -2308,10 +2906,22 @@ class Quick_Export_Controller extends Abstract_Class {
 
         $options = array();
         foreach ( $terms as $term ) {
-            $label     = $show_taxonomy ? $term->name . ' (' . $term->taxonomy . ')' : $term->name;
+            // woo_ce_get_brand_filter_terms() already decoded the name; the
+            // multiselect prints the label as text. Only the value is a term ID,
+            // never the suffixed label, or the selection would export nothing.
+            $name  = (string) $term->name;
+            $label = $name;
+            if ( $show_taxonomy ) {
+                $label = sprintf(
+                    /* translators: 1: brand name, 2: the brand taxonomy slug, e.g. pwb-brand */
+                    __( '%1$s (%2$s)', 'woocommerce-exporter' ),
+                    $name,
+                    $term->taxonomy
+                );
+            }
             $options[] = array(
                 'value' => (string) $term->term_id,
-                'label' => (string) $label,
+                'label' => $label,
             );
         }
         return $options;
@@ -2323,7 +2933,8 @@ class Quick_Export_Controller extends Abstract_Class {
      * @param string $type Export type slug.
      *
      * @since 5.6.0
-     * @return array  { key: form_data_field_name, options: [ { value, label } ] }|null
+     * @since 2.8.3 Products also return `levels`: the "Then by" field/direction form keys.
+     * @return array  { key: form_data_field_name, options: [ { value, label } ], levels?: [ { field_key, order_key } ] }|null
      */
     private function get_type_sort_options( $type ) {
         $sort_definitions = array(
@@ -2351,6 +2962,16 @@ class Quick_Export_Controller extends Abstract_Class {
                         'label' => __( 'Random', 'woocommerce-exporter' ),
                     ),
                 ),
+                'levels'  => array(
+                    array(
+                        'field_key' => 'product_orderby_field1',
+                        'order_key' => 'product_order_field1',
+                    ),
+                    array(
+                        'field_key' => 'product_orderby_field2',
+                        'order_key' => 'product_order_field2',
+                    ),
+                ),
             ),
             'order'          => array(
                 'key'     => 'order_orderby',
@@ -2370,10 +2991,6 @@ class Quick_Export_Controller extends Abstract_Class {
                     array(
                         'value' => 'modified',
                         'label' => __( 'Date Modified', 'woocommerce-exporter' ),
-                    ),
-                    array(
-                        'value' => 'product_name',
-                        'label' => __( 'Product Name', 'woocommerce-exporter' ),
                     ),
                     array(
                         'value' => 'rand',
@@ -2581,6 +3198,19 @@ class Quick_Export_Controller extends Abstract_Class {
             ),
         );
 
+        // Offer only the order sort keys the active order store honours, so the dropdown
+        // never shows a control wc_get_orders() would silently ignore.
+        if ( 'order' === $type ) {
+            $sort_definitions['order']['options'] = array_values(
+                array_filter(
+                    $sort_definitions['order']['options'],
+                    function ( $option ) {
+                        return ! Order_Export::is_ignored_orderby( $option['value'] );
+                    }
+                )
+            );
+        }
+
         return isset( $sort_definitions[ $type ] ) ? $sort_definitions[ $type ] : null;
     }
 
@@ -2601,31 +3231,60 @@ class Quick_Export_Controller extends Abstract_Class {
     }
 
     /**
-     * Curated "common" field set per export type. Used as the default selection
-     * when the user has not yet saved a custom field selection — keeps the
-     * initial export concise rather than dumping every column.
+     * Curated "common" field set per export type. Read through
+     * resolve_default_field_keys(), which turns it into the default selection
+     * when the user has not yet saved a custom one — keeping the initial export
+     * concise rather than dumping every column.
+     *
+     * Every key must be a field name registered by the type's
+     * woo_ce_get_{type}_fields() list — group_fields() silently skips a key
+     * that matches nothing, leaving that column unselected. User
+     * `billing_country` is registered only on some stores (it is read from
+     * the WC_Admin_Profile customer meta fields) and drops out elsewhere.
+     *
+     * Only the free export types are listed; a premium type cannot be
+     * exported here, and resolve_default_field_keys() selects every field for
+     * a type with no curated set.
      *
      * @since 5.6.0
+     * @since 2.8.3 Corrected keys that matched no registered field.
      * @param string $type Export type slug.
      * @return string[]
      */
     private function get_default_field_keys( $type ) {
         $defaults = array(
-            'product'        => array( 'sku', 'name', 'regular_price', 'sale_price', 'stock_status', 'stock', 'type', 'tax_class', 'categories', 'tags' ),
-            'order'          => array( 'order_id', 'order_status', 'order_date', 'order_total', 'billing_email', 'billing_first_name', 'billing_last_name', 'shipping_method', 'payment_method', 'customer_id' ),
-            'customer'       => array( 'customer_id', 'billing_email', 'billing_first_name', 'billing_last_name', 'billing_company', 'billing_country', 'orders_count', 'total_spent', 'last_order_date', 'date_registered' ),
-            'user'           => array( 'ID', 'user_login', 'user_email', 'first_name', 'last_name', 'roles', 'user_registered', 'billing_country', 'display_name', 'last_login' ),
-            'coupon'         => array( 'coupon_code', 'discount_type', 'coupon_amount', 'usage_limit', 'usage_count', 'expiry_date', 'product_ids', 'minimum_amount', 'individual_use' ),
-            'category'       => array( 'term_id', 'name', 'slug', 'parent', 'description', 'count', 'image', 'menu_order', 'display_type', 'thumbnail_id' ),
-            'tag'            => array( 'term_id', 'name', 'slug', 'description', 'count' ),
-            'brand'          => array( 'term_id', 'name', 'slug', 'description', 'count', 'thumbnail_id', 'taxonomy' ),
-            'subscription'   => array( 'ID', 'order_status', 'order_date', 'order_total', 'billing_email', 'billing_first_name', 'billing_last_name', 'billing_period', 'billing_interval', 'next_payment' ),
-            'review'         => array( 'comment_ID', 'comment_post_ID', 'comment_author', 'comment_author_email', 'comment_date', 'comment_content', 'comment_approved', 'rating' ),
-            'attribute'      => array( 'attribute_id', 'attribute_label', 'attribute_name', 'attribute_type', 'attribute_orderby', 'attribute_public' ),
-            'shipping_class' => array( 'term_id', 'name', 'slug', 'description', 'count' ),
+            'product'  => array( 'sku', 'name', 'type', 'price', 'sale_price', 'stock_status', 'quantity', 'tax_class', 'category', 'tag' ),
+            'order'    => array( 'purchase_id', 'purchase_date', 'payment_status', 'purchase_total', 'billing_first_name', 'billing_last_name', 'billing_email', 'shipping_method', 'payment_gateway', 'user_id' ),
+            'user'     => array( 'user_id', 'user_name', 'email', 'first_name', 'last_name', 'full_name', 'user_role', 'date_registered', 'billing_country' ),
+            'category' => array( 'term_id', 'name', 'slug', 'parent_id', 'description', 'count', 'image', 'display_type' ),
+            'tag'      => array( 'term_id', 'name', 'slug', 'description', 'count' ),
         );
 
         return isset( $defaults[ $type ] ) ? $defaults[ $type ] : array();
+    }
+
+    /**
+     * The field names an export type defaults to when nothing is saved.
+     *
+     * The single source of truth for the default selection: group_fields()
+     * ticks exactly these fields, and get_fields() serves the same list as
+     * `default_fields`, so the response cannot disagree with its own flags.
+     *
+     * A type whose curated set matches none of the fields it serves defaults
+     * to every field, the way the classic screen did. The list is never cut
+     * by field position.
+     *
+     * @param string $type   Export type slug.
+     * @param array  $fields Flat array of [ 'name' => '', 'label' => '' ] items.
+     *
+     * @since 2.8.3
+     * @return string[]
+     */
+    private function resolve_default_field_keys( $type, array $fields ) {
+        $names    = array_column( $fields, 'name' );
+        $defaults = $this->get_default_field_keys( $type );
+
+        return array_intersect( $defaults, $names ) ? $defaults : $names;
     }
 
     /**

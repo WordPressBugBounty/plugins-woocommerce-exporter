@@ -1,5 +1,6 @@
 <script setup>
 import { useRouter } from 'vue-router'
+import { __ } from '@wordpress/i18n'
 import {
   Zap,
   Package,
@@ -21,12 +22,12 @@ const router = useRouter()
 const store = useQuickExportStore()
 
 const exportTypes = [
-  { slug: 'product',      label: 'Products',      icon: Package,    iconColor: '#6C7BFF', bgColor: '#EFF1FF', selected: true },
-  { slug: 'order',        label: 'Orders',         icon: ShoppingBag,iconColor: '#F97316', bgColor: '#FFF7ED', selected: false },
-  { slug: 'customer',     label: 'Customers',      icon: Users,      iconColor: '#0D9488', bgColor: '#F0FDFA', selected: false },
-  { slug: 'category',     label: 'Categories',     icon: LayoutGrid, iconColor: '#16A34A', bgColor: '#F0FDF4', selected: false },
-  { slug: 'coupon',       label: 'Coupons',        icon: Tag,        iconColor: '#DC2626', bgColor: '#FFF1F2', selected: false },
-  { slug: 'subscription', label: 'Subscriptions',  icon: RefreshCw,  iconColor: '#0891B2', bgColor: '#ECFEFF', selected: false }
+  { slug: 'product',      label: __('Products', 'woocommerce-exporter'),      icon: Package,    iconColor: '#6C7BFF', bgColor: '#EFF1FF', selected: true },
+  { slug: 'order',        label: __('Orders', 'woocommerce-exporter'),         icon: ShoppingBag,iconColor: '#F97316', bgColor: '#FFF7ED', selected: false },
+  { slug: 'customer',     label: __('Customers', 'woocommerce-exporter'),      icon: Users,      iconColor: '#0D9488', bgColor: '#F0FDFA', selected: false },
+  { slug: 'category',     label: __('Categories', 'woocommerce-exporter'),     icon: LayoutGrid, iconColor: '#16A34A', bgColor: '#F0FDF4', selected: false },
+  { slug: 'coupon',       label: __('Coupons', 'woocommerce-exporter'),        icon: Tag,        iconColor: '#DC2626', bgColor: '#FFF1F2', selected: false },
+  { slug: 'subscription', label: __('Subscriptions', 'woocommerce-exporter'),  icon: RefreshCw,  iconColor: '#0891B2', bgColor: '#ECFEFF', selected: false }
 ]
 
 function goToQuickExport (slug) {
@@ -42,11 +43,11 @@ function goToQuickExport (slug) {
       <div>
         <div class="flex items-center gap-1.5 mb-[3px]">
           <Zap :size="15" color="#F59E0B" fill="#F59E0B" class="flex-shrink-0" />
-          <h2 class="text-[14px] font-semibold text-gray-900 m-0 leading-none">Quick Export</h2>
+          <h2 class="text-[14px] font-semibold text-gray-900 m-0 leading-none">{{ __('Quick Export', 'woocommerce-exporter') }}</h2>
         </div>
-        <p class="text-[12.5px] text-gray-500 m-0 leading-relaxed">Export any data type from your store in just a few clicks.</p>
+        <p class="text-[12.5px] text-gray-500 m-0 leading-relaxed">{{ __('Export any data type from your store in just a few clicks.', 'woocommerce-exporter') }}</p>
       </div>
-      <ViewAllButton to="/export-items" label="View All Export Items" />
+      <ViewAllButton to="/export-items" :label="__('View All Export Items', 'woocommerce-exporter')" />
     </div>
 
     <div class="grid grid-cols-7 gap-2">
@@ -84,7 +85,7 @@ function goToQuickExport (slug) {
         <span class="w-[52px] h-[52px] rounded-[10px] bg-gray-50 flex items-center justify-center">
           <MoreHorizontal :size="22" color="#9CA3AF" :stroke-width="1.75" />
         </span>
-        <span class="text-xs font-semibold text-gray-500 text-center leading-tight">More</span>
+        <span class="text-xs font-semibold text-gray-500 text-center leading-tight">{{ __('More', 'woocommerce-exporter') }}</span>
         <span class="text-[11px] text-gray-400 font-medium -mt-1">+8</span>
       </a>
     </div>

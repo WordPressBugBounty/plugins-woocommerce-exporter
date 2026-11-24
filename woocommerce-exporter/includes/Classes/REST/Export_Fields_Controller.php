@@ -10,6 +10,7 @@ namespace VisserLabs\WSE\Classes\REST;
 
 use VisserLabs\WSE\Abstracts\Abstract_Class;
 use VisserLabs\WSE\Classes\Export\Field_Registry;
+use VisserLabs\WSE\Helpers\Helper;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -131,12 +132,52 @@ class Export_Fields_Controller extends Abstract_Class {
 
         $categories = array_values( array_unique( array_column( $fields, 'category' ) ) );
 
+        // `label` is the saved header, so it stays in the site language. The
+        // display labels follow the user's language; switch locale once, not per field.
+        $data_types = array_values( array_unique( array_column( $fields, 'dataType' ) ) );
+
+        list( $category_labels, $data_type_labels ) = Helper::in_user_locale(
+            function () use ( $categories, $data_types ) {
+                $category_labels = array();
+                foreach ( $categories as $category ) {
+                    $category_labels[ $category ] = Field_Registry::get_category_label( $category );
+                }
+                $data_type_labels = array();
+                foreach ( $data_types as $data_type ) {
+                    $data_type_labels[ $data_type ] = $this->get_data_type_label( $data_type );
+                }
+                return array( $category_labels, $data_type_labels );
+            }
+        );
+
+        foreach ( $fields as &$field_row ) {
+            $field_row['dataTypeLabel'] = $data_type_labels[ $field_row['dataType'] ];
+            $field_row['categoryLabel'] = $category_labels[ $field_row['category'] ];
+        }
+        unset( $field_row );
+
         return rest_ensure_response(
             array(
                 'fields'     => $fields,
                 'categories' => $categories,
             )
         );
+    }
+
+    /**
+     * Translated display label for a data type returned by infer_data_type().
+     *
+     * The English value stays the stable key; this is only what gets rendered.
+     *
+     * @param string $data_type 'Number' or 'Text'.
+     *
+     * @since 2.8.3
+     * @return string
+     */
+    private function get_data_type_label( string $data_type ): string {
+        return 'Number' === $data_type
+            ? __( 'Number', 'woocommerce-exporter' )
+            : __( 'Text', 'woocommerce-exporter' );
     }
 
     /**

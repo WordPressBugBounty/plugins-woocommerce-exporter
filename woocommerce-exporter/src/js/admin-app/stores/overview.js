@@ -1,3 +1,4 @@
+import { __ } from '@wordpress/i18n'
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../lib/api'
@@ -15,7 +16,7 @@ export const useOverviewStore = defineStore('overview', () => {
     try {
       data.value = await api.get('overview')
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load overview data.'
+      error.value = err instanceof Error ? err.message : __('Failed to load overview data.', 'woocommerce-exporter')
     } finally {
       isLoading.value = false
     }

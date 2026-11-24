@@ -49,18 +49,35 @@ export interface ExportField {
   label:    string
   selected: boolean
   dataType?: string
+  dataTypeLabel?: string // dataType translated for display (export-fields endpoint)
   category?: string
+  categoryLabel?: string // category translated for display (export-fields endpoint)
   custom?:   boolean
 }
 
 export interface ExportFieldGroup {
   label:  string
+  display_label?: string // label translated for display; label stays the stable key
   fields: ExportField[]
+}
+
+// A registered custom meta key, listed in its dedicated Manage Fields section.
+export interface CustomMetaField {
+  name:        string
+  definition:  string
+  column_key?: string // the name the saved column order and label override hold this column under
+  selected:    boolean
+  available:   boolean
 }
 
 export interface ExportFieldsResponse {
   fields: ExportField[]   // flat list (export-templates endpoint)
   groups?: ExportFieldGroup[] // grouped (quick-export/fields endpoint)
+  custom_meta_fields?: CustomMetaField[] // quick-export/fields endpoint
+  meta_field_names?: Record<string, Record<string, string>> // quick-export/fields endpoint: prefixed definitions' field names
+  field_order?: string[] // quick-export/fields endpoint: served order before meta keys were stripped
+  saved_field_order?: string[] // quick-export/fields endpoint: the column order the last export ran with
+  default_fields?: string[] // quick-export/fields endpoint: the effective default selection
 }
 
 // ── Filters ──────────────────────────────────────────────────────────────────
@@ -75,6 +92,8 @@ export interface FilterSubOption {
 export interface Filter {
   key:         string
   label:       string
+  group?:       string // stable English group key
+  group_label?: string // group translated for display
   icon?:       string
   description?: string
   sub_options?: FilterSubOption[]
@@ -188,6 +207,23 @@ export interface WseAdminData {
    * scalars, so this arrives as "1" / "" rather than a real boolean.
    */
   debugMode:        boolean | string
+  dateLocale?:      DateLocale
+  /**
+   * "Reset language to English" setting is on. wp_localize_script
+   * stringifies scalars, so this arrives as "1" / "".
+   */
+  resetLanguage?:   boolean | string
+}
+
+// The admin's language (BCP 47) and its date names from WordPress's
+// $wp_locale (weekdays Sunday first).
+export interface DateLocale {
+  locale:        string
+  months:        string[]
+  monthsShort:   string[]
+  weekdays:      string[]
+  weekdaysShort: string[]
+  meridiem:      Record<'am' | 'pm' | 'AM' | 'PM', string>
 }
 
 declare global {

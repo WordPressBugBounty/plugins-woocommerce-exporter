@@ -71,6 +71,15 @@
   border-color: var(--color-border-focus, #3858e9);
 }
 
+/* An input the screen has already rejected keeps its error border, focused or
+ * not. The focus rule above is unlayered, so it outranks a Tailwind `focus:`
+ * utility, which left a rejected field showing a blue edge above its own red
+ * error text. */
+.wse-app input[aria-invalid="true"],
+.wse-app input[aria-invalid="true"]:focus {
+  border-color: var(--color-danger-400, #f87171);
+}
+
 /* ── Search field — inner input must be transparent ──────────────────────
  * The outer .wse-search-field wrapper provides the visual border/focus
  * ring. Specificity (0,2,1) beats the generic input reset (0,1,1).

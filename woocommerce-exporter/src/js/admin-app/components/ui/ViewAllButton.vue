@@ -1,9 +1,10 @@
 <script setup>
 import { ArrowRight } from 'lucide-vue-next'
+import { __ } from '@wordpress/i18n'
 
 defineProps({
   to: { type: [String, Object], required: true },
-  label: { type: String, default: 'View All' }
+  label: { type: String, default: () => __('View All', 'woocommerce-exporter') }
 })
 </script>
 

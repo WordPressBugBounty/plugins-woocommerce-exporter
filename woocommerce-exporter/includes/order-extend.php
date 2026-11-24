@@ -1991,22 +1991,22 @@ function woo_ce_extend_order_items_fields( $fields = array() ) {
 	if ( woo_ce_detect_export_plugin( 'alidropship' ) ) {
 		$fields[] = array(
 			'name'  => 'order_items_ali_product_id',
-			'label' => __( 'Order Items: Product ID', 'woocommerce-exporter' ),
+			'label' => __( 'Order Items: AliDropship Product ID', 'woocommerce-exporter' ),
 			'hover' => __( 'AliDropship for WooCommerce', 'woocommerce-exporter' ),
 		);
 		$fields[] = array(
 			'name'  => 'order_items_ali_product_url',
-			'label' => __( 'Order Items: Product URL', 'woocommerce-exporter' ),
+			'label' => __( 'Order Items: AliDropship Product URL', 'woocommerce-exporter' ),
 			'hover' => __( 'AliDropship for WooCommerce', 'woocommerce-exporter' ),
 		);
 		$fields[] = array(
 			'name'  => 'order_items_ali_store_url',
-			'label' => __( 'Order Items: Store URL', 'woocommerce-exporter' ),
+			'label' => __( 'Order Items: AliDropship Store URL', 'woocommerce-exporter' ),
 			'hover' => __( 'AliDropship for WooCommerce', 'woocommerce-exporter' ),
 		);
 		$fields[] = array(
 			'name'  => 'order_items_ali_store_name',
-			'label' => __( 'Order Items: Store Name', 'woocommerce-exporter' ),
+			'label' => __( 'Order Items: AliDropship Store Name', 'woocommerce-exporter' ),
 			'hover' => __( 'AliDropship for WooCommerce', 'woocommerce-exporter' ),
 		);
 	}
@@ -2167,12 +2167,24 @@ function woo_ce_extend_order_items_fields( $fields = array() ) {
 	if ( apply_filters( 'woo_ce_enable_product_attributes', true ) ) {
 		$attributes = woo_ce_get_product_attributes();
 		if ( ! empty( $attributes ) ) {
+			$used_keys = array();
 			foreach ( $attributes as $attribute ) {
 				$attribute->attribute_label = trim( $attribute->attribute_label );
 				if ( empty( $attribute->attribute_label ) ) {
 					$attribute->attribute_label = $attribute->attribute_name;
                 }
-				$key = sanitize_key( urlencode( $attribute->attribute_name ) );
+				if ( empty( $attribute->attribute_id ) ) {
+					// A product-level (custom) attribute: WooCommerce keys it on the product and on the
+					// order line item by sanitize_title() of its name, so the column uses that key too.
+					$key = sanitize_title( $attribute->attribute_label );
+				} else {
+					$key = sanitize_key( urlencode( $attribute->attribute_name ) );
+				}
+				// One column per key: a custom attribute named like a global one shares its column.
+				if ( '' === $key || isset( $used_keys[ $key ] ) ) {
+					continue;
+				}
+				$used_keys[ $key ] = true;
 				// First row is to fetch the Variation Attribute linked to the Order Item
 				$fields[] = array(
 					'name'    => sprintf( 'order_items_attribute_%s', $key ),
@@ -3371,7 +3383,7 @@ $order_data['purchase_id'] = $order_id;
 		global $wpdb;
 
 		// Check the wc_quick_donation table exists
-		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'wc_quick_donation' ) ) ) {
+		if ( woo_ce_table_exists( $wpdb->prefix . 'wc_quick_donation' ) ) {
 			$project_id_sql             = $wpdb->prepare( 'SELECT `projectid` FROM `' . esc_sql( $wpdb->prefix ) . 'wc_quick_donation` WHERE `donationid` = %d LIMIT 1', $order_id );
 			$order_data['project_id']   = absint( $wpdb->get_var( $project_id_sql ) );
 			$order_data['project_name'] = get_the_title( $order_data['project_id'] );
@@ -5251,13 +5263,22 @@ function woo_ce_extend_order_item( $order_item_data, $order_item, $order_id, $ex
 	}
 
 	// AliDropship for WooCommerce - https://alidropship.com/
-	if ( woo_ce_detect_export_plugin( 'alidropship' ) && isset( $order_item_data['product_id'] ) ) {
+	// The Quick Export only fills product_id when the "Order Items: Product ID" field is
+	// selected, so fall back to the order item's own product.
+	$ali_post_id = 0;
+	if ( isset( $order_item_data['product_id'] ) ) {
+		$ali_post_id = absint( $order_item_data['product_id'] );
+	} elseif ( is_callable( array( $order_item, 'get_product_id' ) ) ) {
+		$ali_post_id = absint( $order_item->get_product_id() );
+	}
+	if ( woo_ce_detect_export_plugin( 'alidropship' ) && $ali_post_id ) {
 
 		global $wpdb;
 
 		// Check the adsw_ali_meta table exists
-		if ( $wpdb->get_var( "SHOW TABLES LIKE '" . $wpdb->prefix . "adsw_ali_meta'" ) ) {
-			$meta_sql = $wpdb->prepare( 'SELECT * FROM `%s` WHERE `post_id` = %d', $wpdb->prefix . 'adsw_ali_meta', absint( $order_item_data['product_id'] ) );
+		$ali_table = $wpdb->prefix . 'adsw_ali_meta';
+		if ( woo_ce_table_exists( $ali_table ) ) {
+			$meta_sql = $wpdb->prepare( 'SELECT * FROM `' . esc_sql( $ali_table ) . '` WHERE `post_id` = %d', $ali_post_id ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table name is sanitized with esc_sql().
 			$meta     = $wpdb->get_row( $meta_sql, ARRAY_A );
 			if ( ! empty( $meta ) ) {
 				$order_item_data['ali_product_id']  = $meta['product_id'];

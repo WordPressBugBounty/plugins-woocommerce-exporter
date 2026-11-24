@@ -11,6 +11,7 @@ namespace VisserLabs\WSE\Classes\REST;
 use VisserLabs\WSE\Abstracts\Abstract_Class;
 use VisserLabs\WSE\Abstracts\Abstract_Exporter;
 use VisserLabs\WSE\Helpers\Export as Export_Helper;
+use VisserLabs\WSE\Helpers\Helper;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -132,10 +133,21 @@ class Settings_Controller extends Abstract_Class {
         // what a stored value means, including what an unset option defaults to.
         $header_formatting = Abstract_Exporter::stored_header_formatting_includes_headers() ? 'include' : 'exclude';
 
+        // Report the delimiter the exporter will ACTUALLY use, not whatever is
+        // stored. An older build could store 'ab', 'é' or '0', which the export
+        // engine resolves to a comma. The SPA posts the whole settings object on
+        // every save, so handing the raw value back would hit the save guard in
+        // update_settings() and lock the store out of saving ANY setting. Asked
+        // through is_storable_delimiter(), the exact rule that guard applies.
+        $stored_delimiter = woo_ce_get_option( 'delimiter', ',' );
+        $delimiter        = Export_Helper::is_storable_delimiter( $stored_delimiter ) ? $stored_delimiter : ',';
+
         return rest_ensure_response(
             array(
                 // General.
-                'filename'               => woo_ce_get_option( 'filename', 'export-{type}-{store}-{date}-{time}' ),
+                // The key the export engine reads. The screen previously read and
+                // wrote `filename`, which nothing else consumed.
+                'export_filename'        => Export_Helper::get_filename_pattern(),
                 'encoding'               => woo_ce_get_option( 'encoding', 'UTF-8' ),
                 // Read through the helper so the screen shows the format the export engine
                 // will actually use. It previously defaulted to 'F j, Y' — a different
@@ -156,7 +168,7 @@ class Settings_Controller extends Abstract_Class {
                 'csv_formula_escaping'   => (bool) woo_ce_get_option( 'csv_formula_escaping', 1 ),
                 'timeout'                => (int) woo_ce_get_option( 'timeout', 0 ),
                 // Export Formats — CSV.
-                'delimiter'              => woo_ce_get_option( 'delimiter', ',' ),
+                'delimiter'              => $delimiter,
                 'category_separator'     => woo_ce_get_option( 'category_separator', '|' ),
                 'line_ending_formatting' => woo_ce_get_option( 'line_ending_formatting', 'windows' ),
                 // Advanced.
@@ -210,7 +222,7 @@ class Settings_Controller extends Abstract_Class {
      * @param \WP_REST_Request $request The REST request.
      *
      * @since 2.7.10
-     * @return \WP_REST_Response
+     * @return \WP_REST_Response|\WP_Error
      */
     public function save_settings( $request ) {
         // Read BEFORE the write. WOO_CE_DEBUG was frozen at `init`, earlier in
@@ -221,7 +233,11 @@ class Settings_Controller extends Abstract_Class {
 
         $allowed = array(
             // General.
-            'filename'               => 'sanitize_text_field',
+            // Not sanitize_text_field(): it strips percent-encoded octets, turning the
+            // legacy %date% tag into "e". The Filename pattern keeps its {tag} and
+            // %tag% placeholders and loses any file extension, as the extension
+            // comes from the export format.
+            'export_filename'        => array( Helper::class, 'sanitize_filename' ),
             'encoding'               => 'sanitize_text_field',
             // Canonicalised rather than merely sanitized: sanitize_text_field() alone
             // accepts '', which the Settings screen submits the moment the Custom radio is
@@ -252,19 +268,33 @@ class Settings_Controller extends Abstract_Class {
             'header_formatting'      => static function ( $value ) {
                 return Abstract_Exporter::normalize_header_formatting( $value ) ? 'include' : 'exclude';
             },
-            'bom'                    => 'boolval',
+            'bom'                    => array( __CLASS__, 'sanitize_bool_to_int' ),
             'flush_cache'            => 'sanitize_text_field',
             'excel_formulas'         => 'boolval',
             'csv_formula_escaping'   => array( __CLASS__, 'sanitize_bool_to_int' ),
             'timeout'                => 'absint',
-            // Export Formats — CSV.
-            'delimiter'              => 'sanitize_text_field',
+            // Export Formats — CSV. Validated before this loop runs (see below). The
+            // encoder persists a literal tab as the TAB token, because
+            // sanitize_text_field() alone collapses it to ''.
+            'delimiter'              => array( Export_Helper::class, 'encode_delimiter' ),
             'category_separator'     => 'sanitize_text_field',
             'line_ending_formatting' => 'sanitize_text_field',
             // Advanced.
             'debug_mode'             => 'boolval',
-            'logging_mode'           => 'boolval',
+            'logging_mode'           => array( __CLASS__, 'sanitize_bool_to_int' ),
         );
+
+        // Rejected, not coerced, and rejected BEFORE anything is written. A
+        // delimiter has no obviously intended value to land on: quietly turning
+        // 'ab' into ',' would leave the screen and the exported file disagreeing.
+        $delimiter = $request->get_param( 'delimiter' );
+        if ( null !== $delimiter && ! Export_Helper::is_storable_delimiter( $delimiter ) ) {
+            return new \WP_Error(
+                'wse_invalid_delimiter',
+                __( 'The Field Delimiter must be a single ASCII character, such as , ; | ^ or ~, or a Tab. Your settings were not saved.', 'woocommerce-exporter' ),
+                array( 'status' => 400 )
+            );
+        }
 
         $saved = array();
         foreach ( $allowed as $key => $sanitizer ) {
@@ -296,7 +326,16 @@ class Settings_Controller extends Abstract_Class {
      * Coerce a request value to the integer 1/0 the legacy settings screen and
      * the export engine read back with woo_ce_get_option().
      *
+     * `boolval` hands update_option() a PHP false for "off". For an option whose
+     * reader uses a truthy default, that cannot persist: a missing row stays
+     * missing, and an existing row is left empty or removed. The option then
+     * reads back as its default (`1`), so the toggle snaps back on. That covers
+     * `bom` (the export engine reads it with a default of 1) and `logging_mode`
+     * (bootstrap.php reads it with a default of 1 under debug mode). Writing `0`
+     * avoids both.
+     *
      * @since 2.8.1
+     * @since 2.8.3 Applied to every toggle with a truthy-default reader, not only csv_formula_escaping.
      *
      * @param mixed $value Raw request value.
      * @return int 1 when truthy, 0 otherwise.

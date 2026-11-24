@@ -1,3 +1,4 @@
+import { __ } from '@wordpress/i18n'
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../lib/api'
@@ -19,6 +20,29 @@ export const useToolsStore = defineStore('tools', () => {
   const searchQuery = ref('')
   const currentPage = ref(1)
 
+  /**
+   * Apply a Tools snapshot returned by the refresh or install route.
+   *
+   * Replaces the object reference so Vue's reactivity system detects the change reliably -
+   * mutating nested properties can be missed by watchers that track the ref itself rather than
+   * its individual properties. woo_tools travels with the modules so the companion-tool cards
+   * follow a plugin switched on without leaving this screen; they are otherwise only built when
+   * the app mounts. Each key falls back to what is already held, so a route that omits one
+   * leaves it alone rather than blanking the screen.
+   *
+   * @param {object} snapshot  The route's response: { woo_tools, modules, counts }.
+   */
+  function applySnapshot (snapshot) {
+    if (!data.value || !snapshot) return
+
+    data.value = {
+      ...data.value,
+      woo_tools: snapshot.woo_tools ?? data.value.woo_tools,
+      modules: snapshot.modules ?? data.value.modules,
+      counts: snapshot.counts ?? data.value.counts
+    }
+  }
+
   async function fetchData () {
     if (data.value) return
     isLoading.value = true
@@ -26,7 +50,7 @@ export const useToolsStore = defineStore('tools', () => {
     try {
       data.value = await api.get('tools')
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load tools data.'
+      error.value = err instanceof Error ? err.message : __('Failed to load tools data.', 'woocommerce-exporter')
     } finally {
       isLoading.value = false
     }
@@ -36,16 +60,10 @@ export const useToolsStore = defineStore('tools', () => {
     isRefreshing.value = true
     error.value = null
     try {
-      const result = await api.post('tools/refresh', {})
-      // Replace the object reference so Vue's reactivity system detects the
-      // change reliably — mutating nested properties can be missed by watchers
-      // that track the ref itself rather than its individual properties.
-      if (data.value) {
-        data.value = { ...data.value, modules: result.modules, counts: result.counts }
-      }
+      applySnapshot(await api.post('tools/refresh', {}))
       currentPage.value = 1
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to refresh module status.'
+      error.value = err instanceof Error ? err.message : __('Failed to refresh module status.', 'woocommerce-exporter')
     } finally {
       isRefreshing.value = false
     }
@@ -74,15 +92,12 @@ export const useToolsStore = defineStore('tools', () => {
     try {
       const result = await api.post('tools/install', { slug })
       installStatus.value = 'success'
-      // The install endpoint returns a fresh module list and counts in one
-      // round trip. Apply them directly so the status badges update immediately
-      // without a separate /refresh call.
-      if (data.value && result.modules) {
-        data.value = { ...data.value, modules: result.modules, counts: result.counts }
-      }
+      // The install endpoint returns the same snapshot as the refresh route, so the status badges
+      // and the card links update in one round trip - no separate /refresh call, no page reload.
+      applySnapshot(result)
     } catch (err) {
       installStatus.value = 'error'
-      installError.value = err instanceof Error ? err.message : 'Installation failed. Please try again.'
+      installError.value = err instanceof Error ? err.message : __('Installation failed. Please try again.', 'woocommerce-exporter')
     } finally {
       clearTimeout(activatingTimer)
     }

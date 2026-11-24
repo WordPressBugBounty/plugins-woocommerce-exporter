@@ -361,6 +361,37 @@ function woo_ce_get_category_field( $name = null, $format = 'name', $export = ar
 }
 
 /**
+ * Returns a category's ancestors, nearest parent first.
+ *
+ * With a language selection WPML stays on every language only while the parents resolve,
+ * so WPML's "Adjust IDs" does not translate them into the admin language.
+ *
+ * @since 2.8.3
+ *
+ * @param int    $parent_id     The parent term ID.
+ * @param string $term_taxonomy The taxonomy.
+ * @param bool   $all_languages Whether to resolve the parents under every WPML language.
+ * @return WP_Term[] The ancestor terms, nearest parent first.
+ */
+function woo_ce_get_category_ancestors( $parent_id, $term_taxonomy, $all_languages = false ) {
+    $previous_language = $all_languages ? woo_ce_wpml_switch_language( 'all' ) : null;
+
+    $ancestors = array();
+    for ( $depth = 0; $parent_id && $depth < WSE_CATEGORY_MAX_ANCESTORS; $depth++ ) {
+        $parent_category = get_term( $parent_id, $term_taxonomy );
+        if ( empty( $parent_category ) || is_wp_error( $parent_category ) ) {
+            break;
+        }
+        $ancestors[] = $parent_category;
+        $parent_id   = $parent_category->parent;
+    }
+
+    woo_ce_wpml_restore_language( $previous_language );
+
+    return $ancestors;
+}
+
+/**
  * Returns a list of WooCommerce Product Categories to export process.
  *
  * @param array $args The arguments for get_terms().
@@ -377,24 +408,36 @@ function woo_ce_get_product_categories( $args = array(), $export = array() ) {
 		'orderby'    => 'name',
 		'order'      => 'ASC',
 		'hide_empty' => 0,
+        'number'     => 0,
+        'offset'     => 0,
 	);
-	$args          = wp_parse_args( $args, $defaults );
+    $args          = woo_ce_get_term_export_query_args( wp_parse_args( $args, $defaults ), 'category' );
 
 	// Allow other developers to bake in their own filters.
 	$args = apply_filters( 'woo_ce_get_product_categories_args', $args );
 
-	$categories = get_terms(
-        array(
-			'taxonomy'   => $term_taxonomy,
-			'orderby'    => $args['orderby'],
-			'order'      => $args['order'],
-			'hide_empty' => $args['hide_empty'],
-        )
+    $query_args = array(
+        'taxonomy'   => $term_taxonomy,
+        'orderby'    => $args['orderby'],
+        'order'      => $args['order'],
+        'hide_empty' => $args['hide_empty'],
+        'number'     => $args['number'],
+        'offset'     => $args['offset'],
     );
+    // Forward a Polylang lang a third party set through the args filter.
+    if ( isset( $args['lang'] ) ) {
+        $query_args['lang'] = $args['lang'];
+    }
+
+    $languages  = isset( $args['category_language'] ) ? array_filter( (array) $args['category_language'] ) : array();
+    $categories = woo_ce_get_terms_in_languages( $query_args, $languages );
 
 	if ( ! empty( $categories ) && is_wp_error( $categories ) == false ) {
+        // get_terms() keeps the original keys when it applies number/offset to a hierarchical taxonomy.
+        $categories = array_values( $categories );
 		foreach ( $categories as $key => $category ) {
-			$categories[ $key ]->description = woo_ce_format_description_excerpt( $category->description );
+            // WordPress stores term names and descriptions entity-encoded; export them as plain text.
+            $categories[ $key ]->description = wp_specialchars_decode( woo_ce_format_description_excerpt( $category->description ), ENT_QUOTES );
 			$categories[ $key ]->term_url    = get_term_link( $category, $term_taxonomy );
 
 			$terms = array();
@@ -405,44 +448,19 @@ function woo_ce_get_product_categories( $args = array(), $export = array() ) {
 			// Term.
 			$terms[] = $category->name;
 			if ( $categories[ $key ]->parent_id = $category->parent ) {
-				$parent_category = get_term( $categories[ $key ]->parent_id, $term_taxonomy );
-				if ( ! empty( $parent_category ) && is_wp_error( $parent_category ) == false ) {
-					$categories[ $key ]->parent_name = $parent_category->name;
-					// Term > Term.
-					$terms[]         = $parent_category->name;
-					$parent_category = get_term( $parent_category->parent, $term_taxonomy );
-					if ( ! empty( $parent_category ) && is_wp_error( $parent_category ) == false ) {
-						// Term > Term > Term.
-						$terms[]         = $parent_category->name;
-						$parent_category = get_term( $parent_category->parent, $term_taxonomy );
-						if ( ! empty( $parent_category ) && is_wp_error( $parent_category ) == false ) {
-							// Term > Term > Term > Term.
-							$terms[]         = $parent_category->name;
-							$parent_category = get_term( $parent_category->parent, $term_taxonomy );
-							if ( ! empty( $parent_category ) && is_wp_error( $parent_category ) == false ) {
-								// Term > Term > Term > Term > Term.
-								$terms[]         = $parent_category->name;
-								$parent_category = get_term( $parent_category->parent, $term_taxonomy );
-								if ( ! empty( $parent_category ) && is_wp_error( $parent_category ) == false ) {
-									// Term > Term > Term > Term > Term > Term.
-									$terms[]         = $parent_category->name;
-									$parent_category = get_term( $parent_category->parent, $term_taxonomy );
-									if ( ! empty( $parent_category ) && is_wp_error( $parent_category ) == false ) {
-										// Term > Term > Term > Term > Term > Term > Term.
-										$terms[] = $parent_category->name;
-									}
-								}
-							}
-						}
-					}
-				}
-				unset( $parent_category );
+                $ancestors = woo_ce_get_category_ancestors( $categories[ $key ]->parent_id, $term_taxonomy, ! empty( $languages ) );
+                if ( ! empty( $ancestors ) ) {
+                    $categories[ $key ]->parent_name = wp_specialchars_decode( $ancestors[0]->name, ENT_QUOTES );
+                    // Term > Term > ... nearest parent first.
+                    $terms = array_merge( $terms, wp_list_pluck( $ancestors, 'name' ) );
+                }
+                unset( $ancestors );
 			} else {
 				$categories[ $key ]->parent_id = '';
 			}
 
 			if ( ! empty( $terms ) ) {
-				$terms                        = array_reverse( $terms );
+                $terms                        = array_reverse( array_map( fn( $term ) => wp_specialchars_decode( $term, ENT_QUOTES ), $terms ) );
 				$categories[ $key ]->heirachy = implode( '>', $terms );
 				$i                            = 1;
 				foreach ( $terms as $term ) {
@@ -452,11 +470,14 @@ function woo_ce_get_product_categories( $args = array(), $export = array() ) {
 				unset( $terms, $term );
 			}
 
+            // Decoded after the hierarchy is built, as $category and $categories[ $key ] are the same WP_Term object.
+            $categories[ $key ]->name = wp_specialchars_decode( $category->name, ENT_QUOTES );
+
 			$categories[ $key ]->image = woo_ce_get_category_thumbnail_url( $category->term_id );
 			if ( ! empty( $categories[ $key ]->image ) ) {
 				if ( isset( $export->export_format ) && $export->export_format == 'xlsx' ) {
 					// Override for the image embed thumbnail size; use registered WordPress image size names.
-					$thumbnail_size                  = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'shop_thumbnail' );
+					$thumbnail_size                  = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'woocommerce_thumbnail' );
 					$categories[ $key ]->image_embed = woo_ce_get_category_thumbnail_path( $category->term_id, $thumbnail_size );
 				}
 			}
@@ -493,11 +514,8 @@ if ( ! function_exists( 'woo_ce_export_dataset_override_category' ) ) {
 
 		global $export;
 
-		$args = array(
-			'orderby' => ( isset( $export->args['category_orderby'] ) ? $export->args['category_orderby'] : 'ID' ),
-			'order'   => ( isset( $export->args['category_order'] ) ? $export->args['category_order'] : 'ASC' ),
-		);
-		if ( $categories = woo_ce_get_product_categories( $args ) ) {
+        $categories = woo_ce_get_product_categories( $export->args );
+        if ( $categories ) {
 			$export->total_rows = count( $categories );
 			// XML, RSS and JSON export.
 			if ( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {
@@ -552,11 +570,8 @@ function woo_ce_export_dataset_multisite_override_category( $output = null, $exp
 	if ( ! empty( $sites ) ) {
 		foreach ( $sites as $site ) {
 			switch_to_blog( $site->blog_id );
-			$args = array(
-				'orderby' => ( isset( $export->args['category_orderby'] ) ? $export->args['category_orderby'] : 'ID' ),
-				'order'   => ( isset( $export->args['category_order'] ) ? $export->args['category_order'] : 'ASC' ),
-			);
-			if ( $categories = woo_ce_get_product_categories( $args ) ) {
+            $categories = woo_ce_get_product_categories( $export->args );
+            if ( $categories ) {
 				$export->total_rows = count( $categories );
 				// XML, RSS and JSON export.
 				if ( in_array( $export->export_format, array( 'xml', 'rss', 'json' ) ) ) {

@@ -38,6 +38,118 @@ class Export {
     const NO_MATCH = -1;
 
     /**
+     * Token persisted in place of a literal tab column delimiter.
+     *
+     * A literal "\t" collapses to '' in sanitize_text_field(). encode_delimiter()
+     * writes this token instead and decode_delimiter() reverses it.
+     *
+     * @since 2.8.3
+     *
+     * @var string
+     */
+    const DELIMITER_TAB_TOKEN = 'TAB';
+
+    /**
+     * Single bytes that cannot serve as a column delimiter.
+     *
+     * - `0` is falsy, and the export engine resolves the stored value with
+     *   `empty()`, so it is replaced by the default at export time.
+     * - The enclosure and escape bytes of the delimited writer. A separator
+     *   equal to either one produces a file a CSV reader cannot take apart.
+     *   They are read off the writer's own constants, so the two cannot drift.
+     *
+     * @since 2.8.3
+     *
+     * @var string[]
+     */
+    const UNUSABLE_DELIMITERS = array(
+        '0',
+        \VisserLabs\WSE\Abstracts\Abstract_Exporter::CSV_ENCLOSURE,
+        \VisserLabs\WSE\Abstracts\Abstract_Exporter::CSV_ESCAPE,
+    );
+
+    /**
+     * Default Filename pattern, used when no pattern has been saved.
+     *
+     * Resolves to exactly what the legacy default
+     * `%store_name%-export_%dataset%-%date%-%time%-%random%` did, so stores that
+     * never touched the setting keep their filenames. The Settings screen's
+     * reset-to-default (`src/js/admin-app/lib/filenamePattern.js`) holds the
+     * same string.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const DEFAULT_FILENAME_PATTERN = '{store}-export_{type}-{date}-{time}-{random}';
+
+    /**
+     * The Filename the Settings screen seeded into the unread `woo_ce_filename` key.
+     *
+     * Only the `woo_ce_filename` repair uses it, to tell that untouched seed apart
+     * from a pattern a user typed.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const LEGACY_SPA_DEFAULT_FILENAME = 'export-{type}-{store}-{date}-{time}';
+
+    /**
+     * Matches a trailing export file extension on a Filename pattern.
+     *
+     * `xlsx` precedes `xls` so the longer extension is not left with a stray `x`.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const FILENAME_EXTENSION_REGEX = '/\.(?:csv|tsv|txt|xlsx|xls|xml|rss|json)$/i';
+
+    /**
+     * The Filename tags, as `{tag}` name => legacy `%tag%` name.
+     *
+     * Only the tags listed here are replaced by resolve_filename_tags().
+     *
+     * @since 2.8.3
+     * @var string[]
+     */
+    const FILENAME_TAGS = array(
+        'type'      => 'dataset',
+        'store'     => 'store_name',
+        'date'      => 'date',
+        'year'      => 'year',
+        'month'     => 'month',
+        'day'       => 'day',
+        'time'      => 'time',
+        'hour'      => 'hour',
+        'minute'    => 'minute',
+        'second'    => 'second',
+        'format'    => 'format',
+        'timestamp' => 'timestamp',
+        'random'    => 'random',
+        'order_id'  => 'order_id',
+    );
+
+    /**
+     * Matches a filename segment a web server could run as a script.
+     *
+     * When such a segment sits between dots, sanitize_export_filename() adds `_` after it.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const EXECUTABLE_EXTENSION_REGEX = '/^(?:php\d*|phtml|phar|pht|phps|cgi|pl|py|asp|aspx|jsp|shtml?|sh)$/i';
+
+    /**
+     * Stands in for a dot while sanitize_file_name() runs (see sanitize_export_filename()).
+     *
+     * Lowercase letters only, so neither sanitize_file_name() nor a lowercasing
+     * `sanitize_file_name` filter changes it.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const FILENAME_DOT_PLACEHOLDER = 'wsefilenamedotplaceholder';
+
+    /**
      * Date-filter preset meta key => the from/to bound keys stored alongside it.
      *
      * One source of truth for the trio every date filter is stored as. The
@@ -48,11 +160,14 @@ class Export {
      * @var array<string, string[]>
      */
     const DATE_FILTER_BOUNDS = array(
-        '_filter_order_date'          => array( '_filter_order_dates_from', '_filter_order_dates_to' ),
-        '_filter_order_modified_date' => array( '_filter_order_modified_dates_from', '_filter_order_modified_dates_to' ),
-        '_filter_subscription_date'   => array( '_filter_subscription_dates_from', '_filter_subscription_dates_to' ),
-        '_filter_user_date'           => array( '_filter_user_dates_from', '_filter_user_dates_to' ),
-        '_filter_user_modified_date'  => array( '_filter_user_modified_dates_from', '_filter_user_modified_dates_to' ),
+        '_filter_order_date'             => array( '_filter_order_dates_from', '_filter_order_dates_to' ),
+        '_filter_order_modified_date'    => array( '_filter_order_modified_dates_from', '_filter_order_modified_dates_to' ),
+        '_filter_subscription_date'      => array( '_filter_subscription_dates_from', '_filter_subscription_dates_to' ),
+        '_filter_user_date'              => array( '_filter_user_dates_from', '_filter_user_dates_to' ),
+        '_filter_user_modified_date'     => array( '_filter_user_modified_dates_from', '_filter_user_modified_dates_to' ),
+        // Read back by woo_ce_cron_product_dataset_args() ( includes/product.php ). `_filter_product_date` is the Date modified filter.
+        '_filter_product_date'           => array( '_filter_product_dates_from', '_filter_product_dates_to' ),
+        '_filter_product_published_date' => array( '_filter_product_published_dates_from', '_filter_product_published_dates_to' ),
     );
 
     /**
@@ -151,6 +266,138 @@ class Export {
     }
 
     /**
+     * Persist a column delimiter in the shape every reader expects.
+     *
+     * A literal tab cannot be stored as itself: sanitize_text_field() collapses
+     * whitespace and trims, so it would come back as ''. The TAB token is
+     * written instead, and decode_delimiter() reverses it.
+     *
+     * @since 2.8.3
+     * @access public
+     * @static
+     *
+     * @param string $delimiter The delimiter as submitted.
+     * @return string The value to persist: the TAB token, or the sanitized delimiter.
+     */
+    public static function encode_delimiter( $delimiter ) {
+        return "\t" === $delimiter ? self::DELIMITER_TAB_TOKEN : sanitize_text_field( $delimiter );
+    }
+
+    /**
+     * Turn a stored column delimiter into the literal separator the writer receives.
+     *
+     * @since 2.8.3
+     * @access public
+     * @static
+     *
+     * @param string $stored The delimiter as stored.
+     * @return string The literal separator to hand to the writer.
+     */
+    public static function decode_delimiter( $stored ) {
+        return self::DELIMITER_TAB_TOKEN === $stored ? "\t" : $stored;
+    }
+
+    /**
+     * Whether a stored column delimiter is one the delimited writer can use.
+     *
+     * The writer joins cells with the separator, so a value such as `ab`, `;;`
+     * or the multi-byte `é` exports "successfully" and produces a file no CSV
+     * reader can parse. The rule is a byte count, not a character count.
+     *
+     * `TAB` is the token encode_delimiter() persists in place of a literal tab,
+     * so it is valid. `'0'` is excluded because the export engine resolves the
+     * stored value with `empty()`, where `'0'` is replaced by the default. The
+     * CSV enclosure and escape bytes are excluded because a separator equal to
+     * either one produces a file a CSV reader cannot take apart. The empty string
+     * is not valid: the global setting has no value to inherit from.
+     *
+     * @since 2.8.3
+     * @access public
+     * @static
+     *
+     * @param mixed $value The delimiter to test, as it would be stored.
+     * @return bool True when the delimited writer can use it.
+     */
+    public static function is_valid_delimiter( $value ) {
+        if ( ! is_string( $value ) ) {
+            return false;
+        }
+
+        if ( self::DELIMITER_TAB_TOKEN === $value ) {
+            return true;
+        }
+
+        return 1 === strlen( $value ) && ! in_array( $value, self::UNUSABLE_DELIMITERS, true );
+    }
+
+    /**
+     * Whether a submitted column delimiter survives storage as one the writer can use.
+     *
+     * Everything the Settings screen writes passes encode_delimiter() first, and
+     * sanitize_text_field() is not value-preserving: a lone space is trimmed to
+     * '', and '<' comes back as '&lt;'. Both sides of the settings endpoint ask
+     * this question, so the value the GET reports is always one the POST accepts.
+     * The SPA mirrors it in isValidDelimiter() (src/js/admin-app/lib/delimiter.js).
+     *
+     * @since 2.8.3
+     * @access public
+     * @static
+     *
+     * @param mixed $value The delimiter as submitted, or as stored before encoding.
+     * @return bool True when the encoded form is one the delimited writer can use.
+     */
+    public static function is_storable_delimiter( $value ) {
+        return self::is_valid_delimiter( self::encode_delimiter( is_scalar( $value ) ? (string) $value : '' ) );
+    }
+
+    /**
+     * Resolve a stored column delimiter into the literal separator the writer receives.
+     *
+     * Paired with is_valid_delimiter(). A store that saved `ab` or `é` through an
+     * older build then exports on the fallback instead of writing an unparseable
+     * file. The fallback is logged, because otherwise the only signal is a column
+     * layout that no longer matches the store's importer.
+     *
+     * @since 2.8.3
+     * @access public
+     * @static
+     *
+     * @param mixed  $stored   Value read from the option or the request.
+     * @param string $fallback Separator to use when $stored is unusable.
+     * @return string The literal separator to hand to the writer.
+     */
+    public static function coerce_delimiter( $stored, $fallback = ',' ) {
+        if ( self::is_valid_delimiter( $stored ) ) {
+            return self::decode_delimiter( $stored );
+        }
+
+        // woo_ce_error_log() lives in the legacy procedural layer, which a REST
+        // request does not always have loaded.
+        if ( function_exists( 'woo_ce_error_log' ) ) {
+            // An unset or blank value is the documented "use the default" state,
+            // not a corrupted one.
+            if ( '' === $stored || null === $stored || false === $stored ) {
+                $message = sprintf(
+                    /* translators: %s: the delimiter used instead, in quotes */
+                    __( 'Notice: the Field Delimiter export option is not set. Using %s.', 'woocommerce-exporter' ),
+                    '"' . $fallback . '"'
+                );
+            } else {
+                $message = sprintf(
+                    /* translators: 1: the unusable delimiter as stored, 2: the delimiter used instead */
+                    __( 'Warning: the Field Delimiter export option holds %1$s, which the CSV writer cannot use. Defaulted to %2$s.', 'woocommerce-exporter' ),
+                    is_scalar( $stored ) ? '"' . (string) $stored . '"' : gettype( $stored ),
+                    '"' . $fallback . '"'
+                );
+            }
+
+            woo_ce_error_log( $message );
+        }
+
+        return $fallback;
+    }
+
+    /**
      * Parse a stored date-filter bound, tolerating either the store's export
      * date format or ISO `Y-m-d`.
      *
@@ -227,8 +474,12 @@ class Export {
      */
     public static function get_export_type_count() {
         global $wpdb;
-        $cache = get_transient( WOO_CE_PREFIX . '_export_type_count' );
+        $cache = woo_ce_get_integration_cache( WOO_CE_PREFIX . '_export_type_count' );
         if ( false === $cache ) {
+            // Read before the counts are computed, so that a Plugin toggled by
+            // another request in the meantime leaves the write below stamped
+            // with the older generation and the next read recounts.
+            $generation       = woo_ce_modules_cache_generation();
             $query            = '';
             $sql_result_order = array(
                 'product'        => 0,
@@ -321,7 +572,12 @@ class Export {
              */
             $count = apply_filters( 'wsed_export_type_count', $count );
 
-            set_transient( WOO_CE_PREFIX . '_export_type_count', $count, HOUR_IN_SECONDS );
+            // Several of these counts are gated on integration detection, so a
+            // request that has toggled a Plugin must not cache them: its view
+            // of the loaded code no longer matches the Plugins that are on.
+            if ( ! woo_ce_modules_cache_is_stale() ) {
+                woo_ce_set_integration_cache( WOO_CE_PREFIX . '_export_type_count', $count, HOUR_IN_SECONDS, $generation );
+            }
         } else {
             $count = $cache;
         }
@@ -691,8 +947,8 @@ class Export {
                 'args'   => array( 'id' => $post_id ),
                 'status' => '',
                 'order'  => 'DESC',
-            ),
-            WSED_AS_GROUP
+                'group'  => WSED_AS_GROUP,
+            )
         );
     }
 
@@ -773,14 +1029,207 @@ class Export {
     /**
      * Get unique filename.
      *
+     * Not wp_unique_filename(): it runs the name back through sanitize_file_name(),
+     * which puts an underscore after every middle dot (`report.final.v2.csv`
+     * becomes `report.final_.v2.csv`).
+     *
      * @since 2.7.3
+     * @since 2.8.3 Keeps every dot in the name, and numbers a clash `name-1.ext`, `name-2.ext`, and so on.
      *
      * @param string $path     The path.
      * @param string $filename The filename.
      * @return string
      */
     public static function get_unique_filename( $path, $filename ) {
-        return wp_unique_filename( $path, sanitize_file_name( $filename ) );
+        $filename  = self::sanitize_export_filename( $filename );
+        $extension = pathinfo( $filename, PATHINFO_EXTENSION );
+        $extension = '' !== $extension ? '.' . $extension : '';
+        $name      = '' !== $extension ? substr( $filename, 0, -strlen( $extension ) ) : $filename;
+        $path      = trailingslashit( $path );
+
+        $unique_filename = $filename;
+        $number          = 1;
+        while ( file_exists( $path . $unique_filename ) ) {
+            $unique_filename = $name . '-' . $number . $extension;
+            ++$number;
+        }
+
+        return $unique_filename;
+    }
+
+    /**
+     * Sanitize an export filename, keeping every dot in it.
+     *
+     * WordPress's sanitize_file_name() reads each middle dot segment of 2-5
+     * letters as an unknown extension and adds `_` after it, so a Filename of
+     * `report.final.v2` would save as `report.final_.v2`. The dots are swapped
+     * for a placeholder while it runs, then restored. Leading and trailing dots
+     * are trimmed, as sanitize_file_name() does.
+     *
+     * The `_` guard is kept for executable types: a middle segment such as `php`
+     * still gets the `_` (`shell.php.csv` saves as `shell.php_.csv`).
+     *
+     * @since 2.8.3
+     *
+     * @param string $filename The filename, with or without its extension.
+     * @return string The sanitized filename.
+     */
+    public static function sanitize_export_filename( $filename ) {
+        $sanitized = sanitize_file_name( str_replace( '.', self::FILENAME_DOT_PLACEHOLDER, (string) $filename ) );
+        $parts     = explode( '.', trim( str_replace( self::FILENAME_DOT_PLACEHOLDER, '.', $sanitized ), '.' ) );
+        $last      = count( $parts ) - 1;
+
+        foreach ( $parts as $index => $part ) {
+            if ( $index > 0 && $index < $last && preg_match( self::EXECUTABLE_EXTENSION_REGEX, $part ) ) {
+                $parts[ $index ] .= '_';
+            }
+        }
+
+        return implode( '.', $parts );
+    }
+
+    /**
+     * Get the Filename pattern exports are named with.
+     *
+     * Reads `woo_ce_export_filename`, the key the Settings screen saves to. An
+     * unset or empty value falls back to the default, and a file extension is
+     * dropped because the extension always comes from the export format.
+     *
+     * @since 2.8.3
+     *
+     * @return string The Filename pattern.
+     */
+    public static function get_filename_pattern() {
+        // get_option() rather than woo_ce_get_option(): the activation repair calls
+        // this before the legacy function files are loaded.
+        $pattern = get_option( WOO_CE_PREFIX . '_export_filename', '' );
+
+        if ( empty( $pattern ) || ! is_string( $pattern ) ) {
+            return self::DEFAULT_FILENAME_PATTERN;
+        }
+
+        return self::strip_filename_extension( $pattern );
+    }
+
+    /**
+     * Drop a trailing export file extension from a Filename.
+     *
+     * @since 2.8.3
+     *
+     * @param string $filename The Filename or Filename pattern.
+     * @return string The Filename without its export extension.
+     */
+    public static function strip_filename_extension( $filename ) {
+        return (string) preg_replace( self::FILENAME_EXTENSION_REGEX, '', (string) $filename );
+    }
+
+    /**
+     * Build an export filename from a Filename pattern.
+     *
+     * Resolves the pattern's tags, runs the `wsed_generate_filename` filter, adds
+     * the format's extension (`rss` exports are `.xml` files) and sanitizes the
+     * result.
+     *
+     * @since 2.8.3
+     *
+     * @param string $pattern       The Filename pattern, without an extension.
+     * @param string $export_type   The export type.
+     * @param string $export_format The export format, e.g. `csv`.
+     * @param int    $order_id      The order ID for the `order_id` tag, or 0.
+     * @return string The filename, with the format's extension.
+     */
+    public static function build_export_filename( $pattern, $export_type, $export_format, $order_id = 0 ) {
+        $filename       = self::resolve_filename_tags( $pattern, $export_type, $export_format, $order_id );
+        $file_extension = 'rss' === $export_format ? 'xml' : $export_format;
+
+        /**
+         * Filter the generated filename.
+         *
+         * @since 2.7.3
+         * @param string $filename    The generated filename.
+         * @param string $export_type The export type.
+         */
+        return self::sanitize_export_filename( apply_filters( 'wsed_generate_filename', $filename, $export_type ) . '.' . $file_extension );
+    }
+
+    /**
+     * Replace the Filename tags in a pattern with their values.
+     *
+     * Both spellings are supported: `{type}` (the Settings screen) and the legacy
+     * `%dataset%` (older stored values). Every value is computed only when its tag
+     * is present, so the `woo_ce_filename_tag_*` filters still fire only for tags
+     * in use. Dates and times are UTC.
+     *
+     * @since 2.8.3
+     *
+     * @param string     $filename      The Filename pattern.
+     * @param string     $export_type   The export type.
+     * @param string     $export_format The export format, e.g. `csv`.
+     * @param int|string $order_id      The order ID, for single-order exports.
+     * @return string The Filename with its tags resolved.
+     */
+    public static function resolve_filename_tags( $filename, $export_type, $export_format = '', $order_id = 0 ) {
+        $filename = (string) $filename;
+
+        // Tag => callback producing its value. Callbacks keep each value lazy.
+        $tags = array(
+            'type'      => function () use ( $export_type ) {
+                return $export_type;
+            },
+            'store'     => function () {
+                return sanitize_title( get_bloginfo( 'name' ) );
+            },
+            'date'      => function () {
+                return apply_filters( 'woo_ce_filename_tag_date', gmdate( 'Y_m_d' ) );
+            },
+            'year'      => function () {
+                return apply_filters( 'woo_ce_filename_tag_year', gmdate( 'Y' ) );
+            },
+            'month'     => function () {
+                return apply_filters( 'woo_ce_filename_tag_month', gmdate( 'm' ) );
+            },
+            'day'       => function () {
+                return apply_filters( 'woo_ce_filename_tag_day', gmdate( 'd' ) );
+            },
+            'time'      => function () {
+                return apply_filters( 'woo_ce_filename_tag_time', gmdate( 'H_i_s' ) );
+            },
+            'hour'      => function () {
+                return apply_filters( 'woo_ce_filename_tag_hour', gmdate( 'H' ) );
+            },
+            'minute'    => function () {
+                return apply_filters( 'woo_ce_filename_tag_minute', gmdate( 'i' ) );
+            },
+            'second'    => function () {
+                return apply_filters( 'woo_ce_filename_tag_second', gmdate( 's' ) );
+            },
+            'format'    => function () use ( $export_format ) {
+                return 'rss' === $export_format ? 'xml' : $export_format;
+            },
+            'timestamp' => function () {
+                return time();
+            },
+            // Drawn once per pattern, so both spellings of the tag get the same number.
+            'random'    => function () {
+                return wp_rand( 10000000, 99999999 );
+            },
+        );
+
+        // Only substituted when there is an order, so the tag is left as typed otherwise.
+        if ( ! empty( $order_id ) ) {
+            $tags['order_id'] = function () use ( $order_id ) {
+                return $order_id;
+            };
+        }
+
+        foreach ( self::FILENAME_TAGS as $tag => $legacy_tag ) {
+            $search = array( '{' . $tag . '}', '%' . $legacy_tag . '%' );
+            if ( isset( $tags[ $tag ] ) && ( false !== strpos( $filename, $search[0] ) || false !== strpos( $filename, $search[1] ) ) ) {
+                $filename = str_replace( $search, (string) $tags[ $tag ](), $filename );
+            }
+        }
+
+        return $filename;
     }
 
     /**
@@ -871,64 +1320,203 @@ class Export {
     const MAX_ID_COUNT = 100000;
 
     /**
+     * The 'N-M' entries the MAX_ID_COUNT budget rejected while parsing the current input.
+     *
+     * Recorded so the export can tell the admin WHY nothing matched. Without it, a
+     * range the budget discarded ends at the generic "No objects found to export.",
+     * which reads as "no order has those IDs". See self::get_no_objects_error_message().
+     *
+     * @since 2.8.3
+     * @var array
+     */
+    private static $rejected_id_ranges = array();
+
+    /**
+     * Get the 'N-M' entries the ID budget rejected while parsing the most recent input.
+     *
+     * @since 2.8.3
+     *
+     * @return array The rejected entries, in the order they were typed.
+     */
+    public static function get_rejected_id_ranges() {
+        return self::$rejected_id_ranges;
+    }
+
+    /**
+     * Forget any previously recorded budget rejections.
+     *
+     * Called at the start of each parse of one filter input, and by the Quick
+     * Export runner BEFORE the export settings are built, because that is where
+     * the ID filter is parsed and a rejection recorded.
+     *
+     * @since 2.8.3
+     *
+     * @return void
+     */
+    public static function reset_rejected_id_ranges() {
+        self::$rejected_id_ranges = array();
+    }
+
+    /**
+     * Get the error message for an export that resolved to no object.
+     *
+     * Returns a specific message when the ID budget discarded a range, because the
+     * generic one tells the admin no order matched, when in fact the range was
+     * never expanded.
+     *
+     * The message is consumed as PLAIN TEXT, so it must not carry HTML entities.
+     * number_format_i18n() can emit '&nbsp;' as a thousands separator, so
+     * html_entity_decode() puts the real character back.
+     *
+     * @since 2.8.3
+     *
+     * @return string The message to abort the export with.
+     */
+    public static function get_no_objects_error_message() {
+        $rejected = self::get_rejected_id_ranges();
+
+        if ( ! empty( $rejected ) ) {
+            return sprintf(
+                /* translators: 1: the rejected ID range(s) as typed, 2: the maximum number of IDs one filter may name. */
+                __( 'The Order ID range %1$s is too large to expand. Use ranges holding %2$s IDs or fewer.', 'woocommerce-exporter' ),
+                implode( ', ', array_map( 'sanitize_text_field', $rejected ) ),
+                html_entity_decode( number_format_i18n( self::MAX_ID_COUNT ), ENT_QUOTES, 'UTF-8' )
+            );
+        }
+
+        return __( 'No objects found to export.', 'woocommerce-exporter' );
+    }
+
+    /**
+     * Normalize a raw Order ID filter value into the comma-separated string the parser reads.
+     *
+     * An ARRAY arrives whenever the value is submitted as `order_filter_id[]=5`,
+     * because set_form_data() builds its settings with parse_str(). Flattening it
+     * keeps the filter honoured, where discarding it widened the export to every
+     * order. A submitted '0' survives as the string '0', so every gate on this
+     * value tests `'' !== $value` rather than ! empty().
+     *
+     * @since 2.8.3
+     *
+     * @param mixed $value The raw submitted or stored value.
+     * @return string The normalized value, or '' when it names nothing.
+     */
+    public static function normalize_id_filter_input( $value ) {
+        if ( is_array( $value ) ) {
+            $value = implode( ',', array_map( 'strval', array_filter( $value, 'is_scalar' ) ) );
+        }
+
+        return is_scalar( $value ) ? trim( (string) $value ) : '';
+    }
+
+    /**
+     * Expand one 'N-M' entry of an ID filter into its inclusive list of IDs.
+     *
+     * An entry is REJECTED (null) when it is not exactly two digits-only bounds,
+     * or when expanding it would push the running total past self::MAX_ID_COUNT.
+     * Digits only, not is_numeric(): that admits '1.5', '+5' and '1e3', which
+     * absint() then re-reads as a different ID ( 1, 5 and 1000 ). Exactly two
+     * bounds: a malformed '1-2-3' used to silently export 1 to 2.
+     *
+     * @since 2.8.3
+     *
+     * @param string $entry          One entry of the filter input, e.g. '100-199'.
+     * @param int    $resolved_count How many IDs the caller has resolved from earlier entries.
+     * @return array|null The expanded IDs, or null when the entry is rejected.
+     */
+    public static function expand_id_range( $entry, $resolved_count ) {
+        $bounds = array_map( 'trim', explode( '-', (string) $entry ) );
+        $bounds = array_map(
+            static function ( $bound ) {
+                return ltrim( $bound, '#' );
+            },
+            $bounds
+        );
+
+        if ( 2 !== count( $bounds ) || ! ctype_digit( $bounds[0] ) || ! ctype_digit( $bounds[1] ) ) {
+            return null;
+        }
+
+        $range_start = min( (int) $bounds[0], (int) $bounds[1] );
+        $range_end   = max( (int) $bounds[0], (int) $bounds[1] );
+
+        if ( $resolved_count + ( $range_end - $range_start ) + 1 > self::MAX_ID_COUNT ) {
+            self::$rejected_id_ranges[] = (string) $entry;
+
+            return null;
+        }
+
+        return range( $range_start, $range_end );
+    }
+
+    /**
      * Sanitize multiple ID input.
      *
-     * This function will sanitize a string of comma separated IDs and ranges into an array of integers.
-     * For example, '1,2,3,4,5-10' will be converted to [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
-     * This function will also remove any duplicates and empty values.
+     * Parses a string of comma separated IDs and "N-M" ranges into an array of
+     * integers, inclusive at both bounds, with duplicates and empty values
+     * removed. For example, '1,2,3,4,5-10' becomes [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
      *
-     * An entry is rejected (not truncated) when it is not numeric (e.g. 'abc'
-     * or '100-') or when it would push the total over self::MAX_ID_COUNT. A
-     * rejected entry never widens the result: when the input asked for IDs but
-     * no valid ID survives, the function returns array( 0 ),
-     * which matches no record, never an empty array, which callers read as
-     * "no ID filter" and so export every record.
+     * An entry is rejected (not truncated) when it is not digits-only (e.g.
+     * 'abc', '100-' or '1.5') or when it would push the total over
+     * self::MAX_ID_COUNT. A rejected entry never widens the result: when the
+     * input asked for IDs but no valid ID survives, the function returns
+     * array( 0 ), which matches no record, never an empty array, which callers
+     * read as "no ID filter" and so export every record.
      *
      * @since 2.7.3
      * @since 2.8.2 Bounds the total IDs and fails closed on a rejected entry.
+     * @since 2.8.3 Accepts an array, strips a copied '#', requires digits-only IDs,
+     *              and records a range the budget rejected.
      *
-     * @param string $input The input.
+     * @param mixed $input Comma-separated IDs and/or 'N-M' ranges. An array is flattened.
      * @return array
      */
     public static function sanitize_multiple_id_input( $input ) {
+        $input = sanitize_text_field( self::normalize_id_filter_input( $input ) );
+
+        // Start this input's rejection record clean.
+        self::reset_rejected_id_ranges();
+
+        // Whether the admin named anything at all, decided from the RAW input
+        // before any normalisation can empty it. Reading it off the loop instead
+        // would let an entry that normalises to '' (a lone '#') fail OPEN.
+        $requested = '' !== trim( str_replace( ',', '', $input ) );
+
         // Explode the input by comma.
-        $input = array_map( 'trim', explode( ',', sanitize_text_field( $input ) ) );
+        $input = array_map( 'trim', explode( ',', $input ) );
 
         // Collect into a separate list. Merging ranges into $input while the
         // loop walks it re-indexes the array, so a later single ID overwrote
         // the first ID of an earlier range ("3-5,9" lost 3).
-        $ids       = array();
-        $requested = false;
+        $ids = array();
         foreach ( $input as $value ) {
+            // Strip any leading hashes, so an order number copied as '#1042'
+            // reads as 1042. Stripped per entry and per range bound, so a
+            // malformed '1#2' stays malformed and is rejected.
+            $value = ltrim( $value, '#' );
+
             if ( '' === $value ) {
                 continue;
             }
 
-            $requested = true;
-
             if ( strpos( $value, '-' ) !== false ) {
-                $range = array_map( 'trim', explode( '-', $value ) );
+                $expanded = self::expand_id_range( $value, count( $ids ) );
 
-                if ( ! isset( $range[0], $range[1] ) || ! is_numeric( $range[0] ) || ! is_numeric( $range[1] ) ) {
+                if ( null === $expanded ) {
                     continue;
                 }
 
-                $range_start = min( absint( $range[0] ), absint( $range[1] ) );
-                $range_end   = max( absint( $range[0] ), absint( $range[1] ) );
-
-                if ( count( $ids ) + ( $range_end - $range_start ) + 1 > self::MAX_ID_COUNT ) {
-                    continue;
-                }
-
-                $ids = array_merge( $ids, range( $range_start, $range_end ) );
-            } elseif ( is_numeric( $value ) && count( $ids ) < self::MAX_ID_COUNT ) {
-                $ids[] = absint( $value );
+                $ids = array_merge( $ids, $expanded );
+            } elseif ( ctype_digit( $value ) && count( $ids ) < self::MAX_ID_COUNT ) {
+                $ids[] = (int) $value;
             }
             // Any other entry, such as 'abc', is rejected, not read as ID 0.
         }
 
-        // Remove duplicates and empty values.
-        $ids = array_values( array_unique( array_filter( $ids ) ) );
+        // Remove duplicates and empty values, then re-index. array_keys( array_flip() )
+        // rather than array_unique(), which costs noticeably more at the budget's
+        // ceiling; both keep first-occurrence order.
+        $ids = array_values( array_filter( array_keys( array_flip( $ids ) ) ) );
 
         // SECURITY: the user asked for a subset. Return a sentinel that matches
         // nothing, not an empty list that the caller reads as "every record".
@@ -1163,5 +1751,31 @@ class Export {
             include_once WOO_CE_PATH . 'includes/admin/ticket.php';
             include_once WOO_CE_PATH . 'includes/admin/booking.php';
         }
+    }
+
+    /**
+     * Sort order objects into the sequence of the given order IDs.
+     *
+     * Re-querying a batch with `post__in` makes WooCommerce return it in its own
+     * default date DESC order, discarding the Sort by and direction already applied
+     * when the IDs were fetched. Orders whose ID is not in the list sort last.
+     *
+     * @since 2.8.3
+     *
+     * @param \WC_Order[]      $orders     The order objects to sort.
+     * @param array|int|string $object_ids The order IDs, in the order to restore.
+     * @return \WC_Order[]
+     */
+    public static function sort_orders_by_id_sequence( $orders, $object_ids ) {
+        $id_positions = array_flip( array_map( 'absint', (array) $object_ids ) );
+
+        usort(
+            $orders,
+            static function ( $a, $b ) use ( $id_positions ) {
+                return ( $id_positions[ $a->get_id() ] ?? PHP_INT_MAX ) <=> ( $id_positions[ $b->get_id() ] ?? PHP_INT_MAX );
+            }
+        );
+
+        return $orders;
     }
 }

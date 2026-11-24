@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __, _n, _x, sprintf } from '@wordpress/i18n'
 import {
   AlertCircle,
   RefreshCw,
@@ -15,7 +16,7 @@ import {
   ShieldCheck,
   CheckCircle2,
 } from 'lucide-vue-next'
-import { FilterTabs, FilterSearchInput, BaseModal, BaseSpinner } from '../components/ui'
+import { FilterTabs, FilterSearchInput, BaseModal, BaseSpinner, I18nText } from '../components/ui'
 import { useToolsStore } from '../stores/tools'
 import PageActions from '../components/PageActions.vue'
 
@@ -113,9 +114,9 @@ function countFor (key) {
 }
 
 const STATUS_TABS = computed(() => [
-  { key: 'all', label: 'All', count: countFor('all') },
-  { key: 'active', label: 'Active', count: countFor('active') },
-  { key: 'inactive', label: 'Inactive', count: countFor('inactive') },
+  { key: 'all', label: __('All', 'woocommerce-exporter'), count: countFor('all') },
+  { key: 'active', label: _x('Active', 'status', 'woocommerce-exporter'), count: countFor('active') },
+  { key: 'inactive', label: _x('Inactive', 'status', 'woocommerce-exporter'), count: countFor('inactive') },
 ])
 
 function statusBadgeClass (status) {
@@ -125,11 +126,11 @@ function statusBadgeClass (status) {
 }
 
 function statusLabel (status) {
-  return status === 'active' ? 'Active' : 'Inactive'
+  return status === 'active' ? _x('Active', 'status', 'woocommerce-exporter') : _x('Inactive', 'status', 'woocommerce-exporter')
 }
 
 function actionLabel (status) {
-  return status === 'active' ? 'Deactivate' : 'Install'
+  return status === 'active' ? _x('Deactivate', 'button label', 'woocommerce-exporter') : _x('Install', 'button label', 'woocommerce-exporter')
 }
 
 function actionUrl (module) {
@@ -146,12 +147,30 @@ function actionClass (status) {
     : `${base} bg-white text-[#6C7BFF] border-[#6C7BFF] hover:bg-indigo-50`
 }
 
+const showingLabel = computed(() =>
+  sprintf(
+    /* translators: 1: first item number, 2: last item number, 3: total number of modules */
+    _n('Showing %1$s to %2$s of %3$s module', 'Showing %1$s to %2$s of %3$s modules', filteredModules.value.length, 'woocommerce-exporter'),
+    showingFrom.value,
+    showingTo.value,
+    filteredModules.value.length
+  )
+)
+
 // ── Install confirmation ──────────────────────────────────────────────────────
 
 const pendingInstall = ref(null)
 
 const isInstalling = computed(() =>
   installStatus.value === 'installing' || installStatus.value === 'activating'
+)
+
+const activeMessage = computed(() =>
+  sprintf(
+    /* translators: %s: plugin name */
+    __('%s is now active!', 'woocommerce-exporter'),
+    pendingInstall.value?.title ?? ''
+  )
 )
 
 function isWpOrg (module) {
@@ -221,8 +240,8 @@ function visiblePages () {
     <!-- Page header -->
     <div class="wse-header">
       <div>
-        <h1 class="wse-page-title">Export Modules</h1>
-        <p class="wse-page-sub">Enable or disable export types and third-party integrations.</p>
+        <h1 class="wse-page-title">{{ __('Export Modules', 'woocommerce-exporter') }}</h1>
+        <p class="wse-page-sub">{{ __('Enable or disable export types and third-party integrations.', 'woocommerce-exporter') }}</p>
       </div>
       <PageActions />
     </div>
@@ -230,7 +249,7 @@ function visiblePages () {
     <!-- Loading -->
     <div v-if="isLoading" class="wse-loading">
       <span class="wse-spinner" />
-      Loading tools&hellip;
+      {{ __('Loading tools…', 'woocommerce-exporter') }}
     </div>
 
     <!-- Error -->
@@ -246,9 +265,9 @@ function visiblePages () {
 
         <!-- Header row -->
         <div class="relative">
-          <h2 class="m-0 text-[18px] font-bold text-[#1E1B4B] leading-snug">WooCommerce Tools</h2>
+          <h2 class="m-0 text-[18px] font-bold text-[#1E1B4B] leading-snug">{{ __('WooCommerce Tools', 'woocommerce-exporter') }}</h2>
           <p class="m-0 mt-1 text-[14px] text-gray-500">
-            Extend your store with powerful WooCommerce extensions.
+            {{ __('Extend your store with powerful WooCommerce extensions.', 'woocommerce-exporter') }}
           </p>
 
           <!-- Decorative cube -->
@@ -298,15 +317,15 @@ function visiblePages () {
               <Info :size="15" color="#7C3AED" :stroke-width="1.75" />
             </div>
             <div>
-              <div class="text-[14px] font-semibold text-gray-900 leading-snug">Built for Store Owners &amp; Developers</div>
-              <p class="m-0 mt-0.5 text-[13px] text-gray-500">Our tools are designed to save time, reduce manual work, and help you manage your WooCommerce store more efficiently.</p>
+              <div class="text-[14px] font-semibold text-gray-900 leading-snug">{{ __('Built for Store Owners & Developers', 'woocommerce-exporter') }}</div>
+              <p class="m-0 mt-0.5 text-[13px] text-gray-500">{{ __('Our tools are designed to save time, reduce manual work, and help you manage your WooCommerce store more efficiently.', 'woocommerce-exporter') }}</p>
             </div>
           </div>
 
           <!-- Right: trust indicator -->
           <div class="flex items-center gap-1.5 flex-shrink-0 text-[13px] font-semibold text-emerald-600">
             <ShieldCheck :size="16" color="#059669" :stroke-width="1.75" />
-            Trusted by 10,000+ stores
+            {{ __('Trusted by 10,000+ stores', 'woocommerce-exporter') }}
           </div>
         </div>
 
@@ -318,10 +337,10 @@ function visiblePages () {
         <!-- Card header -->
         <div class="flex items-start justify-between gap-4 px-5 py-4 border-b border-gray-100">
           <div>
-            <h2 class="m-0 text-[14px] font-semibold text-gray-900">Export Modules</h2>
+            <h2 class="m-0 text-[14px] font-semibold text-gray-900">{{ __('Export Modules', 'woocommerce-exporter') }}</h2>
             <p class="m-0 mt-1 text-[13px] text-gray-500">
-              Export store details from other WooCommerce and WordPress plugins.
-              Install and activate one of the below plugins to enable additional export options.
+              {{ __('Export store details from other WooCommerce and WordPress plugins.', 'woocommerce-exporter') }}
+              {{ __('Install and activate one of the below plugins to enable additional export options.', 'woocommerce-exporter') }}
             </p>
           </div>
           <button
@@ -335,7 +354,7 @@ function visiblePages () {
               :stroke-width="1.75"
               :class="isRefreshing ? 'animate-spin' : ''"
             />
-            {{ isRefreshing ? 'Refreshing…' : 'Refresh Status' }}
+            {{ isRefreshing ? __('Refreshing…', 'woocommerce-exporter') : __('Refresh Status', 'woocommerce-exporter') }}
           </button>
         </div>
 
@@ -348,17 +367,17 @@ function visiblePages () {
           />
           <FilterSearchInput
             v-model="localSearch"
-            placeholder="Search modules..."
+            :placeholder="__('Search modules...', 'woocommerce-exporter')"
             class="min-w-[220px]"
           />
         </div>
 
         <!-- Table header -->
         <div class="grid grid-cols-[280px_1fr_120px_130px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50/50">
-          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">Module</span>
-          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">Description</span>
-          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">Status</span>
-          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">Action</span>
+          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">{{ __('Module', 'woocommerce-exporter') }}</span>
+          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">{{ __('Description', 'woocommerce-exporter') }}</span>
+          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">{{ __('Status', 'woocommerce-exporter') }}</span>
+          <span class="text-[11px] font-medium text-[#9CA3AF] uppercase tracking-wide">{{ __('Action', 'woocommerce-exporter') }}</span>
         </div>
 
         <!-- Module list -->
@@ -424,7 +443,7 @@ function visiblePages () {
 
         <!-- Empty state -->
         <div v-else class="py-10 text-center text-[13px] text-gray-400">
-          No modules match your current filter.
+          {{ __('No modules match your current filter.', 'woocommerce-exporter') }}
         </div>
 
         <!-- Pagination -->
@@ -433,7 +452,7 @@ function visiblePages () {
           class="flex items-center justify-between gap-4 px-5 py-3 border-t border-gray-100"
         >
           <span class="text-[12.5px] text-gray-500">
-            Showing {{ showingFrom }} to {{ showingTo }} of {{ filteredModules.length }} modules
+            {{ showingLabel }}
           </span>
 
           <div class="flex items-center gap-1">
@@ -484,7 +503,7 @@ function visiblePages () {
   <!-- ── Install modal ───────────────────────────────────────────────── -->
   <BaseModal
     :model-value="Boolean(pendingInstall)"
-    title="Install Plugin"
+    :title="__('Install Plugin', 'woocommerce-exporter')"
     size="sm"
     :close-on-backdrop="!isInstalling"
     @update:model-value="closeInstallModal"
@@ -518,16 +537,20 @@ function visiblePages () {
 
       <!-- Idle state: intro copy -->
       <p v-if="!installStatus" class="m-0 text-[13px] text-gray-600 leading-relaxed">
-        This plugin is available on <strong>WordPress.org</strong>. Click <em>Install</em> to download and activate it automatically — no need to leave this page.
+        <!-- translators: 1: WordPress.org, shown in bold, 2: the "Install" button label -->
+        <I18nText :text="__('This plugin is available on %1$s. Click %2$s to download and activate it automatically — no need to leave this page.', 'woocommerce-exporter')">
+          <template #1><strong>WordPress.org</strong></template>
+          <template #2><em>{{ _x('Install', 'button label', 'woocommerce-exporter') }}</em></template>
+        </I18nText>
       </p>
 
       <!-- Progress stepper (installing / activating / success) -->
       <div v-if="installStatus && installStatus !== 'error'" class="wse-install-steps">
         <div
           v-for="(step, idx) in [
-            { key: 'installing', label: 'Downloading & Installing' },
-            { key: 'activating', label: 'Activating' },
-            { key: 'success',    label: 'Done' },
+            { key: 'installing', label: __('Downloading & Installing', 'woocommerce-exporter') },
+            { key: 'activating', label: __('Activating', 'woocommerce-exporter') },
+            { key: 'success',    label: __('Done', 'woocommerce-exporter') },
           ]"
           :key="step.key"
           class="wse-install-steps__step"
@@ -555,10 +578,10 @@ function visiblePages () {
         </div>
         <div>
           <div class="text-[13px] font-semibold text-gray-900">
-            {{ pendingInstall?.title }} is now active!
+            {{ activeMessage }}
           </div>
           <p class="m-0 mt-0.5 text-[12px] text-gray-500 leading-relaxed">
-            The plugin has been installed and activated. Refresh the page to use its features.
+            {{ __('The plugin has been installed and activated. Refresh the page to use its features.', 'woocommerce-exporter') }}
           </p>
         </div>
       </div>
@@ -579,7 +602,7 @@ function visiblePages () {
           class="inline-flex items-center justify-center px-4 py-[7px] border border-gray-300 rounded-md bg-white text-gray-700 text-[13px] font-medium cursor-pointer transition-colors hover:bg-gray-50"
           @click="closeInstallModal"
         >
-          Cancel
+          {{ __('Cancel', 'woocommerce-exporter') }}
         </button>
         <button
           type="button"
@@ -587,7 +610,7 @@ function visiblePages () {
           @click="confirmInstall"
         >
           <Download :size="13" :stroke-width="1.75" />
-          Install
+          {{ _x('Install', 'button label', 'woocommerce-exporter') }}
         </button>
       </template>
 
@@ -598,7 +621,7 @@ function visiblePages () {
           disabled
           class="inline-flex items-center justify-center px-4 py-[7px] border border-gray-200 rounded-md bg-white text-gray-400 text-[13px] font-medium cursor-not-allowed"
         >
-          Cancel
+          {{ __('Cancel', 'woocommerce-exporter') }}
         </button>
         <button
           type="button"
@@ -606,7 +629,7 @@ function visiblePages () {
           class="inline-flex items-center justify-center gap-2 px-4 py-[7px] rounded-md bg-indigo-400 text-white text-[13px] font-medium cursor-not-allowed border-0"
         >
           <BaseSpinner size="sm" />
-          {{ installStatus === 'activating' ? 'Activating…' : 'Installing…' }}
+          {{ installStatus === 'activating' ? __('Activating…', 'woocommerce-exporter') : __('Installing…', 'woocommerce-exporter') }}
         </button>
       </template>
 
@@ -617,7 +640,7 @@ function visiblePages () {
           class="inline-flex items-center justify-center px-4 py-[7px] rounded-md bg-[#6C7BFF] text-white text-[13px] font-medium cursor-pointer transition-colors hover:bg-indigo-700 border-0"
           @click="closeInstallModal"
         >
-          Close
+          {{ __('Close', 'woocommerce-exporter') }}
         </button>
       </template>
 
@@ -628,7 +651,7 @@ function visiblePages () {
           class="inline-flex items-center justify-center px-4 py-[7px] border border-gray-300 rounded-md bg-white text-gray-700 text-[13px] font-medium cursor-pointer transition-colors hover:bg-gray-50"
           @click="closeInstallModal"
         >
-          Cancel
+          {{ __('Cancel', 'woocommerce-exporter') }}
         </button>
         <button
           type="button"
@@ -636,7 +659,7 @@ function visiblePages () {
           @click="confirmInstall"
         >
           <Download :size="13" :stroke-width="1.75" />
-          Try Again
+          {{ __('Try Again', 'woocommerce-exporter') }}
         </button>
       </template>
     </template>

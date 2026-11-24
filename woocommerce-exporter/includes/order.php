@@ -322,7 +322,9 @@ if ( is_admin() ) {
         if ( woo_ce_get_option( 'order_digital_products' ) !== $args['order_items_digital'] ) {
             woo_ce_update_option( 'order_digital_products', $args['order_items_digital'] );
         }
-        if ( woo_ce_get_option( 'order_items_formatting' ) !== $args['order_items'] ) {
+        // Only remember a submitted value. The Quick Export SPA never posts order_items, and
+        // wiping the option here changed the fallback that the same export then used.
+        if ( false !== $args['order_items'] && woo_ce_get_option( 'order_items_formatting' ) !== $args['order_items'] ) {
             woo_ce_update_option( 'order_items_formatting', $args['order_items'] );
         }
         if ( woo_ce_get_option( 'order_items_types' ) !== $args['order_items_types'] ) {

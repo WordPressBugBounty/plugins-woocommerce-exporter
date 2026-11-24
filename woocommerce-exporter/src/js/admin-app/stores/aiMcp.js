@@ -1,3 +1,4 @@
+import { __ } from '@wordpress/i18n'
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../lib/api'
@@ -18,7 +19,7 @@ export const useAiMcpStore = defineStore('aiMcp', () => {
     try {
       data.value = await api.get('ai-mcp')
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load the AI / MCP screen.'
+      error.value = err instanceof Error ? err.message : __('Failed to load the AI / MCP screen.', 'woocommerce-exporter')
     } finally {
       isLoading.value = false
     }

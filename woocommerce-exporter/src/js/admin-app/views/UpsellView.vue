@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { __, sprintf } from '@wordpress/i18n'
 import { useRoute } from 'vue-router'
 import { Lock, Check } from 'lucide-vue-next'
 import PageShell from '../components/ui/PageShell.vue'
@@ -22,6 +23,11 @@ function upgradeUrl (campaign) {
   return `${UPGRADE_BASE}?utm_source=wse&utm_medium=${medium}&utm_campaign=${campaign}`
 }
 
+const featureTitle = computed(() => {
+  /* translators: %s: Deluxe feature name, for example Scheduled Exports */
+  return sprintf(__('%s is a Deluxe feature', 'woocommerce-exporter'), upsell.value.feature)
+})
+
 const upgradeNowUrl = computed(() => upgradeUrl('upsellupgradenowbutton'))
 const tellMeMoreUrl = computed(() => upgradeUrl('upselltellmemorebutton'))
 </script>
@@ -31,7 +37,7 @@ const tellMeMoreUrl = computed(() => upgradeUrl('upselltellmemorebutton'))
     <PageHeader :title="upsell.feature" :subtitle="upsell.lead">
       <template #actions>
         <span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
-          <Lock :size="12" :stroke-width="2.5" /> Deluxe
+          <Lock :size="12" :stroke-width="2.5" /> {{ __('Deluxe', 'woocommerce-exporter') }}
         </span>
       </template>
     </PageHeader>
@@ -54,7 +60,7 @@ const tellMeMoreUrl = computed(() => upgradeUrl('upselltellmemorebutton'))
           </div>
 
           <h2 class="text-[19px] font-extrabold tracking-[-0.01em] text-gray-900">
-            {{ upsell.feature }} is a Deluxe feature
+            {{ featureTitle }}
           </h2>
           <p class="text-[13.5px] text-gray-600 mt-2 mx-auto max-w-[44ch]">{{ upsell.lead }}</p>
 
@@ -71,16 +77,14 @@ const tellMeMoreUrl = computed(() => upgradeUrl('upselltellmemorebutton'))
               target="_blank"
               rel="noopener"
               class="inline-block bg-amber-600 hover:bg-amber-700 !text-white text-[13.5px] font-semibold rounded-lg px-5 py-2.5 no-underline transition-colors"
-            >Upgrade Now</a>
+            >{{ __('Upgrade Now', 'woocommerce-exporter') }}</a>
             <a
               :href="tellMeMoreUrl"
               target="_blank"
               rel="noopener"
               class="inline-block bg-transparent hover:bg-amber-50 text-amber-700 border border-amber-200 text-[13.5px] font-semibold rounded-lg px-5 py-2.5 no-underline transition-colors"
-            >Tell me more</a>
+            >{{ __('Tell me more', 'woocommerce-exporter') }}</a>
           </div>
-
-          <p class="text-[11.5px] text-gray-500 mt-3.5">30-day money-back guarantee · Priority support</p>
         </div>
       </div>
     </div>

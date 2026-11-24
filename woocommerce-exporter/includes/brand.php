@@ -315,7 +315,7 @@ function woo_ce_get_product_brands( $args = array(), $export = null ) {
 			if( !empty( $brands[$key]->image ) ) {
 				if( isset( $export->export_format ) && $export->export_format == 'xlsx' ) {
 					// Override for the image embed thumbnail size; use registered WordPress image size names
-					$thumbnail_size = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'shop_thumbnail' );
+					$thumbnail_size = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'woocommerce_thumbnail' );
 					$brands[$key]->image_embed = woo_ce_get_category_thumbnail_path( $brand->term_id, $thumbnail_size );
 				}
 			}
@@ -512,9 +512,11 @@ function woo_ce_get_brand_term_count() {
  *
  * Unlike woo_ce_get_product_brands(), which hydrates the terms for the Brand
  * export rows, this one is for filter dropdowns: each term is given the
- * parent_name property that woo_ce_format_product_category_label() expects.
+ * parent_name property that woo_ce_format_product_category_label() expects,
+ * and its name and parent_name are entity-decoded to plain text.
  *
  * @since 2.8.1
+ * @since 2.8.3 Term names and parent names are entity-decoded.
  *
  * @param array $args Optional. get_terms() arguments; the taxonomy is always overridden.
  * @return array List of WP_Term objects, empty when the store has no brand terms.
@@ -540,11 +542,16 @@ function woo_ce_get_brand_filter_terms( $args = array() ) {
     }
 
     foreach ( $terms as $term ) {
+        // WordPress stores term names entity-encoded. Decode to plain text here,
+        // so every caller of this helper holds the same shape the Brand export
+        // rows use. A doubly-encoded name ( "&amp;lt;" ) renders as the text "<",
+        // still text, never markup, as every caller escapes it for output.
+        $term->name        = wp_specialchars_decode( $term->name, ENT_QUOTES );
         $term->parent_name = '';
         if ( ! empty( $term->parent ) ) {
             $parent_term = get_term( $term->parent, $term->taxonomy );
             if ( ! empty( $parent_term ) && ! is_wp_error( $parent_term ) ) {
-                $term->parent_name = $parent_term->name;
+                $term->parent_name = wp_specialchars_decode( $parent_term->name, ENT_QUOTES );
             }
         }
     }

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __, sprintf } from '@wordpress/i18n'
 import { Check, ChevronRight, Settings2, Plus, Move, RotateCcw, Pencil, X as XIcon } from 'lucide-vue-next'
 import { useQuickExportStore } from '../../../stores/quickExport'
 import { useToastsStore } from '../../../stores/toasts'
@@ -31,13 +32,18 @@ const fieldsChips = computed(() => {
     return ai - bi
   })
 
-  const meta = []
-  const typeMetaValues = customMetaValues.value[selectedType.value] ?? {}
-  Object.entries(typeMetaValues).forEach(([defName, raw]) => {
-    String(raw ?? '').split(/[\n,]+/).map(k => k.trim()).filter(Boolean).forEach(key => {
-      meta.push({ name: key, label: formatMetaKeyLabel(key), _isMeta: true, _defName: defName })
-    })
-  })
+  // The meta chips are the meta columns the export posts: an unresolved or
+  // duplicate key is left out, so the chips and "Selected Fields (N)" match
+  // the export. A chip is named by its column key, the name its saved
+  // position and label use, so a prefixed column that shares a key with a
+  // plain one keeps its own position and label.
+  const meta = store.selectedCustomMetaColumns().map(({ metaKey, definition, columnKey }) => ({
+    name: columnKey,
+    label: formatMetaKeyLabel(metaKey),
+    _isMeta: true,
+    _metaKey: metaKey,
+    _defName: definition
+  }))
 
   if (!order?.length) return [...sorted, ...meta]
 
@@ -63,7 +69,10 @@ function commitRename () {
   if (editingField.value && selectedType.value) {
     const label = editingDraft.value.trim()
     store.setFieldLabel(selectedType.value, editingField.value, label)
-    if (label) toasts.push(`Field renamed to "${label}"`)
+    if (label) {
+      /* translators: %s: new field label */
+      toasts.push(sprintf(__('Field renamed to "%s"', 'woocommerce-exporter'), label))
+    }
   }
   editingField.value = null
   editingDraft.value = ''
@@ -81,6 +90,18 @@ function removeMetaKey (defName, key) {
     .map(k => k.trim())
     .filter(k => k && k !== key)
   customMetaValues.value[type][defName] = remaining.join('\n')
+}
+function selectedFieldsLabel () {
+  /* translators: %s: number of selected fields */
+  return sprintf(__('Selected Fields (%s)', 'woocommerce-exporter'), fieldsChips.value.length)
+}
+function renameAriaLabel (field) {
+  /* translators: %s: field label */
+  return sprintf(__('Rename %s', 'woocommerce-exporter'), field.label)
+}
+function removeAriaLabel (field) {
+  /* translators: %s: name of the item to remove */
+  return sprintf(__('Remove %s', 'woocommerce-exporter'), field.label)
 }
 function displayLabel (field) {
   return store.getFieldLabel(selectedType.value, field.name, field.label)
@@ -158,18 +179,18 @@ function onInlineListDragLeave (e) {
 <template>
   <div class="pt-1 px-[18px] pb-4 border-t border-gray-50">
     <div v-if="currentFields && currentFields.loading" class="flex items-center gap-2 text-[12.5px] text-gray-500 py-3">
-      <span class="wse-spinner" /> Loading fields…
+      <span class="wse-spinner" /> {{ __('Loading fields…', 'woocommerce-exporter') }}
     </div>
     <template v-else-if="currentFields && !currentFields.error">
       <div class="flex items-center justify-between my-1.5 mb-2.5">
-        <span class="text-[13.5px] font-semibold text-gray-900">Selected Fields ({{ fieldsChips.length }})</span>
+        <span class="text-[13.5px] font-semibold text-gray-900">{{ selectedFieldsLabel() }}</span>
         <span v-if="fieldsChips.length" class="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-gray-500 bg-gray-100 rounded-[6px] py-1 px-2.5">
           <Move :size="12" :stroke-width="2" />
-          Drag to reorder
+          {{ __('Drag to reorder', 'woocommerce-exporter') }}
         </span>
       </div>
       <div class="bg-white border-[1.5px] border-gray-200 rounded-[10px] p-3.5 min-h-[60px]">
-        <div v-if="!fieldsChips.length" class="text-[12.5px] text-gray-400">No fields selected.</div>
+        <div v-if="!fieldsChips.length" class="text-[12.5px] text-gray-400">{{ __('No fields selected.', 'woocommerce-exporter') }}</div>
         <ul
           v-else
           class="list-none m-0 p-0 flex flex-wrap items-center gap-2"
@@ -211,10 +232,10 @@ function onInlineListDragLeave (e) {
                   @keydown.esc.prevent="cancelRename()"
                   @click.stop
                 />
-                <button class="bg-transparent border-none cursor-pointer p-0 flex items-center text-emerald-500 flex-shrink-0 hover:text-emerald-600" title="Save" @mousedown.prevent="commitRename()">
+                <button class="bg-transparent border-none cursor-pointer p-0 flex items-center text-emerald-500 flex-shrink-0 hover:text-emerald-600" :title="__('Save', 'woocommerce-exporter')" @mousedown.prevent="commitRename()">
                   <Check :size="11" :stroke-width="2.5" />
                 </button>
-                <button class="bg-transparent border-none cursor-pointer p-0 flex items-center text-gray-400 flex-shrink-0 hover:text-red-600" title="Cancel" @mousedown.prevent="cancelRename()">
+                <button class="bg-transparent border-none cursor-pointer p-0 flex items-center text-gray-400 flex-shrink-0 hover:text-red-600" :title="__('Cancel', 'woocommerce-exporter')" @mousedown.prevent="cancelRename()">
                   <XIcon :size="11" :stroke-width="2.5" />
                 </button>
               </template>
@@ -223,15 +244,15 @@ function onInlineListDragLeave (e) {
                 <button
                   v-if="!field._isMeta"
                   class="bg-transparent border-none cursor-pointer p-0 flex items-center text-gray-400 flex-shrink-0 hover:text-indigo-600"
-                  :aria-label="`Rename ${field.label}`"
+                  :aria-label="renameAriaLabel(field)"
                   @click.stop="startRename(field.name, displayLabel(field))"
                 >
                   <Pencil :size="10" :stroke-width="2" />
                 </button>
                 <button
                   class="bg-transparent border-none cursor-pointer p-0 flex items-center text-gray-400 flex-shrink-0 hover:text-red-600"
-                  :aria-label="`Remove ${field.label}`"
-                  @click.stop="field._isMeta ? removeMetaKey(field._defName, field.name) : store.removeField(selectedType, field.name)"
+                  :aria-label="removeAriaLabel(field)"
+                  @click.stop="field._isMeta ? removeMetaKey(field._defName, field._metaKey) : store.removeField(selectedType, field.name)"
                 >
                   <XIcon :size="10" :stroke-width="2.5" />
                 </button>
@@ -254,41 +275,41 @@ function onInlineListDragLeave (e) {
         <span class="inline-flex items-center justify-center text-gray-500">
           <Plus :size="18" :stroke-width="2" />
         </span>
-        <span class="text-[13.5px] font-semibold text-gray-900">Add more fields</span>
-        <span class="text-xs text-gray-500">Click to add more fields from available fields</span>
+        <span class="text-[13.5px] font-semibold text-gray-900">{{ __('Add more fields', 'woocommerce-exporter') }}</span>
+        <span class="text-xs text-gray-500">{{ __('Click to add more fields from available fields', 'woocommerce-exporter') }}</span>
       </button>
 
       <div class="flex items-center justify-between gap-3 mt-[18px] pt-4 border-t border-gray-100">
         <div class="flex flex-col gap-[2px] min-w-0">
-          <p class="text-[13px] font-semibold text-gray-900 m-0">Quick Actions</p>
-          <p class="text-xs text-gray-500 m-0">Save time by using presets or managing your field selections.</p>
+          <p class="text-[13px] font-semibold text-gray-900 m-0">{{ __('Quick Actions', 'woocommerce-exporter') }}</p>
+          <p class="text-xs text-gray-500 m-0">{{ __('Save time by using presets or managing your field selections.', 'woocommerce-exporter') }}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button
             class="wse-qe-reset-fields inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100"
-            @click="store.resetFieldsToDefault(selectedType); toasts.push('Reset to default fields')"
+            @click="store.resetFieldsToDefault(selectedType); toasts.push(__('Reset to default fields', 'woocommerce-exporter'))"
           >
             <RotateCcw :size="13" :stroke-width="1.75" />
-            Reset to Default
+            {{ __('Reset to Default', 'woocommerce-exporter') }}
           </button>
           <button
             class="wse-qe-manage-fields inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100"
             @click="store.showManageFields = true"
           >
             <Settings2 :size="13" :stroke-width="1.75" />
-            Manage Fields
+            {{ __('Manage Fields', 'woocommerce-exporter') }}
           </button>
           <button
             class="wse-qe-fields-continue inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-indigo-600 text-white border-none hover:bg-indigo-700"
-            @click="store.saveFields(); toasts.push('Fields saved')"
+            @click="store.saveFields(); toasts.push(__('Fields saved', 'woocommerce-exporter'))"
           >
-            Continue <ChevronRight :size="13" :stroke-width="2" />
+            {{ __('Continue', 'woocommerce-exporter') }} <ChevronRight :size="13" :stroke-width="2" />
           </button>
         </div>
       </div>
 
       <BaseInfoNotice class="mt-3.5">
-        <strong>Tip:</strong> You can reorder fields by dragging them. The order will be reflected in your exported file.
+        <strong>{{ __('Tip:', 'woocommerce-exporter') }}</strong> {{ __('You can reorder fields by dragging them. The order will be reflected in your exported file.', 'woocommerce-exporter') }}
       </BaseInfoNotice>
     </template>
     <div v-else-if="currentFields?.error" class="flex items-center gap-2 text-[12.5px] text-red-600 py-3">{{ currentFields.error }}</div>
@@ -297,7 +318,7 @@ function onInlineListDragLeave (e) {
         class="wse-qe-fields-continue inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-indigo-600 text-white border-none hover:bg-indigo-700"
         @click="store.saveFields()"
       >
-        Continue <ChevronRight :size="13" :stroke-width="2" />
+        {{ __('Continue', 'woocommerce-exporter') }} <ChevronRight :size="13" :stroke-width="2" />
       </button>
     </div>
   </div>

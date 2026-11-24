@@ -1,15 +1,17 @@
 <script setup>
+import { __, _n, sprintf } from '@wordpress/i18n'
 import { computed, ref, watch } from 'vue'
 import { X, Pencil, Check, ChevronDown, ChevronRight, RotateCcw, ArrowRight, ArrowLeft, ArrowUpDown, Info } from 'lucide-vue-next'
 import BaseCheckbox from './BaseCheckbox.vue'
 import FilterSearchInput from './FilterSearchInput.vue'
 import BaseSelect from './BaseSelect.vue'
+import { formatCount } from '../../lib/formatWpDate'
 
 const props = defineProps({
   title:              { type: String,  required: true },
   subtitle:           { type: String,  default: '' },
   footerHint:         { type: String,  default: '' },
-  confirmLabel:       { type: String,  default: 'Apply' },
+  confirmLabel:       { type: String,  default: () => __('Apply', 'woocommerce-exporter') },
   showResetDefault:   { type: Boolean, default: false },
   extraSectionLabel:  { type: String,  default: '' },
   groups:             { type: Array,   default: () => [] },
@@ -52,8 +54,8 @@ function isGroupCollapsed (label) {
 
 // ── Derived lists ─────────────────────────────────────────────────────────────
 const groupOptions = computed(() => [
-  { value: 'all', label: 'All Groups' },
-  ...props.groups.map(g => ({ value: g.label, label: g.label })),
+  { value: 'all', label: __('All Groups', 'woocommerce-exporter') },
+  ...props.groups.map(g => ({ value: g.label, label: g.display_label || g.label })),
   ...(props.extraSectionLabel ? [{ value: '__extra__', label: props.extraSectionLabel }] : []),
 ])
 
@@ -83,6 +85,12 @@ const filteredGroups = computed(() => {
 
 const allFieldsCount   = computed(() => props.groups.reduce((n, g) => n + g.fields.length, 0))
 const allSelectedCount = computed(() => props.selectedNames.length)
+
+const selectedCountLabel = computed(() => sprintf(
+  /* translators: %s: number of selected items */
+  _n('%s selected', '%s selected', allSelectedCount.value, 'woocommerce-exporter'),
+  formatCount(allSelectedCount.value)
+))
 
 function isSelected (name) {
   return props.selectedNames.includes(name)
@@ -188,7 +196,7 @@ function onListDragLeave (e) {
         </div>
         <button
           class="bg-none border-none cursor-pointer p-1 text-gray-400 rounded-md flex items-center hover:bg-gray-100 hover:text-gray-700"
-          aria-label="Close"
+          :aria-label="__('Close', 'woocommerce-exporter')"
           @click="emit('close')"
         >
           <X :size="18" :stroke-width="1.75" />
@@ -199,7 +207,7 @@ function onListDragLeave (e) {
       <div class="flex items-center gap-[10px] px-5 py-[14px] border-b border-gray-100 flex-shrink-0">
         <FilterSearchInput
           v-model="search"
-          placeholder="Search fields..."
+          :placeholder="__('Search fields...', 'woocommerce-exporter')"
           class="flex-1"
         />
         <BaseSelect
@@ -213,7 +221,7 @@ function onListDragLeave (e) {
           class="inline-flex items-center gap-[6px] h-[40px] px-4 bg-white border-[1.5px] border-gray-200 rounded-lg text-[12.5px] font-semibold text-gray-700 cursor-pointer whitespace-nowrap flex-shrink-0 hover:bg-gray-50 hover:border-gray-300"
           @click="emit('clearAll')"
         >
-          Clear All
+          {{ __('Clear All', 'woocommerce-exporter') }}
         </button>
         <button
           v-if="showResetDefault"
@@ -222,7 +230,7 @@ function onListDragLeave (e) {
           @click="emit('reset')"
         >
           <RotateCcw :size="13" :stroke-width="2" />
-          Reset to Default
+          {{ __('Reset to Default', 'woocommerce-exporter') }}
         </button>
       </div>
 
@@ -236,15 +244,15 @@ function onListDragLeave (e) {
         <div class="flex flex-col bg-white border-[1.5px] border-gray-200 rounded-[10px] min-w-0 overflow-hidden">
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
             <span class="text-[13.5px] font-semibold text-gray-900 inline-flex items-center gap-2">
-              All Fields
+              {{ __('All Fields', 'woocommerce-exporter') }}
               <span class="inline-flex items-center justify-center text-[11px] font-bold text-gray-500 bg-gray-100 rounded-md py-[2px] px-2">{{ allFieldsCount }}</span>
             </span>
-            <span class="text-[11.5px] font-medium text-indigo-600 bg-indigo-50 rounded-[5px] py-1 px-[9px]">{{ allSelectedCount }} selected</span>
+            <span class="text-[11.5px] font-medium text-indigo-600 bg-indigo-50 rounded-[5px] py-1 px-[9px]">{{ selectedCountLabel }}</span>
           </div>
 
           <div class="flex-1 overflow-y-auto py-[6px] min-h-[380px]">
             <div v-if="loading" class="flex items-center gap-2 px-4 py-5 text-[12.5px] text-gray-500">
-              <span class="wse-spinner" /> Loading fields…
+              <span class="wse-spinner" /> {{ __('Loading fields…', 'woocommerce-exporter') }}
             </div>
             <div v-else-if="error" class="flex items-center gap-2 px-4 py-5 text-[12.5px] text-red-600">
               {{ error }}
@@ -265,7 +273,7 @@ function onListDragLeave (e) {
                       :stroke-width="2"
                       class="flex-shrink-0"
                     />
-                    <span class="flex-1 text-[13px] font-semibold text-gray-900">{{ group.label }}</span>
+                    <span class="flex-1 text-[13px] font-semibold text-gray-900">{{ group.display_label || group.label }}</span>
                     <span class="text-[11px] font-medium text-indigo-600 bg-indigo-50 rounded-[5px] py-[3px] px-2 flex-shrink-0">
                       {{ group.fields.filter(f => isSelected(f.name)).length }}/{{ group.fields.length }}
                     </span>
@@ -294,7 +302,7 @@ function onListDragLeave (e) {
                   </ul>
                 </div>
                 <div v-if="filteredGroups.length === 0" class="flex items-center gap-2 px-4 py-5 text-[12.5px] text-gray-500">
-                  No fields match your search.
+                  {{ __('No fields match your search.', 'woocommerce-exporter') }}
                 </div>
               </template>
               <slot v-if="showExtraSection" name="extra-sections" />
@@ -307,7 +315,7 @@ function onListDragLeave (e) {
           <button
             type="button"
             class="w-[38px] h-[38px] flex items-center justify-center bg-white border-[1.5px] border-gray-200 rounded-lg cursor-pointer text-gray-700 transition-[background,border-color,color] duration-[120ms] hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-600"
-            title="Add visible fields to selection"
+            :title="__('Add visible fields to selection', 'woocommerce-exporter')"
             @click="handleSelectAllVisible"
           >
             <ArrowRight :size="14" :stroke-width="2" />
@@ -315,7 +323,7 @@ function onListDragLeave (e) {
           <button
             type="button"
             class="w-[38px] h-[38px] flex items-center justify-center bg-white border-[1.5px] border-gray-200 rounded-lg cursor-pointer text-gray-700 transition-[background,border-color,color] duration-[120ms] hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-600"
-            title="Remove all from selection"
+            :title="__('Remove all from selection', 'woocommerce-exporter')"
             @click="emit('clearAll')"
           >
             <ArrowLeft :size="14" :stroke-width="2" />
@@ -326,18 +334,18 @@ function onListDragLeave (e) {
         <div class="flex flex-col bg-white border-[1.5px] border-gray-200 rounded-[10px] min-w-0 overflow-hidden">
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
             <span class="text-[13.5px] font-semibold text-gray-900 inline-flex items-center gap-2">
-              Selected Fields
+              {{ __('Selected Fields', 'woocommerce-exporter') }}
               <span class="inline-flex items-center justify-center text-[11px] font-bold text-gray-500 bg-gray-100 rounded-md py-[2px] px-2">{{ selectedFields.length }}</span>
             </span>
             <span class="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-indigo-600 bg-indigo-50 rounded-md py-1 px-[9px]">
               <ArrowUpDown :size="11" :stroke-width="2" />
-              Reorder
+              {{ __('Reorder', 'woocommerce-exporter') }}
             </span>
           </div>
 
           <div class="flex-1 overflow-y-auto p-2 min-h-[380px]">
             <p v-if="selectedFields.length === 0" class="text-xs text-gray-400 text-center py-5 px-3 m-0">
-              Enable fields on the left to add them here.
+              {{ __('Enable fields on the left to add them here.', 'woocommerce-exporter') }}
             </p>
             <ul
               v-else
@@ -381,12 +389,12 @@ function onListDragLeave (e) {
                     />
                     <button
                       class="bg-none border-none cursor-pointer p-[2px] rounded-[3px] flex items-center flex-shrink-0 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
-                      title="Save"
+                      :title="__('Save', 'woocommerce-exporter')"
                       @mousedown.prevent="commitEdit"
                     ><Check :size="13" :stroke-width="2.5" /></button>
                     <button
                       class="bg-none border-none cursor-pointer p-[2px] rounded-[3px] flex items-center flex-shrink-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                      title="Cancel"
+                      :title="__('Cancel', 'woocommerce-exporter')"
                       @mousedown.prevent="cancelEdit"
                     ><X :size="13" :stroke-width="2.5" /></button>
                   </template>
@@ -397,12 +405,12 @@ function onListDragLeave (e) {
                     >{{ field.label }}</span>
                     <button
                       class="bg-none border-none cursor-pointer p-[2px] rounded-[3px] flex items-center flex-shrink-0 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
-                      aria-label="Rename field"
+                      :aria-label="__('Rename field', 'woocommerce-exporter')"
                       @click.stop="startEdit(field)"
                     ><Pencil :size="12" :stroke-width="2" /></button>
                     <button
                       class="bg-none border-none cursor-pointer p-[2px] rounded-[3px] flex items-center flex-shrink-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                      aria-label="Remove field"
+                      :aria-label="__('Remove field', 'woocommerce-exporter')"
                       @click.stop="emit('remove', field.name)"
                     ><X :size="12" :stroke-width="2" /></button>
                   </template>
@@ -428,7 +436,7 @@ function onListDragLeave (e) {
           <button
             class="bg-transparent border-[1.5px] border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 py-[7px] px-4 cursor-pointer hover:bg-gray-100"
             @click="emit('close')"
-          >Cancel</button>
+          >{{ __('Cancel', 'woocommerce-exporter') }}</button>
           <button
             class="bg-indigo-600 border-none rounded-lg text-[13px] font-semibold text-white py-[7px] px-[18px] cursor-pointer hover:bg-indigo-700"
             @click="emit('confirm')"

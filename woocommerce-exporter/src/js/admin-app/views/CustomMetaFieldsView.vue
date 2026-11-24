@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted } from 'vue'
+import { __, _n, sprintf } from '@wordpress/i18n'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import {
@@ -53,6 +54,14 @@ function badgeStyle (typeSlug) {
   return BADGE_STYLES[typeSlug] ?? { bg: '#F3F4F6', text: '#6B7280' }
 }
 
+function fieldCountLabel (count) {
+  return sprintf(
+    /* translators: %s: number of fields */
+    _n('%s field', '%s fields', count, 'woocommerce-exporter'),
+    count
+  )
+}
+
 function goToType (typeSlug) {
   router.push(`/custom-meta-fields/${typeSlug}`)
 }
@@ -73,15 +82,15 @@ function addCustomField () {
     <!-- Page header -->
     <div class="flex items-start justify-between gap-4 mb-6">
       <div>
-        <h1 class="m-0 text-[24px] font-bold text-[#111827] leading-snug">Custom Meta Fields</h1>
+        <h1 class="m-0 text-[24px] font-bold text-[#111827] leading-snug">{{ __('Custom Meta Fields', 'woocommerce-exporter') }}</h1>
         <p class="m-0 mt-1 text-[14px] text-[#6B7280]">
-          Manage and reuse custom meta fields across different export types.
+          {{ __('Manage and reuse custom meta fields across different export types.', 'woocommerce-exporter') }}
         </p>
       </div>
       <div class="flex items-center gap-2">
         <BaseButton @click="addCustomField">
           <template #icon><Plus :size="15" :stroke-width="2.25" /></template>
-          Add Custom Field
+          {{ __('Add Custom Field', 'woocommerce-exporter') }}
         </BaseButton>
         <PageActions />
       </div>
@@ -90,7 +99,7 @@ function addCustomField () {
     <!-- Loading -->
     <div v-if="isLoadingList" class="flex items-center gap-2.5 text-[13px] text-gray-500 py-10 justify-center">
       <span class="wse-spinner" />
-      Loading&hellip;
+      {{ __('Loading…', 'woocommerce-exporter') }}
     </div>
 
     <!-- Error -->
@@ -105,9 +114,9 @@ function addCustomField () {
 
         <!-- Card header -->
         <div class="px-6 py-5 border-b border-[#F3F4F6]">
-          <h2 class="m-0 text-[15px] font-semibold text-[#111827]">Export Types</h2>
+          <h2 class="m-0 text-[15px] font-semibold text-[#111827]">{{ __('Export Types', 'woocommerce-exporter') }}</h2>
           <p class="m-0 mt-1 text-[13px] text-[#6B7280]">
-            Select an export type to view and manage its custom meta fields.
+            {{ __('Select an export type to view and manage its custom meta fields.', 'woocommerce-exporter') }}
           </p>
         </div>
 
@@ -157,15 +166,15 @@ function addCustomField () {
             <path d="M174 105 L175 108 L178 109 L175 110 L174 113 L173 110 L170 109 L173 108 Z" fill="#C4B5FD" />
           </svg>
 
-          <h3 class="wse-cmf-empty-title">No custom meta fields yet</h3>
+          <h3 class="wse-cmf-empty-title">{{ __('No custom meta fields yet', 'woocommerce-exporter') }}</h3>
           <p class="wse-cmf-empty-desc">
-            You haven't created any custom meta fields for any export type.<br>
-            Add your first custom meta field to get started.
+            {{ __("You haven't created any custom meta fields for any export type.", 'woocommerce-exporter') }}<br>
+            {{ __('Add your first custom meta field to get started.', 'woocommerce-exporter') }}
           </p>
 
           <BaseButton @click="addCustomField">
             <template #icon><Plus :size="16" :stroke-width="2.5" /></template>
-            Add Custom Field
+            {{ __('Add Custom Field', 'woocommerce-exporter') }}
           </BaseButton>
         </div>
 
@@ -202,7 +211,7 @@ function addCustomField () {
               class="wse-cmf-badge flex-shrink-0"
               :style="{ backgroundColor: badgeStyle(item.type).bg, color: badgeStyle(item.type).text }"
             >
-              {{ item.field_count }} {{ item.field_count === 1 ? 'field' : 'fields' }}
+              {{ fieldCountLabel(item.field_count) }}
             </div>
 
             <!-- Chevron -->
@@ -214,7 +223,7 @@ function addCustomField () {
         <div class="flex items-center gap-2 px-6 py-4 border-t border-[#F3F4F6]">
           <Info :size="14" color="#9CA3AF" :stroke-width="1.75" class="flex-shrink-0" />
           <span class="text-[12px] text-[#6B7280]">
-            Custom meta fields are key-value pairs that you can include in your exports.
+            {{ __('Custom meta fields are key-value pairs that you can include in your exports.', 'woocommerce-exporter') }}
           </span>
         </div>
 

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { __, sprintf } from '@wordpress/i18n'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -26,6 +27,22 @@ const {
   formError
 } = storeToRefs(store)
 
+// Saved keys of an Order Item Meta / Order Item Product Meta definition that the
+// export cannot write: their order_items_<key> column name is a built-in Order
+// Items field, or another section's key already claimed it.
+function unavailableKeys (defName) {
+  return Object.entries(currentType.value?.unavailable_keys?.[defName] ?? {})
+    .map(([key, fieldName]) => `${key} (${fieldName})`)
+}
+
+function unavailableNotice (defName) {
+  return sprintf(
+    /* translators: %s: comma-separated meta keys that are not exported, each followed by the column it clashes with */
+    __('Not exported: %s. Another column already uses this column name, either a built-in Order Items field or the same key in another section. Rename the key to export it.', 'woocommerce-exporter'),
+    unavailableKeys(defName).join(', ')
+  )
+}
+
 const EXPORT_TYPE_OPTIONS = computed(() =>
   types.value.map(t => ({ value: t.type, label: t.label }))
 )
@@ -33,6 +50,24 @@ const EXPORT_TYPE_OPTIONS = computed(() =>
 const exportTypeLabel = computed(() => {
   const opt = EXPORT_TYPE_OPTIONS.value.find(o => o.value === route.params.type)
   return opt ? opt.label : route.params.type
+})
+
+const pageTitle = computed(() => {
+  if (!isEditMode.value) return __('Add Meta Fields', 'woocommerce-exporter')
+  return sprintf(
+    /* translators: %s: export type name, e.g. Products */
+    __('Edit %s Meta Fields', 'woocommerce-exporter'),
+    exportTypeLabel.value
+  )
+})
+
+const pageSubtitle = computed(() => {
+  if (!isEditMode.value) return __('Choose an export type and define your custom meta fields.', 'woocommerce-exporter')
+  return sprintf(
+    /* translators: %s: export type name, e.g. Products */
+    __('Define custom meta fields for the %s export type.', 'woocommerce-exporter'),
+    exportTypeLabel.value
+  )
 })
 
 /**
@@ -110,12 +145,10 @@ function handleCancel () {
     <div class="flex items-start justify-between gap-4 mb-6">
       <div>
         <h1 class="m-0 text-[24px] font-bold text-[#111827] leading-snug">
-          {{ isEditMode ? `Edit ${exportTypeLabel} Meta Fields` : 'Add Meta Fields' }}
+          {{ pageTitle }}
         </h1>
         <p class="m-0 mt-1 text-[14px] text-[#6B7280]">
-          {{ isEditMode
-            ? `Define custom meta fields for the ${exportTypeLabel} export type.`
-            : 'Choose an export type and define your custom meta fields.' }}
+          {{ pageSubtitle }}
         </p>
       </div>
       <button
@@ -124,14 +157,14 @@ function handleCancel () {
         @click="handleCancel"
       >
         <ArrowLeft :size="15" :stroke-width="2" />
-        Custom Meta Fields
+        {{ __('Custom Meta Fields', 'woocommerce-exporter') }}
       </button>
     </div>
 
     <!-- Loading -->
     <div v-if="isLoadingForm" class="flex items-center gap-2.5 text-[13px] text-gray-500 py-10 justify-center">
       <span class="wse-spinner" />
-      Loading&hellip;
+      {{ __('Loading…', 'woocommerce-exporter') }}
     </div>
 
     <!-- Error -->
@@ -145,11 +178,11 @@ function handleCancel () {
 
       <!-- Card header -->
       <div class="px-6 py-5 border-b border-[#F3F4F6]">
-        <h2 class="m-0 text-[15px] font-semibold text-[#111827]">Custom Field Configuration</h2>
+        <h2 class="m-0 text-[15px] font-semibold text-[#111827]">{{ __('Custom Field Configuration', 'woocommerce-exporter') }}</h2>
         <p class="m-0 mt-1 text-[13px] text-[#6B7280]">
           {{ isEditMode
-            ? 'Define the meta keys and export availability for each custom field.'
-            : 'Choose export type and define custom meta fields.' }}
+            ? __('Define the meta keys and export availability for each custom field.', 'woocommerce-exporter')
+            : __('Choose export type and define custom meta fields.', 'woocommerce-exporter') }}
         </p>
       </div>
 
@@ -159,10 +192,10 @@ function handleCancel () {
         <div v-if="!isEditMode" class="wse-cmf-form-row border-b border-[#F3F4F6]">
           <div class="wse-cmf-form-label">
             <label class="block text-[14px] font-semibold text-[#111827]" for="cmf-export-type">
-              Export Type
+              {{ __('Export Type', 'woocommerce-exporter') }}
             </label>
             <p class="m-0 mt-1 text-[13px] text-[#6B7280]">
-              Select the export type these fields belong to.
+              {{ __('Select the export type these fields belong to.', 'woocommerce-exporter') }}
             </p>
           </div>
           <div class="wse-cmf-form-field">
@@ -181,7 +214,7 @@ function handleCancel () {
                   :disabled="configuredTypeSlugs.has(opt.value)"
                 >{{ configuredTypeSlugs.has(opt.value) ? '✓ ' + opt.label : opt.label }}</option>
               </select>
-              <BaseTooltip content="Select the export type these custom meta fields apply to. Each type maintains its own independent set of meta fields.">
+              <BaseTooltip :content="__('Select the export type these custom meta fields apply to. Each type maintains its own independent set of meta fields.', 'woocommerce-exporter')">
                 <button type="button" class="flex-shrink-0 p-1 border-0 bg-transparent cursor-pointer text-[#9CA3AF] hover:text-gray-600">
                   <HelpCircle :size="16" :stroke-width="1.75" />
                 </button>
@@ -205,7 +238,7 @@ function handleCancel () {
               {{ def.label }}
             </label>
             <p class="m-0 mt-1 text-[13px] text-[#6B7280]">
-              {{ def.description || 'Enter one meta key per line.' }}
+              {{ def.description || __('Enter one meta key per line.', 'woocommerce-exporter') }}
             </p>
           </div>
           <div class="wse-cmf-form-field">
@@ -216,11 +249,18 @@ function handleCancel () {
               placeholder="_meta_key_name"
               spellcheck="false"
             />
+            <p
+              v-if="unavailableKeys(def.name).length"
+              class="wse-cmf-unavailable-notice"
+              role="status"
+            >
+              {{ unavailableNotice(def.name) }}
+            </p>
             <div class="wse-cmf-availability-box">
-              <span class="wse-cmf-availability-box__heading">Available In</span>
+              <span class="wse-cmf-availability-box__heading">{{ __('Available In', 'woocommerce-exporter') }}</span>
               <BaseAvailabilityCheckboxes v-model="def.availability" />
               <p class="wse-cmf-availability-box__hint">
-                Selected export areas will have these fields available for use.
+                {{ __('Selected export areas will have these fields available for use.', 'woocommerce-exporter') }}
               </p>
             </div>
           </div>
@@ -234,11 +274,11 @@ function handleCancel () {
         <div class="flex items-center gap-2 text-[13px]">
           <template v-if="saveStatus === 'saved'">
             <CheckCircle2 :size="15" color="#059669" :stroke-width="1.75" />
-            <span class="text-emerald-600 font-medium">Fields saved.</span>
+            <span class="text-emerald-600 font-medium">{{ __('Fields saved.', 'woocommerce-exporter') }}</span>
           </template>
           <template v-else-if="saveStatus === 'error' || formError">
             <AlertCircle :size="15" color="#DC2626" :stroke-width="1.75" />
-            <span class="text-red-600">{{ formError ?? 'Save failed.' }}</span>
+            <span class="text-red-600">{{ formError ?? __('Save failed.', 'woocommerce-exporter') }}</span>
           </template>
         </div>
 
@@ -249,7 +289,7 @@ function handleCancel () {
             :disabled="isSaving"
             @click="handleCancel"
           >
-            Cancel
+            {{ __('Cancel', 'woocommerce-exporter') }}
           </button>
           <button
             type="button"
@@ -258,7 +298,7 @@ function handleCancel () {
             @click="handleSave"
           >
             <span v-if="isSaving" class="wse-spinner wse-spinner--sm wse-spinner--white" />
-            {{ isSaving ? 'Saving…' : 'Save Fields' }}
+            {{ isSaving ? __('Saving…', 'woocommerce-exporter') : __('Save Fields', 'woocommerce-exporter') }}
           </button>
         </div>
       </div>

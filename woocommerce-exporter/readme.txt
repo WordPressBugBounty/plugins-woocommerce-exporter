@@ -5,7 +5,7 @@ Tags: woocommerce export, export products, export orders, export subscriptions, 
 Requires at least: 2.9.2
 Tested up to: 7.1
 Requires PHP: 5.6
-Stable tag: 2.8.2
+Stable tag: 2.8.3
 License: GPLv2 or later
 
 Export WooCommerce products, orders, customers, categories, tags, subscriptions & more into formatted files like CSV, XML, Excel 2007, XLS, XLSX.
@@ -166,6 +166,53 @@ You can report security bugs through the Patchstack Vulnerability Disclosure Pro
 
 == Changelog ==
 
+= 2.8.3 =
+* Improvement: Remove the incorrect money-back guarantee line from the Deluxe upgrade modal and the Deluxe feature screens
+* Improvement: Cancel export now stops the export, and a new export can start at once
+* Improvement: Translate the admin app. A translation in wp-content/languages/woocommerce-exporter now takes priority, and "Reset language to English" also keeps exports in English
+* Improvement: Product quick export can sort by two more "Then by" levels
+* Improvement: Category and tag quick exports have a language filter (WPML and Polylang)
+* Improvement: Category and tag product filters have a "Match type" choice (include or filter out)
+* Improvement: CSV/TSV rows now end with the line ending formatting setting (Windows CRLF by default) instead of always LF
+* Bug Fix: Export modules: the Store Toolkit and Product Importer Deluxe cards open the download page even when the plugin is installed and active, and the Store Toolkit link points at a screen that no current release registers
+* Bug Fix: WordPress dashboard shows a fatal error ("Undefined constant WSED_AS_HOOK") when a published scheduled export exists
+* Bug Fix: Filename setting has no effect on exported files (wrong option key)
+* Bug Fix: Field delimiter accepts multi-character values that break or corrupt CSV exports
+* Bug Fix: Settings toggles that default to on cannot be saved off
+* Bug Fix: Settings screen shows an inflated "unsaved changes" count
+* Bug Fix: Quick export ascending/descending sort toggle has no effect
+* Bug Fix: Quick export field order resets to the default order
+* Bug Fix: Quick export default field selection misses the key columns
+* Bug Fix: Quick export lists custom meta keys both in basic info and in their own section
+* Bug Fix: Custom meta field "Available In" setting is ignored by quick export
+* Bug Fix: Quick export: switching off a filter card leaves its options set
+* Bug Fix: Quick export: order item meta and order item product meta keys never appear as export columns
+* Bug Fix: Quick export: "Order Items Formatting", "Max Unique Order Items" and "Order Item Types" filters have no effect
+* Bug Fix: Orders export "Product Name" sort option is ignored
+* Bug Fix: Orders export with "Individual rows" copies the previous item's values into the next row
+* Bug Fix: Orders export: order items category is blank for variation line items
+* Bug Fix: Orders export: custom product attribute variation columns are blank
+* Bug Fix: Orders export: coupon description and coupon expiry date are blank on WooCommerce 8.7+
+* Bug Fix: Orders export: PayPal payment columns are blank
+* Bug Fix: Orders export: refund rows leave modified date and type ID blank
+* Bug Fix: Column label overrides are ignored for order item columns
+* Bug Fix: Categories and tags exports write "&" as "&amp;" and ignore sort, limit and offset
+* Bug Fix: Users export ignores the "Sort by" setting
+* Bug Fix: Users export HTML-escapes billing and shipping values
+* Bug Fix: Users export with a user membership filter that matches no members exports every user
+* Bug Fix: "Image (Embed)" columns export blank (deprecated shop_thumbnail size)
+* Bug Fix: ID range input drops IDs or accepts values that are not whole numbers
+* Bug Fix: A refused export request clears the running export's settings
+* Bug Fix: Active-integration cache goes stale after WP-CLI activation or plugin deactivation
+* Bug Fix: Table checks match similar table names (SHOW TABLES LIKE without esc_like)
+* Bug Fix: Orders export: AliDropship order item columns are blank. Their headers are now "Order Items: AliDropship Product ID", "Product URL", "Store URL" and "Store Name". Update an import that maps these columns by header text
+* Bug Fix: Export progress dialog keeps the "Export in Progress" title after the export completes
+* Bug Fix: Admin app footer shows an impossible memory readout
+* Bug Fix: Custom meta field rows in manage fields cannot be used with the keyboard
+* Bug Fix: Quick export opened with a ?type= link does not select that export type
+* Bug Fix: Tickets export (requires Store Exporter Deluxe): attendee e-mail, ticket sent and barcode columns are synced with Store Exporter Deluxe 5.4.6, including its woo_ce_fooevents_barcode_path and woo_ce_fooevents_barcode_image filters
+* Bug Fix: Store Export screen shows a critical error when the tab parameter is passed as an array
+
 = 2.8.2 =
 * Feature: Register Store Exporter features with the WordPress Abilities API so AI assistants can use them through MCP
 * Feature: New AI / MCP screen to set up StoreAgent and allow or block AI changes
@@ -220,39 +267,6 @@ You can report security bugs through the Patchstack Vulnerability Disclosure Pro
 * Security: Export Template post type used the generic post capabilities, so Contributors could create templates
 * Security: Archives bulk-delete had no nonce or capability check
 * Security: Archived export files were written to the public uploads folder; they now live in a protected export sub-directory and are removed when the attachment is deleted
-
-= 2.8.0 =
-* Feature: Admin SPA modernization — new Vue 3 admin interface backed by a REST API
-* Bug Fix: Order export filters (customer, billing/shipping country, user role, order ID, payment gateway) silently ignored when HPOS is disabled
-* Bug Fix: Subscription export shows a stale coupon after a recurring coupon is removed from the subscription
-* Bug Fix: Fatal error crashing the whole site when the plugin bootstrap loads in a bad state (stale OPcache or incomplete update)
-
-= 2.7.9 =
-* Bug Fix: Brands are not being exported
-* Bug Fix: Custom user meta fields (woo_ce_custom_users) missing from order exports after v5.x refactor
-* Bug Fix: Export fails with fatal error when date format uses slashes (d/m/Y)
-* Bug Fix: Fatal error calling get_description() on int when exporting subscriptions with coupons
-* Bug Fix: Fatal error: attempt to assign property 'order_id' on null when exporting subscriptions with HPOS enabled
-* Bug Fix: Fatal error: call to get_description() on int when exporting orders/subscriptions with recurring discount coupons
-* Bug Fix: Incorrect "last month" date filter when using UTC-1 or negative timezones
-* Bug Fix: Quick Export filters silently ignored for non-user export types (follow-up to #233)
-* Bug Fix: Quick Export of users fails with 500 error on large user sites, permanently locks exports
-* Bug Fix: Subscription Items export reads from parent order instead of current subscription
-* Bug Fix: Subscription Items: product variation and variation ID columns always empty for variable subscriptions
-* Bug Fix: Subscription export 500 error when HPOS enabled and date filter applied
-* Bug Fix: User export: WooCommerce Memberships filter ignored (exports all users)
-* Bug Fix: User export: disabled filters still applied (stale filter state)
-* Feature: Add support to export Cost of Goods Sold (COGS) in the products and order type export
-
-= 2.7.8 =
-* Bug Fix: Custom order meta incorrectly appear for customer and subscription export
-* Bug Fix: Export to SFTP doesn't work for scheduled exports
-* Bug Fix: Filtering orders by multiple coupon codes only exports a single coupon order
-* Bug Fix: PHP 8.2: Cannot use dynamic creation of properties during export
-* Bug Fix: Special characters break Excel export
-* Bug Fix: Text with file extension is not exported to XLS format
-* Bug Fix: WooCommerce Subscriptions division by zero
-* Bug Fix: Potential security issues
 
 = Older versions =
 See [changelog.txt](https://plugins.svn.wordpress.org/woocommerce-exporter/trunk/changelog.txt) for the changelog of older versions.

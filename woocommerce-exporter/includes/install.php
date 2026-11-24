@@ -19,9 +19,6 @@ function woo_cd_create_secure_archives_dir() {
 
 }
 
-// Refresh the list of active modules when a Plugin is activated/de-activated
-if( function_exists( 'woo_ce_refresh_active_export_plugins' ) ) {
-	add_action( 'activated_plugin', 'woo_ce_refresh_active_export_plugins' );
-	add_action( 'deactivated_plugin', 'woo_ce_refresh_active_export_plugins' );
-}
+// The active-module cache is invalidated from includes/bootstrap.php, on every
+// request, so a Plugin toggled over WP-CLI or the REST API is noticed too.
 ?>

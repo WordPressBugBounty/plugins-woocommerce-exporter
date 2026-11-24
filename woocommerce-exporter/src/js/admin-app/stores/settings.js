@@ -1,6 +1,8 @@
+import { __ } from '@wordpress/i18n'
 import { ref, reactive, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../lib/api'
+import { DEFAULT_FILENAME_PATTERN } from '../lib/filenamePattern'
 
 /**
  * Resolve whether debugging mode is genuinely gating exports.
@@ -30,6 +32,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref(null)
+  // A failed SAVE, as opposed to `error` above, which means the settings could
+  // not be loaded at all.
+  const saveError = ref(null)
+  // The WP_Error code behind saveError, so the section owning the rejected
+  // field can show the message beside it.
+  const saveErrorCode = ref('')
   const activeCategory = ref('general')
   // Whether debugging mode is genuinely active on the server. Seeded from the
   // bootstrapped wseAdminData (which mirrors the WOO_CE_DEBUG constant) so the
@@ -52,7 +60,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const settings = reactive({
     // General
-    filename: 'export-{type}-{store}-{date}-{time}',
+    export_filename: DEFAULT_FILENAME_PATTERN,
     encoding: 'UTF-8',
     // Matches the server default, Export_Helper::DEFAULT_DATE_FORMAT.
     date_format: 'd/m/Y',
@@ -120,15 +128,17 @@ export const useSettingsStore = defineStore('settings', () => {
   // True once fetchSettings() has successfully returned from the server.
   const isSettingsLoaded = computed(() => original.value !== null)
 
-  const isDirty = computed(() => {
-    if (!original.value) return false
-    return JSON.stringify(settings) !== JSON.stringify(original.value)
-  })
-
+  // Compare per key by value: `original` is a deep clone, so a reference check
+  // would always flag the object-valued keys.
   const unsavedCount = computed(() => {
     if (!original.value) return 0
-    return Object.keys(settings).filter(k => settings[k] !== original.value[k]).length
+    return Object.keys(settings).filter(
+      k => JSON.stringify(settings[k]) !== JSON.stringify(original.value[k])
+    ).length
   })
+
+  // Derived from unsavedCount so the bar's visibility and its count cannot drift apart.
+  const isDirty = computed(() => unsavedCount.value > 0)
 
   async function fetchSettings () {
     if (isLoading.value) return // already in-flight; avoid double-fetch
@@ -147,7 +157,7 @@ export const useSettingsStore = defineStore('settings', () => {
       original.value = JSON.parse(JSON.stringify(settings))
       debugModeActive.value = resolveDebugModeActive(data, data.debug_mode)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load settings.'
+      error.value = err instanceof Error ? err.message : __('Failed to load settings.', 'woocommerce-exporter')
     } finally {
       isLoading.value = false
     }
@@ -155,7 +165,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function saveSettings () {
     isSaving.value = true
-    error.value = null
+    saveError.value = null
+    saveErrorCode.value = ''
     try {
       // Snapshot BEFORE the await. `settings` is reactive and the user can keep
       // toggling while the request is in flight, so every post-await read of it
@@ -167,7 +178,11 @@ export const useSettingsStore = defineStore('settings', () => {
       // that rejects, must never flip the banner.
       debugModeActive.value = resolveDebugModeActive(response, payload.debug_mode)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save settings.'
+      // Kept apart from `error`, which the view renders INSTEAD of the
+      // settings body: a rejected save must leave the form on screen, or the
+      // control the message asks the user to correct disappears with it.
+      saveError.value = err instanceof Error ? err.message : __('Failed to save settings.', 'woocommerce-exporter')
+      saveErrorCode.value = (err && err.code) || ''
       throw err
     } finally {
       isSaving.value = false
@@ -178,18 +193,21 @@ export const useSettingsStore = defineStore('settings', () => {
     if (original.value) {
       Object.assign(settings, JSON.parse(JSON.stringify(original.value)))
     }
+    // A refused save was about the discarded edits, so its message goes too.
+    saveError.value = null
+    saveErrorCode.value = ''
   }
 
   async function runAction (action) {
     try {
       return await api.post('settings/actions', { action })
     } catch (err) {
-      throw err instanceof Error ? err : new Error('Action failed.')
+      throw err instanceof Error ? err : new Error(__('Action failed.', 'woocommerce-exporter'))
     }
   }
 
   return {
-    isLoading, isSaving, error, activeCategory, categories, context, premiumFormats,
+    isLoading, isSaving, error, saveError, saveErrorCode, activeCategory, categories, context, premiumFormats,
     debugModeActive,
     settings, isDirty, unsavedCount, isSettingsLoaded,
     fetchSettings, saveSettings, resetToSaved, runAction

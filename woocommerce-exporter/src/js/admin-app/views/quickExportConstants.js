@@ -1,6 +1,8 @@
 // Static lookup tables for QuickExportView — extracted to keep the SFC focused
 // on UI logic. No reactive state lives here; everything is pure data + helpers.
 
+import { __ } from '@wordpress/i18n'
+import { formatCount } from '../lib/formatWpDate'
 import {
   FileText, FileSpreadsheet, FileCode2, Folder, Code2, Tag, Tags, Paperclip,
   Link2, Box, CheckCircle2, Calendar, CalendarClock, CreditCard, Users,
@@ -62,39 +64,39 @@ const EXTRA_OPTION_ICONS = {
 
 const EXTRA_OPTION_DESCRIPTIONS = {
   product_grouped_formatting: {
-    0: 'Export the WordPress post ID of each grouped product.',
-    1: 'Export the SKU of each grouped product.',
-    2: 'Export the product name of each grouped product.'
+    0: __('Export the WordPress post ID of each grouped product.', 'woocommerce-exporter'),
+    1: __('Export the SKU of each grouped product.', 'woocommerce-exporter'),
+    2: __('Export the product name of each grouped product.', 'woocommerce-exporter')
   },
   product_upsell_formatting: {
-    0: 'Export the WordPress post ID of each up-sell product.',
-    1: 'Export the SKU of each up-sell product.'
+    0: __('Export the WordPress post ID of each up-sell product.', 'woocommerce-exporter'),
+    1: __('Export the SKU of each up-sell product.', 'woocommerce-exporter')
   },
   product_crosssell_formatting: {
-    0: 'Export the WordPress post ID of each cross-sell product.',
-    1: 'Export the SKU of each cross-sell product.'
+    0: __('Export the WordPress post ID of each cross-sell product.', 'woocommerce-exporter'),
+    1: __('Export the SKU of each cross-sell product.', 'woocommerce-exporter')
   },
   variation_formatting: {
-    0: 'Empty variation fields will remain blank in the export.',
-    1: 'Empty variation fields will inherit the parent product value.'
+    0: __('Empty variation fields will remain blank in the export.', 'woocommerce-exporter'),
+    1: __('Empty variation fields will inherit the parent product value.', 'woocommerce-exporter')
   },
   description_excerpt_formatting: {
-    0: 'HTML tags will be included as-is in the export.',
-    1: 'HTML tags will be removed and only plain text will be exported.'
+    0: __('HTML tags will be included as-is in the export.', 'woocommerce-exporter'),
+    1: __('HTML tags will be removed and only plain text will be exported.', 'woocommerce-exporter')
   },
   product_image_formatting: {
-    0: 'Export the WordPress attachment ID.',
-    1: 'Export the image URL.',
-    2: 'Export the server filepath.'
+    0: __('Export the WordPress attachment ID.', 'woocommerce-exporter'),
+    1: __('Export the image URL.', 'woocommerce-exporter'),
+    2: __('Export the server filepath.', 'woocommerce-exporter')
   },
   product_gallery_formatting: {
-    0: 'Export each gallery image as its WordPress attachment ID.',
-    1: 'Export each gallery image as a full URL.',
-    2: 'Export each gallery image as the server filepath.'
+    0: __('Export each gallery image as its WordPress attachment ID.', 'woocommerce-exporter'),
+    1: __('Export each gallery image as a full URL.', 'woocommerce-exporter'),
+    2: __('Export each gallery image as the server filepath.', 'woocommerce-exporter')
   },
   product_gallery_unique: {
-    0: 'All gallery images combined into one pipe-separated cell.',
-    1: 'Each gallery image in its own dedicated column.'
+    0: __('All gallery images combined into one pipe-separated cell.', 'woocommerce-exporter'),
+    1: __('Each gallery image in its own dedicated column.', 'woocommerce-exporter')
   }
 }
 
@@ -110,16 +112,7 @@ export function extraOptionDescription (optionKey, choiceValue) {
 
 // Predefined limit choices for the Batch Settings "Limit" select.
 export const LIMIT_PRESETS = [
-  { value: '',      label: 'All Records' },
-  { value: '100',   label: '100' },
-  { value: '500',   label: '500' },
-  { value: '1000',  label: '1,000' },
-  { value: '5000',  label: '5,000' },
-  { value: '10000', label: '10,000' },
-  { value: '50000', label: '50,000' }
-]
-
-export const MONTHS_SHORT = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  { value: '', label: __('All Records', 'woocommerce-exporter') },
+  // Numbers grouped the admin's way, e.g. 1,000 or 1.000.
+  ...[100, 500, 1000, 5000, 10000, 50000].map((limit) => ({ value: String(limit), label: formatCount(limit) })),
 ]

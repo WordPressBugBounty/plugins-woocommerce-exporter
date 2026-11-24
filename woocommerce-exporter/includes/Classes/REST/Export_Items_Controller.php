@@ -310,14 +310,9 @@ class Export_Items_Controller extends Abstract_Class {
      * @return array
      */
     private function get_plugin_info() {
-        $memory_used  = Helper::get_current_memory_usage();
-        $memory_limit = $this->parse_memory_limit( WP_MEMORY_LIMIT );
-
         return array(
-            'version'      => Helper::get_plugin_version( false, false ),
-            'memory_used'  => (int) $memory_used,
-            'memory_limit' => $memory_limit,
-            'load_time'    => $this->get_page_load_time(),
+            'version'   => Helper::get_plugin_version( false, false ),
+            'load_time' => $this->get_page_load_time(),
         );
     }
 
@@ -340,33 +335,6 @@ class Export_Items_Controller extends Abstract_Class {
             'settings'     => esc_url_raw( $base . '&tab=settings' ),
             'tools'        => esc_url_raw( $base . '&tab=tools' ),
         );
-    }
-
-    /**
-     * Parse a WordPress memory limit string into megabytes.
-     *
-     * @param string $limit Memory limit string (e.g. "256M").
-     *
-     * @since 2.8.0
-     * @return int
-     */
-    private function parse_memory_limit( $limit ) {
-        if ( ! $limit || -1 === (int) $limit ) {
-            return 0;
-        }
-        $unit  = strtoupper( substr( (string) $limit, -1 ) );
-        $value = (int) $limit;
-
-        switch ( $unit ) {
-            case 'G':
-                return $value * 1024;
-            case 'M':
-                return $value;
-            case 'K':
-                return (int) ( $value / 1024 );
-            default:
-                return (int) ( $value / 1024 / 1024 );
-        }
     }
 
     /**

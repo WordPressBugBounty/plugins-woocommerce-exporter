@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted } from 'vue'
+import { __ } from '@wordpress/i18n'
 import { storeToRefs } from 'pinia'
 import { AlertCircle } from 'lucide-vue-next'
 import { useOverviewStore } from '../stores/overview'
@@ -19,8 +20,8 @@ onMounted(store.fetchData)
     <!-- Page header -->
     <div class="wse-header">
       <div>
-        <h1 class="wse-page-title">Overview</h1>
-        <p class="wse-page-sub">Central hub for managing your export operations.</p>
+        <h1 class="wse-page-title">{{ __('Overview', 'woocommerce-exporter') }}</h1>
+        <p class="wse-page-sub">{{ __('Central hub for managing your export operations.', 'woocommerce-exporter') }}</p>
       </div>
       <PageActions />
     </div>
@@ -28,7 +29,7 @@ onMounted(store.fetchData)
     <!-- Loading -->
     <div v-if="isLoading" class="wse-loading">
       <span class="wse-spinner" />
-      Loading overview&hellip;
+      {{ __('Loading overview…', 'woocommerce-exporter') }}
     </div>
 
     <!-- Error -->

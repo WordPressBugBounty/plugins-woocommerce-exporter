@@ -7,6 +7,7 @@
  * @since 5.8.2 (JS) / 5.8.3 (TypeScript)
  */
 
+import { __, sprintf } from '@wordpress/i18n'
 import type { WseAdminData } from './types'
 
 function wpData (): Partial<WseAdminData> {
@@ -86,7 +87,7 @@ export async function prepareExport ({ type, nonce, formData }: PrepareExportPar
   const data = await res.json() as { success: boolean; data: PrepareExportResult & { message?: string; premium?: boolean; upsell?: string; feature?: string; debug?: boolean; diagnostics?: ExportDiagnostic[] } }
 
   if (!res.ok || data.success === false) {
-    throw new ExportApiError(data.data?.message ?? 'Export prepare failed.', Boolean(data.data?.premium), data.data?.upsell ?? null, data.data?.feature ?? null, Boolean(data.data?.debug), data.data?.diagnostics ?? [])
+    throw new ExportApiError(data.data?.message ?? __('Export prepare failed.', 'woocommerce-exporter'), Boolean(data.data?.premium), data.data?.upsell ?? null, data.data?.feature ?? null, Boolean(data.data?.debug), data.data?.diagnostics ?? [])
   }
 
   return data.data
@@ -102,6 +103,9 @@ interface ProcessBatchResult {
   exported: number
   done:     boolean
   file_url?: string
+  /** 'upgrade' on the 1st and every 10th successful Quick Export. */
+  post_export_prompt?: 'upgrade'
+  upgrade_url?: string
   message?: string
   premium?: boolean
   upsell?: string
@@ -130,10 +134,33 @@ export async function processBatch ({ type, nonce, step }: ProcessBatchParams): 
   const data = await res.json() as { success: boolean; data: ProcessBatchResult }
 
   if (!res.ok || data.success === false) {
-    throw new ExportApiError(data.data?.message ?? `Batch ${step} failed.`, Boolean(data.data?.premium), data.data?.upsell ?? null, data.data?.feature ?? null, Boolean(data.data?.debug), data.data?.diagnostics ?? [])
+    throw new ExportApiError(data.data?.message ?? sprintf(
+      /* translators: %d: batch number */
+      __('Batch %d failed.', 'woocommerce-exporter'),
+      step
+    ), Boolean(data.data?.premium), data.data?.upsell ?? null, data.data?.feature ?? null, Boolean(data.data?.debug), data.data?.diagnostics ?? [])
   }
 
   return data.data
+}
+
+/**
+ * Clear the server's export transients, including the 30-minute run lock.
+ * Called after a cancelled export, so the next export can start.
+ */
+export async function clearExport ({ type, nonce }: { type: string; nonce: string }): Promise<void> {
+  const body = new URLSearchParams({
+    action: 'woo_ce_quick_export',
+    nonce,
+    type,
+    method: 'clear_export',
+  })
+
+  await fetch(ajaxUrl(), {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    body.toString(),
+  })
 }
 
 /**

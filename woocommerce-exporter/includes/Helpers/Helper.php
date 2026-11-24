@@ -42,6 +42,49 @@ class Helper {
     }
 
     /**
+     * Whether the "Reset language to English" setting is on.
+     *
+     * @since 2.8.3
+     * @return bool
+     */
+    public static function is_language_reset() {
+        return (bool) get_option( 'woo_ce_reset_language_english', false );
+    }
+
+    /**
+     * Run a callback in the current user's locale.
+     *
+     * Field-list REST requests run in the site locale, because their field
+     * labels become the saved export headers. The labels the SPA only displays
+     * (categories, groups, data types) must still follow the user's language,
+     * like the rest of the screen.
+     *
+     * With "Reset language to English" on the callback runs as is: the plugin's
+     * strings stay English whatever the locale. switch_to_locale() also does
+     * nothing when the user locale has no core language pack installed; the
+     * labels then stay in the site language.
+     *
+     * @param callable $callback Callback whose return value is passed through.
+     *
+     * @since 2.8.3
+     * @return mixed The callback's return value.
+     */
+    public static function in_user_locale( callable $callback ) {
+        if ( self::is_language_reset() ) {
+            return $callback();
+        }
+
+        $switched = switch_to_locale( get_user_locale() );
+        try {
+            return $callback();
+        } finally {
+            if ( $switched ) {
+                restore_previous_locale();
+            }
+        }
+    }
+
+    /**
      * Log an error message.
      *
      * @param string $message The message to log.
@@ -105,6 +148,36 @@ class Helper {
     }
 
     /**
+     * Sanitize a Filename pattern.
+     *
+     * Keeps `{tag}` and `%tag%` placeholders intact, because the result is a
+     * Filename pattern that is resolved at export time rather than a finished
+     * filename. Strips a trailing file extension, turns whitespace into hyphens,
+     * and keeps dots and non-ASCII letters.
+     *
+     * @since 2.8.3
+     *
+     * @param string $filename The filename to sanitize.
+     * @return string The sanitized filename.
+     */
+    public static function sanitize_filename( $filename = '' ) {
+        if ( empty( $filename ) || ! is_string( $filename ) ) {
+            return '';
+        }
+
+        $filename = wp_unslash( $filename );
+
+        // Strip the file extension, as the extension always comes from the export format.
+        $filename = Export::strip_filename_extension( $filename );
+
+        // Whitespace becomes a hyphen, as sanitize_file_name() does, so "monthly orders" keeps its word break.
+        $filename = preg_replace( '/\s+/u', '-', trim( wp_check_invalid_utf8( $filename, true ) ) );
+
+        // Allow letters in any script, digits, dots, underscores, hyphens, percent signs and braces.
+        return (string) preg_replace( '/[^\p{L}\p{N}._%{}\-]/u', '', $filename );
+    }
+
+    /**
      * Load templates in an overridable manner.
      *
      * @since 2.7.3
@@ -147,5 +220,19 @@ class Helper {
             ),
             $export_capability
         );
+    }
+
+    /**
+     * Whether a Quick Export count gets the post-export upgrade prompt.
+     *
+     * The prompt shows on the 1st Quick Export and then on every 10th.
+     *
+     * @since 2.8.3
+     * @param int $count Number of successful Quick Exports, this one included.
+     * @return bool
+     */
+    public static function is_post_export_prompt_count( $count ) {
+        $count = (int) $count;
+        return 1 === $count || ( $count > 0 && 0 === $count % 10 );
     }
 }

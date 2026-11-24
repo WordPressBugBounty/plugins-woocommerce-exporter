@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __ } from '@wordpress/i18n'
 import { Bug, FileSearch, RotateCcw, BellOff, Trash2 } from 'lucide-vue-next'
 import { useSettingsStore } from '../../stores/settings'
 import { useToastsStore } from '../../stores/toasts'
@@ -15,9 +16,9 @@ async function runAction (action) {
   actionLoading.value = action
   try {
     const result = await settingsStore.runAction(action)
-    toastsStore.push(result.message ?? 'Done.', 'success')
+    toastsStore.push(result.message ?? __('Done.', 'woocommerce-exporter'), 'success')
   } catch (err) {
-    toastsStore.push(err.message ?? 'Action failed.', 'error')
+    toastsStore.push(err.message ?? __('Action failed.', 'woocommerce-exporter'), 'error')
   } finally {
     actionLoading.value = null
   }
@@ -27,8 +28,8 @@ async function runAction (action) {
 <template>
   <div class="bg-white border border-gray-200 rounded-[10px] overflow-hidden flex-shrink-0">
     <div class="py-5 px-6 border-b border-gray-100">
-      <h2 class="text-[20px] font-bold text-gray-900 m-0 leading-tight">Advanced</h2>
-      <p class="text-[13px] text-gray-500 m-0 mt-1">System and interface options for advanced configurations.</p>
+      <h2 class="text-[20px] font-bold text-gray-900 m-0 leading-tight">{{ __('Advanced', 'woocommerce-exporter') }}</h2>
+      <p class="text-[13px] text-gray-500 m-0 mt-1">{{ __('System and interface options for advanced configurations.', 'woocommerce-exporter') }}</p>
     </div>
 
     <div class="divide-y divide-gray-100">
@@ -41,8 +42,8 @@ async function runAction (action) {
               <Bug :size="15" :stroke-width="1.75" color="#6C7BFF" />
             </span>
             <div class="min-w-0">
-              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Enable Debugging Mode</p>
-              <p class="text-[12px] text-gray-400 m-0">Activate verbose debug output. Visible in WooCommerce &rsaquo; Status.</p>
+              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Enable Debugging Mode', 'woocommerce-exporter') }}</p>
+              <p class="text-[12px] text-gray-400 m-0">{{ __('Activate verbose debug output. Visible in WooCommerce › Status.', 'woocommerce-exporter') }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2.5 flex-shrink-0">
@@ -59,7 +60,7 @@ async function runAction (action) {
               />
             </button>
             <span class="text-[13px] font-semibold" :class="settings.debug_mode ? 'text-indigo-600' : 'text-gray-400'">
-              {{ settings.debug_mode ? 'On' : 'Off' }}
+              {{ settings.debug_mode ? __('On', 'woocommerce-exporter') : __('Off', 'woocommerce-exporter') }}
             </span>
           </div>
         </div>
@@ -73,8 +74,8 @@ async function runAction (action) {
               <FileSearch :size="15" :stroke-width="1.75" color="#6C7BFF" />
             </span>
             <div class="min-w-0">
-              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Enable Logging Mode</p>
-              <p class="text-[12px] text-gray-400 m-0">Write export activity to the WooCommerce log. Visible in WooCommerce &rsaquo; Status.</p>
+              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Enable Logging Mode', 'woocommerce-exporter') }}</p>
+              <p class="text-[12px] text-gray-400 m-0">{{ __('Write export activity to the WooCommerce log. Visible in WooCommerce › Status.', 'woocommerce-exporter') }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2.5 flex-shrink-0">
@@ -91,7 +92,7 @@ async function runAction (action) {
               />
             </button>
             <span class="text-[13px] font-semibold" :class="settings.logging_mode ? 'text-indigo-600' : 'text-gray-400'">
-              {{ settings.logging_mode ? 'On' : 'Off' }}
+              {{ settings.logging_mode ? __('On', 'woocommerce-exporter') : __('Off', 'woocommerce-exporter') }}
             </span>
           </div>
         </div>
@@ -104,8 +105,8 @@ async function runAction (action) {
             <RotateCcw :size="15" :stroke-width="1.75" color="#6C7BFF" />
           </span>
           <div>
-            <p class="text-[13px] font-semibold text-gray-900 m-0">Maintenance</p>
-            <p class="text-[12px] text-gray-400 m-0">One-time reset and cleanup operations.</p>
+            <p class="text-[13px] font-semibold text-gray-900 m-0">{{ __('Maintenance', 'woocommerce-exporter') }}</p>
+            <p class="text-[12px] text-gray-400 m-0">{{ __('One-time reset and cleanup operations.', 'woocommerce-exporter') }}</p>
           </div>
         </div>
 
@@ -117,8 +118,8 @@ async function runAction (action) {
               <RotateCcw :size="13" :stroke-width="1.75" color="#7986FF" />
             </span>
             <div class="flex-1 min-w-0">
-              <p class="text-[13px] font-semibold text-gray-800 m-0 leading-tight">Reset Hidden Export Types</p>
-              <p class="text-[11px] text-gray-400 m-0 mt-0.5 leading-tight">Restore export types hidden on the Quick Export screen.</p>
+              <p class="text-[13px] font-semibold text-gray-800 m-0 leading-tight">{{ __('Reset Hidden Export Types', 'woocommerce-exporter') }}</p>
+              <p class="text-[11px] text-gray-400 m-0 mt-0.5 leading-tight">{{ __('Restore export types hidden on the Quick Export screen.', 'woocommerce-exporter') }}</p>
             </div>
             <button
               type="button"
@@ -127,7 +128,7 @@ async function runAction (action) {
               @click="runAction('reset_hidden_export_types')"
             >
               <RotateCcw v-if="actionLoading !== 'reset_hidden_export_types'" :size="11" :stroke-width="2.25" />
-              {{ actionLoading === 'reset_hidden_export_types' ? 'Resetting…' : 'Reset' }}
+              {{ actionLoading === 'reset_hidden_export_types' ? __('Resetting…', 'woocommerce-exporter') : __('Reset', 'woocommerce-exporter') }}
             </button>
           </div>
 
@@ -137,8 +138,8 @@ async function runAction (action) {
               <BellOff :size="13" :stroke-width="1.75" color="#7986FF" />
             </span>
             <div class="flex-1 min-w-0">
-              <p class="text-[13px] font-semibold text-gray-800 m-0 leading-tight">Reset Dismissed Notices</p>
-              <p class="text-[11px] text-gray-400 m-0 mt-0.5 leading-tight">Restore all notices that were previously dismissed.</p>
+              <p class="text-[13px] font-semibold text-gray-800 m-0 leading-tight">{{ __('Reset Dismissed Notices', 'woocommerce-exporter') }}</p>
+              <p class="text-[11px] text-gray-400 m-0 mt-0.5 leading-tight">{{ __('Restore all notices that were previously dismissed.', 'woocommerce-exporter') }}</p>
             </div>
             <button
               type="button"
@@ -147,7 +148,7 @@ async function runAction (action) {
               @click="runAction('reset_notices')"
             >
               <RotateCcw v-if="actionLoading !== 'reset_notices'" :size="11" :stroke-width="2.25" />
-              {{ actionLoading === 'reset_notices' ? 'Resetting…' : 'Reset' }}
+              {{ actionLoading === 'reset_notices' ? __('Resetting…', 'woocommerce-exporter') : __('Reset', 'woocommerce-exporter') }}
             </button>
           </div>
 
@@ -157,8 +158,8 @@ async function runAction (action) {
               <Trash2 :size="13" :stroke-width="1.75" color="#7986FF" />
             </span>
             <div class="flex-1 min-w-0">
-              <p class="text-[13px] font-semibold text-gray-800 m-0 leading-tight">Clear Export Transient</p>
-              <p class="text-[11px] text-gray-400 m-0 mt-0.5 leading-tight">Clear the transient cache. Use if an export appears stuck.</p>
+              <p class="text-[13px] font-semibold text-gray-800 m-0 leading-tight">{{ __('Clear Export Transient', 'woocommerce-exporter') }}</p>
+              <p class="text-[11px] text-gray-400 m-0 mt-0.5 leading-tight">{{ __('Clear the transient cache. Use if an export appears stuck.', 'woocommerce-exporter') }}</p>
             </div>
             <button
               type="button"
@@ -167,7 +168,7 @@ async function runAction (action) {
               @click="runAction('clear_export_transient')"
             >
               <Trash2 v-if="actionLoading !== 'clear_export_transient'" :size="11" :stroke-width="2.25" />
-              {{ actionLoading === 'clear_export_transient' ? 'Clearing…' : 'Clear' }}
+              {{ actionLoading === 'clear_export_transient' ? __('Clearing…', 'woocommerce-exporter') : __('Clear', 'woocommerce-exporter') }}
             </button>
           </div>
 

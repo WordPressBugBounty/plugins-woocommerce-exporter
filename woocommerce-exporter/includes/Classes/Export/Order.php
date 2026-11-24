@@ -9,6 +9,7 @@ namespace VisserLabs\WSE\Classes\Export;
 
 use DateTime;
 use VisserLabs\WSE\Abstracts\Abstract_Class;
+use VisserLabs\WSE\Abstracts\Abstract_Exporter;
 use VisserLabs\WSE\Traits\Singleton_Trait;
 use VisserLabs\WSE\Classes\Export\Product;
 use VisserLabs\WSE\Helpers\Formatting;
@@ -49,6 +50,15 @@ class Order extends Abstract_Class {
     const ORDER_ITEMS_FORMATTING_DEFAULT = 'unique';
 
     /**
+     * Group prefix the Order Items field labels carry, dropped from the item
+     * column labels (and from a renamed one) in export_columns().
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const ORDER_ITEMS_LABEL_PREFIX = 'Order Items: ';
+
+    /**
      * Default "Order item types" value, matching the default argument of
      * woo_ce_get_order_items() (includes/order.php).
      *
@@ -56,6 +66,15 @@ class Order extends Abstract_Class {
      * @var string[]
      */
     const ORDER_ITEMS_TYPES_DEFAULT = array( 'line_item' );
+
+    /**
+     * Default "Max unique order items" value when none is submitted, matching
+     * woo_ce_order_dataset_args() (includes/order.php).
+     *
+     * @since 2.8.3
+     * @var int
+     */
+    const MAX_ORDER_ITEMS_DEFAULT = 10;
 
     /**
      * Billing e-mail matched when the Customer filter is enabled but the submitted
@@ -66,6 +85,81 @@ class Order extends Abstract_Class {
      * @var string
      */
     const UNMATCHABLE_CUSTOMER_EMAIL = 'no-matching-customer@invalid';
+
+    /**
+     * The order sort keys the plugin's own "Sort by" controls offer, spelt as
+     * wc_get_orders() expects them. Used to normalise a saved value's case, e.g. the
+     * legacy 'DATE' default to 'date'.
+     *
+     * @since 2.8.3
+     * @var string[]
+     */
+    const ORDERBY_KEYS = array( 'ID', 'title', 'date', 'modified', 'rand' );
+
+    /**
+     * Order sort keys wc_get_orders() silently drops on the HPOS orders table.
+     *
+     * OrdersTableQuery::sanitize_order_orderby() ignores any key outside its fixed
+     * mapping. 'product_name' was never a WooCommerce sort key on either store.
+     *
+     * @since 2.8.3
+     * @var string[]
+     */
+    const ORDERBY_KEYS_IGNORED_HPOS = array( 'title', 'rand', 'product_name' );
+
+    /**
+     * Order sort keys wc_get_orders() silently drops on the legacy posts-table store.
+     *
+     * @since 2.8.3
+     * @var string[]
+     */
+    const ORDERBY_KEYS_IGNORED_LEGACY = array( 'product_name' );
+
+    /**
+     * Order meta keys read by the PayPal "Payment" export fields, keyed by field slug.
+     * Mirrors the legacy reader in woo_ce_get_order_data() (includes/order.php).
+     *
+     * @since 2.8.3
+     * @var array<string,string>
+     */
+    const PAYPAL_META_KEYS = array(
+        'paypal_payer_paypal_address' => 'Payer PayPal address',
+        'paypal_payer_first_name'     => 'Payer first name',
+        'paypal_payer_last_name'      => 'Payer last name',
+        'paypal_payment_type'         => 'Payment type',
+        'paypal_payment_status'       => '_paypal_status',
+    );
+
+    /**
+     * Prefix of the Order Items field names.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const ORDER_ITEM_FIELD_PREFIX = 'order_items_';
+
+    /**
+     * Coupon description and expiry date, keyed by "<coupon ID>|<coupon code>".
+     *
+     * @since 2.8.3
+     * @var array<string,array>
+     */
+    private $coupon_details_memo = array();
+
+    /**
+     * Options holding the custom meta keys registered as Order Items fields.
+     *
+     * Each option maps to the filter of its field hover text. The order is the
+     * order the sources claim a field name in: the first one keeps it.
+     *
+     * @since 2.8.3
+     * @var array<string,string>
+     */
+    const CUSTOM_ORDER_ITEM_SOURCES = array(
+        'custom_order_items'    => 'wsed_extend_order_fields_custom_order_item_hover',
+        'custom_order_products' => 'wsed_extend_order_fields_custom_order_product_hover',
+        'custom_products'       => 'wsed_extend_order_fields_custom_product_hover',
+    );
 
     /**
      * The export type.
@@ -82,6 +176,17 @@ class Order extends Abstract_Class {
     private $order_item_fields = array();
 
     /**
+     * Custom meta keys registered as Order Items fields, keyed by field name.
+     *
+     * Each entry holds the option the key came from (`source`) and the stored
+     * meta key (`key`). Null until get_default_fields() or the export builds it.
+     *
+     * @since 2.8.3
+     * @var array<string,array<string,string>>|null
+     */
+    private $custom_order_item_fields = null;
+
+    /**
      * Constructor.
      *
      * @var array
@@ -92,12 +197,114 @@ class Order extends Abstract_Class {
      * Get default fields.
      *
      * @since 2.7.3
+     * @since 2.8.3 Reads the built-in fields from get_builtin_field_lists().
      * @access public
      *
      * @param int $post_id The post ID.
      * @return array
      */
     public function get_default_fields( $post_id = 0 ) {
+        list( $fields, $order_item_fields ) = $this->get_builtin_field_lists();
+
+        // Custom Order Item Meta, Order Item Product Meta and Product Meta fields.
+        $this->custom_order_item_fields = $this->build_custom_order_item_fields( array_column( array_merge( $fields, $order_item_fields ), 'name' ) );
+        $source_labels                  = $this->get_custom_order_item_source_labels();
+        foreach ( $this->custom_order_item_fields as $field_name => $custom_field ) {
+            $hover_filter = self::CUSTOM_ORDER_ITEM_SOURCES[ $custom_field['source'] ];
+
+            $order_item_fields[] = array(
+                'name'     => $field_name,
+                // translators: %s: Custom meta key.
+                'label'    => sprintf( __( 'Order Items: %s', 'woocommerce-exporter' ), Export_Helper::clean_export_label( $custom_field['key'] ) ),
+                'hover'    => sprintf( apply_filters( $hover_filter, '%s: %s' ), $source_labels[ $custom_field['source'] ], $custom_field['key'] ), // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- Hook names are the literals in CUSTOM_ORDER_ITEM_SOURCES.
+                'disabled' => 1,
+            );
+        }
+
+        /**
+         * Filter the Order fields.
+         * Allows for adding/removing fields from the Order export.
+         *
+         * @since 2.7.3
+         * @param array $fields The default fields.
+         */
+        $fields = apply_filters( 'wsed_order_fields', $fields );
+
+        /**
+         * Filter the Order Items fields.
+         * Allows for adding/removing fields from the Order Items export.
+         *
+         * @since 2.7.3
+         * @param array $order_items_fields The default fields.
+         */
+        $order_item_fields       = apply_filters( 'wsed_order_items_fields', $order_item_fields );
+        $this->order_item_fields = $order_item_fields;
+
+        // Merge the fields.
+        $fields = array_merge( $fields, $order_item_fields );
+
+        // Check if we're dealing with an Export Template.
+        $sorting = false;
+        if ( ! empty( $post_id ) ) {
+            $remember = get_post_meta( $post_id, sprintf( '_%s_fields', $this->export_type ), true );
+            $hidden   = get_post_meta( $post_id, sprintf( '_%s_hidden', $this->export_type ), false );
+            $sorting  = get_post_meta( $post_id, sprintf( '_%s_sorting', $this->export_type ), true );
+        } else {
+            $remember = get_option( WOO_CE_PREFIX . '_' . $this->export_type . '_fields', array() );
+            $hidden   = get_option( WOO_CE_PREFIX . '_' . $this->export_type . '_hidden', array() );
+        }
+        if ( ! empty( $remember ) ) {
+            $remember = maybe_unserialize( $remember );
+            $hidden   = maybe_unserialize( $hidden );
+            $size     = count( $fields );
+            for ( $i = 0; $i < $size; $i++ ) {
+                $fields[ $i ]['disabled'] = ( isset( $fields[ $i ]['disabled'] ) ? $fields[ $i ]['disabled'] : 0 );
+                $fields[ $i ]['hidden']   = ( isset( $fields[ $i ]['hidden'] ) ? $fields[ $i ]['hidden'] : 0 );
+                $fields[ $i ]['default']  = 1;
+                if ( isset( $fields[ $i ]['name'] ) ) {
+                    // If not found turn off default.
+                    if ( ! array_key_exists( $fields[ $i ]['name'], $remember ) ) {
+                        $fields[ $i ]['default'] = 0;
+                    }
+                    // Remove the field from exports if found.
+                    if ( array_key_exists( $fields[ $i ]['name'], $hidden ) ) {
+                        $fields[ $i ]['hidden'] = 1;
+                    }
+                }
+            }
+        }
+
+        $size = count( $fields );
+
+        // Load the default sorting.
+        if ( empty( $sorting ) ) {
+            $sorting = get_option( WOO_CE_PREFIX . '_order_sorting', array() );
+        }
+
+        for ( $i = 0; $i < $size; $i++ ) {
+            if ( ! isset( $fields[ $i ]['name'] ) ) {
+                unset( $fields[ $i ] );
+                continue;
+            }
+            $fields[ $i ]['reset'] = $i;
+            $fields[ $i ]['order'] = ( isset( $sorting[ $fields[ $i ]['name'] ] ) ? $sorting[ $fields[ $i ]['name'] ] : $i );
+        }
+        $fields = Export_Helper::sort_export_fields( $fields, 'order' );
+        return $fields;
+    }
+
+    /**
+     * Build the built-in Order and Order Items field lists.
+     *
+     * Holds every field get_default_fields() registers before the custom Order Items
+     * meta fields, so those names stay reserved.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @return array Array of [ order fields, order item fields ].
+     */
+    private function get_builtin_field_lists(): array {
         $fields = array(
             array(
                 'name'  => 'purchase_id',
@@ -704,6 +911,25 @@ class Order extends Abstract_Class {
                     );
                 }
             }
+
+            // Product-level (custom) attributes listed in the Custom Product attribute setting.
+            $global_names = wp_list_pluck( (array) $attribute_taxonomies, 'attribute_name' );
+            foreach ( self::get_custom_attribute_keys( $global_names ) as $attribute_key => $attribute_label ) {
+                $order_item_fields[] = array(
+                    'name'     => sprintf( 'order_items_attribute_%s', $attribute_key ),
+                    // translators: %s: Attribute Label.
+                    'label'    => sprintf( __( 'Order Items: %s Variation', 'woocommerce-exporter' ), $attribute_label ),
+                    'hover'    => sprintf( '%s: %s', __( 'Product Variation', 'woocommerce-exporter' ), $attribute_key ),
+                    'disabled' => 1,
+                );
+                $order_item_fields[] = array(
+                    'name'     => sprintf( 'order_items_product_attribute_%s', $attribute_key ),
+                    // translators: %s: Attribute Label.
+                    'label'    => sprintf( __( 'Order Items: %s Attribute', 'woocommerce-exporter' ), $attribute_label ),
+                    'hover'    => sprintf( '%s: %s', __( 'Product Attribute', 'woocommerce-exporter' ), $attribute_key ),
+                    'disabled' => 1,
+                );
+            }
         }
 
         // Add tax rates fields if enabled.
@@ -773,118 +999,7 @@ class Order extends Abstract_Class {
             }
         }
 
-        // Custom Order Items fields.
-        $custom_order_items = get_option( WOO_CE_PREFIX . '_custom_order_items', '' );
-        if ( ! empty( $custom_order_items ) ) {
-            foreach ( $custom_order_items as $custom_order_item ) {
-                $order_item_fields[] = array(
-                    'name'     => sprintf( 'order_items_%s', sanitize_key( $custom_order_item ) ),
-                    // translators: %s: Custom Order Item.
-                    'label'    => sprintf( __( 'Order Items: %s', 'woocommerce-exporter' ), Export_Helper::clean_export_label( $custom_order_item ) ),
-                    'hover'    => sprintf( apply_filters( 'wsed_extend_order_fields_custom_order_item_hover', '%s: %s' ), __( 'Custom Order Item', 'woocommerce-exporter' ), $custom_order_item ),
-                    'disabled' => 1,
-                );
-            }
-        }
-
-        // Custom Order Item Product fields.
-        $custom_order_products = get_option( WOO_CE_PREFIX . '_custom_order_products', '' );
-        if ( ! empty( $custom_order_products ) ) {
-            foreach ( $custom_order_products as $custom_order_product ) {
-                $order_item_fields[] = array(
-                    'name'     => sprintf( 'order_items_%s', sanitize_key( $custom_order_product ) ),
-                    // translators: %s: Custom Order Item Product.
-                    'label'    => sprintf( __( 'Order Items: %s', 'woocommerce-exporter' ), Export_Helper::clean_export_label( $custom_order_product ) ),
-                    'hover'    => sprintf( apply_filters( 'wsed_extend_order_fields_custom_order_product_hover', '%s: %s' ), __( 'Custom Order Item Product', 'woocommerce-exporter' ), $custom_order_product ),
-                    'disabled' => 1,
-                );
-            }
-        }
-
-        // Custom Product fields.
-        $custom_products = get_option( WOO_CE_PREFIX . '_custom_products', '' );
-        if ( ! empty( $custom_products ) ) {
-            foreach ( $custom_products as $custom_product ) {
-                $order_item_fieldss[] = array(
-                    'name'     => sprintf( 'order_items_%s', sanitize_key( $custom_product ) ),
-                    // translators: %s: Custom Product.
-                    'label'    => sprintf( __( 'Order Items: %s', 'woocommerce-exporter' ), Export_Helper::clean_export_label( $custom_product ) ),
-                    'hover'    => sprintf( apply_filters( 'wsed_extend_order_fields_custom_product_hover', '%s: %s' ), __( 'Custom Product', 'woocommerce-exporter' ), $custom_product ),
-                    'disabled' => 1,
-                );
-            }
-        }
-
-        /**
-         * Filter the Order fields.
-         * Allows for adding/removing fields from the Order export.
-         *
-         * @since 2.7.3
-         * @param array $fields The default fields.
-         */
-        $fields = apply_filters( 'wsed_order_fields', $fields );
-
-        /**
-         * Filter the Order Items fields.
-         * Allows for adding/removing fields from the Order Items export.
-         *
-         * @since 2.7.3
-         * @param array $order_items_fields The default fields.
-         */
-        $order_item_fields       = apply_filters( 'wsed_order_items_fields', $order_item_fields );
-        $this->order_item_fields = $order_item_fields;
-
-        // Merge the fields.
-        $fields = array_merge( $fields, $order_item_fields );
-
-        // Check if we're dealing with an Export Template.
-        $sorting = false;
-        if ( ! empty( $post_id ) ) {
-            $remember = get_post_meta( $post_id, sprintf( '_%s_fields', $this->export_type ), true );
-            $hidden   = get_post_meta( $post_id, sprintf( '_%s_hidden', $this->export_type ), false );
-            $sorting  = get_post_meta( $post_id, sprintf( '_%s_sorting', $this->export_type ), true );
-        } else {
-            $remember = get_option( WOO_CE_PREFIX . '_' . $this->export_type . '_fields', array() );
-            $hidden   = get_option( WOO_CE_PREFIX . '_' . $this->export_type . '_hidden', array() );
-        }
-        if ( ! empty( $remember ) ) {
-            $remember = maybe_unserialize( $remember );
-            $hidden   = maybe_unserialize( $hidden );
-            $size     = count( $fields );
-            for ( $i = 0; $i < $size; $i++ ) {
-                $fields[ $i ]['disabled'] = ( isset( $fields[ $i ]['disabled'] ) ? $fields[ $i ]['disabled'] : 0 );
-                $fields[ $i ]['hidden']   = ( isset( $fields[ $i ]['hidden'] ) ? $fields[ $i ]['hidden'] : 0 );
-                $fields[ $i ]['default']  = 1;
-                if ( isset( $fields[ $i ]['name'] ) ) {
-                    // If not found turn off default.
-                    if ( ! array_key_exists( $fields[ $i ]['name'], $remember ) ) {
-                        $fields[ $i ]['default'] = 0;
-                    }
-                    // Remove the field from exports if found.
-                    if ( array_key_exists( $fields[ $i ]['name'], $hidden ) ) {
-                        $fields[ $i ]['hidden'] = 1;
-                    }
-                }
-            }
-        }
-
-        $size = count( $fields );
-
-        // Load the default sorting.
-        if ( empty( $sorting ) ) {
-            $sorting = get_option( WOO_CE_PREFIX . '_order_sorting', array() );
-        }
-
-        for ( $i = 0; $i < $size; $i++ ) {
-            if ( ! isset( $fields[ $i ]['name'] ) ) {
-                unset( $fields[ $i ] );
-                continue;
-            }
-            $fields[ $i ]['reset'] = $i;
-            $fields[ $i ]['order'] = ( isset( $sorting[ $fields[ $i ]['name'] ] ) ? $sorting[ $fields[ $i ]['name'] ] : $i );
-        }
-        $fields = Export_Helper::sort_export_fields( $fields, 'order' );
-        return $fields;
+        return array( $fields, $order_item_fields );
     }
 
     /**
@@ -1127,6 +1242,23 @@ class Order extends Abstract_Class {
     }
 
     /**
+     * Get the "Order items formatting" an export uses when none is submitted.
+     *
+     * The admin forms declare this as their radio default so the preselected choice is the
+     * format the export would actually fall back to. Those forms treat picking the declared
+     * default as "filter off" and submit nothing, so a hardcoded default that differs from
+     * this fallback made that choice impossible to apply.
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @return string One of self::ORDER_ITEMS_FORMATTING_FORMATS.
+     */
+    public static function get_fallback_order_items_format() {
+        return self::normalize_order_items_format( '' );
+    }
+
+    /**
      * Normalise an "Order item types" value to a guaranteed-valid, non-empty array.
      *
      * WC_Order::get_items() runs `array_filter( (array) $types )` on its argument, so it
@@ -1161,6 +1293,87 @@ class Order extends Abstract_Class {
         $types = array_filter( array_map( 'sanitize_text_field', array_filter( (array) $value, 'is_scalar' ) ) );
 
         return ! empty( $types ) ? array_values( $types ) : self::ORDER_ITEMS_TYPES_DEFAULT;
+    }
+
+    /**
+     * Get the order sort keys wc_get_orders() silently ignores on the active order store.
+     *
+     * HPOS and the legacy posts-table store accept different `orderby` keys, and both
+     * drop an unrecognised key without error. The active store is decided by
+     * OrderUtil::custom_orders_table_usage_is_enabled() — the same check wc_get_orders()
+     * uses — so the sort dropdown and the export query always agree.
+     *
+     * Only keys the plugin itself offered are listed. Any other key, e.g. one set through
+     * the `wsed_order_export_dataset_args` filter, still reaches wc_get_orders().
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @return string[] Ignored `orderby` keys.
+     */
+    public static function get_ignored_orderby_keys() {
+        $hpos_enabled = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )
+            && OrderUtil::custom_orders_table_usage_is_enabled();
+
+        return $hpos_enabled ? self::ORDERBY_KEYS_IGNORED_HPOS : self::ORDERBY_KEYS_IGNORED_LEGACY;
+    }
+
+    /**
+     * Whether the active order store silently ignores an order sort value.
+     *
+     * Matching is case-insensitive. A non-string value (e.g. an array sort) is never
+     * treated as ignored.
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @param mixed $value The submitted or saved "Sort by" value.
+     * @return bool True when wc_get_orders() would drop the value.
+     */
+    public static function is_ignored_orderby( $value ) {
+        if ( ! is_string( $value ) || '' === $value ) {
+            return false;
+        }
+
+        foreach ( self::get_ignored_orderby_keys() as $key ) {
+            if ( 0 === strcasecmp( $key, $value ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Resolve an order sort value to what is passed to wc_get_orders() as `orderby`.
+     *
+     * A key the active store silently ignores resolves to '' so the store's default date
+     * sort applies. One of the plugin's own keys is returned as WooCommerce spells it, so
+     * the legacy 'DATE' default resolves to 'date'. Anything else, including an array
+     * sort, is returned unchanged.
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @param mixed $value The submitted or saved "Sort by" value.
+     * @return mixed The value to pass as `orderby`, or '' when it would be ignored.
+     */
+    public static function resolve_orderby( $value ) {
+        if ( ! is_string( $value ) ) {
+            return $value;
+        }
+
+        if ( self::is_ignored_orderby( $value ) ) {
+            return '';
+        }
+
+        foreach ( self::ORDERBY_KEYS as $key ) {
+            if ( 0 === strcasecmp( $key, $value ) ) {
+                return $key;
+            }
+        }
+
+        return $value;
     }
 
     /**
@@ -1436,8 +1649,10 @@ class Order extends Abstract_Class {
         // Order IDs (classic UI only; no SPA control).
         if ( $this->is_quick_filter_enabled( $settings, $orders_filters, 'id' ) ) {
             // A string check, not empty(): empty() reads '0' as "no filter", which
-            // exported every order.
-            $order_filter_id   = isset( $settings['order_filter_id'] ) && is_scalar( $settings['order_filter_id'] ) ? trim( (string) $settings['order_filter_id'] ) : '';
+            // exported every order. set_form_data() builds $settings with parse_str(),
+            // so `order_filter_id[]=5` arrives as an array, which the helper flattens
+            // rather than discarding (discarding it exported every order).
+            $order_filter_id   = Export_Helper::normalize_id_filter_input( $settings['order_filter_id'] ?? null );
             $args['order_ids'] = '' !== $order_filter_id ? Export_Helper::sanitize_multiple_id_input( $order_filter_id ) : false;
         }
 
@@ -1461,6 +1676,23 @@ class Order extends Abstract_Class {
         }
 
         // Order Export Options.
+        // The SPA "Max Unique Order Items" and "Order Item Types" cards submit
+        // order_filter_max_order_items and order_filter_item_types; the classic UI submits
+        // max_order_items and order_items_types. Prefer an enabled SPA card's value, else fall
+        // back to the legacy key, or the wizard values are silently ignored.
+        $spa_max_order_items = $this->is_quick_filter_enabled( $settings, $orders_filters, 'max_order_items', 'order_filter_max_order_items_enabled' )
+            && isset( $settings['order_filter_max_order_items'] ) && is_scalar( $settings['order_filter_max_order_items'] )
+            ? absint( $settings['order_filter_max_order_items'] )
+            : 0;
+        if ( $spa_max_order_items > 0 ) {
+            $max_order_items = $spa_max_order_items;
+        } else {
+            $max_order_items = isset( $settings['max_order_items'] ) ? absint( $settings['max_order_items'] ) : self::MAX_ORDER_ITEMS_DEFAULT;
+        }
+        $order_items_types = $this->is_quick_filter_enabled( $settings, $orders_filters, 'item_types', 'order_filter_item_types_enabled' ) && ! empty( $settings['order_filter_item_types'] )
+            ? $settings['order_filter_item_types']
+            : ( $settings['order_items_types'] ?? false );
+
         // Normalise the "Order items formatting" value to a guaranteed-valid format rather than boolean
         // false when the setting is absent or empty — an empty or invalid value produces the undefined
         // method name "_parse_order_item_data_<value>" downstream and fatals the export.
@@ -1472,10 +1704,13 @@ class Order extends Abstract_Class {
         // column on every Quick Export, the SPA having no control that submits this setting
         // at all. Normalising here also guarantees every downstream consumer sees an array,
         // including the unguarded in_array() calls in includes/order.php.
-        $args['order_items']              = self::normalize_order_items_format( ! empty( $settings['order_items'] ) ? sanitize_text_field( $settings['order_items'] ) : '' );
-        $args['order_items_types']        = self::normalize_order_items_types( $settings['order_items_types'] ?? false );
+        // The SPA "Order Items Formatting" control submits order_filter_items; the classic UI
+        // submitted order_items. Read both, or the wizard selection is silently ignored.
+        $order_items_format               = $settings['order_filter_items'] ?? $settings['order_items'] ?? '';
+        $args['order_items']              = self::normalize_order_items_format( is_scalar( $order_items_format ) ? sanitize_text_field( (string) $order_items_format ) : '' );
+        $args['order_items_types']        = self::normalize_order_items_types( $order_items_types );
         $args['order_flag_notes']         = isset( $settings['order_flag_notes'] ) ? absint( $settings['order_flag_notes'] ) : false;
-        $args['max_order_items']          = isset( $settings['max_order_items'] ) ? absint( $settings['max_order_items'] ) : 10;
+        $args['max_order_items']          = $max_order_items;
         $args['order_orderby']            = isset( $settings['order_orderby'] ) ? sanitize_text_field( $settings['order_orderby'] ) : 'DATE';
         $args['order_order']              = isset( $settings['order_order'] ) ? sanitize_text_field( $settings['order_order'] ) : 'DESC';
         $args['product_image_formatting'] = get_option( WOO_CE_PREFIX . '_product_image_formatting', 1 );
@@ -1540,8 +1775,14 @@ class Order extends Abstract_Class {
             $args['order'] = $export_args['order_order'];
         }
 
-        if ( ! empty( $export_args['order_orderby'] ) ) {
-            $args['orderby'] = $export_args['order_orderby'];
+        // Drop a sort key the active store silently ignores (the retired 'product_name', or
+        // 'title'/'rand' on HPOS) so its default date sort applies, still in the chosen
+        // direction. The legacy 'DATE' default resolves to 'date', as HPOS matches keys
+        // case-sensitively. Any other value, including a key or array set through a
+        // dataset-args filter, still reaches wc_get_orders().
+        $orderby = self::resolve_orderby( $export_args['order_orderby'] ?? '' );
+        if ( ! empty( $orderby ) ) {
+            $args['orderby'] = $orderby;
         }
 
         if ( ! empty( $export_args['limit_volume'] ) ) {
@@ -2005,6 +2246,7 @@ class Order extends Abstract_Class {
      * Get dataset to export.
      *
      * @since 2.7.3
+     * @since 2.8.3 Rows follow the sequence of $object_ids instead of WooCommerce's default date DESC.
      * @access public
      *
      * @param array  $object_ids The object IDs.
@@ -2013,6 +2255,7 @@ class Order extends Abstract_Class {
      */
     public function get_dataset( $object_ids, $export = null ) {
         $dataset = array();
+        $order   = null; // Stays null for an empty batch, which still reaches the dataset filter.
         $columns = $export->columns;
         $fields  = $export->fields;
 
@@ -2022,7 +2265,7 @@ class Order extends Abstract_Class {
                 'limit'    => -1,
             )
         );
-        $order_objects = $orders_query->get_orders();
+        $order_objects = Export_Helper::sort_orders_by_id_sequence( $orders_query->get_orders(), $object_ids );
 
         if ( ! empty( $order_objects ) ) {
             foreach ( $order_objects as $i => $order ) {
@@ -2068,10 +2311,10 @@ class Order extends Abstract_Class {
          * Filter the Order dataset.
          *
          * @since 2.7.3
-         * @param array    $dataset The default dataset array.
-         * @param array    $fields  The selected fields.
-         * @param WC_Order $order   The order object.
-         * @param object   $export  The export settings.
+         * @param array         $dataset The default dataset array.
+         * @param array         $fields  The selected fields.
+         * @param WC_Order|null $order   The last order in the batch, or null when the batch is empty.
+         * @param object        $export  The export settings.
          * @return array
          */
         $dataset = apply_filters( 'wsed_order_export_dataset', $dataset, $fields, $order, $export );
@@ -2396,6 +2639,7 @@ class Order extends Abstract_Class {
      * Parse the order item data for individual export.
      *
      * @since 2.7.3
+     * @since 2.8.3 Each item row no longer carries over the previous item's values.
      * @access private
      *
      * @param array  $dataset           The dataset to parse.
@@ -2420,17 +2664,21 @@ class Order extends Abstract_Class {
                         $order_items_data[ "order_items_{$field}" ] = $value;
                     }
 
+                    // Build each row from the order-level data only, so a column this item
+                    // does not fill is left blank instead of repeating the previous item's value.
+                    $row = $data;
+
                     // Re-assign the order items data to main data array based on the export format.
                     if ( in_array( $export_format, array( 'csv', 'tsv', 'xls', 'xlsx' ), true ) ) {
-                        $data = array_merge( $data, $order_items_data );
+                        $row = array_merge( $row, $order_items_data );
                     } else {
-                        $data['order_items'] = $order_items_data;
+                        $row['order_items'] = $order_items_data;
                     }
 
                     // Strip out data if not exist in $default_data.
-                    $data = array_intersect_key( $data, $default_data );
+                    $row = array_intersect_key( $row, $default_data );
 
-                    $dataset[ $i ] = wp_parse_args( $data, $default_data );
+                    $dataset[ $i ] = wp_parse_args( $row, $default_data );
                     ++$i;
                 }
             } else {
@@ -2448,6 +2696,7 @@ class Order extends Abstract_Class {
      * Override export columns.
      *
      * @since 2.7.3
+     * @since 2.8.3 Item columns honour the per-export column-label override.
      * @access public
      *
      * @param array  $columns The default columns.
@@ -2489,7 +2738,7 @@ class Order extends Abstract_Class {
                 // Strip the 'Order Items: ' prefix from the Order Items fields.
                 if ( in_array( $export->export_format, array( 'xml', 'rss', 'json' ), true ) ) {
                     foreach ( $order_item_fields as $field ) {
-                        $columns['order_items'][ $field['name'] ] = str_replace( 'Order Items: ', '', $field['label'] );
+                        $columns['order_items'][ $field['name'] ] = $this->get_order_item_column_label( $export, $field );
                     }
                 } else { // Add 'order_items_' prefix to the Order Items fields.
                     // Check for the max_order_items override.
@@ -2502,7 +2751,7 @@ class Order extends Abstract_Class {
                     for ( $i = 1; $i <= $max_order_items; $i++ ) {
                         foreach ( $order_item_fields as $field ) {
                             $name  = str_replace( 'order_items_', '', $field['name'] );
-                            $label = isset( $field['label'] ) ? str_replace( 'Order Items: ', '', $field['label'] ) : '';
+                            $label = $this->get_order_item_column_label( $export, $field );
 
                             // translators: %1$d - order item number, %2$s - field label.
                             $columns[ "order_items_{$i}_{$name}" ] = sprintf( __( 'Order Item #%1$d: %2$s', 'woocommerce-exporter' ), $i, $label );
@@ -2512,6 +2761,27 @@ class Order extends Abstract_Class {
             }
         }
         return $columns;
+    }
+
+    /**
+     * Resolve the label of an Order Items field for its numbered or nested item column.
+     *
+     * The per-export override is keyed by the original field name, which the
+     * re-keyed item columns no longer carry, so get_export_columns() cannot
+     * apply it to them.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param object $export The export settings object.
+     * @param array  $field  The Order Items field definition.
+     * @return string The item column label, without the 'Order Items: ' prefix.
+     */
+    private function get_order_item_column_label( $export, $field ) {
+        // The English prefix and its translation: a translated site's field labels carry the latter.
+        $prefixes = array( self::ORDER_ITEMS_LABEL_PREFIX, __( 'Order Items: ', 'woocommerce-exporter' ) );
+
+        return Abstract_Exporter::get_field_label( $export, $field['name'], $field['label'] ?? '', $prefixes );
     }
 
     /**
@@ -2810,6 +3080,13 @@ class Order extends Abstract_Class {
                 case 'order_discount':
                     $data['order_discount'] = isset( $order_data['discount_total'] ) ? Formatting::format_price( $order_data['discount_total'] ) : '';
                     break;
+                case 'paypal_payer_paypal_address':
+                case 'paypal_payer_first_name':
+                case 'paypal_payer_last_name':
+                case 'paypal_payment_type':
+                case 'paypal_payment_status':
+                    $data[ $key ] = $order->get_meta( self::PAYPAL_META_KEYS[ $key ], true, 'edit' );
+                    break;
             }
         }
         return $data;
@@ -3093,13 +3370,14 @@ class Order extends Abstract_Class {
             $coupons_data = array();
             $coupons      = $order->get_items( 'coupon' );
             if ( ! empty( $coupons ) ) {
+                $need_details = isset( $fields['coupon_description'] ) || isset( $fields['coupon_expiry_date'] );
                 foreach ( $coupons as $coupon ) {
-                    $coupon_data = $coupon->get_data();
-                    $coupon_meta = $coupon->get_meta( 'coupon_data' );
+                    $coupon_data    = $coupon->get_data();
+                    $coupon_details = $need_details ? $this->_get_order_item_coupon_details( $coupon ) : array();
 
                     $coupons_data['code'][]         = ! empty( $coupon_data['code'] ) ? $coupon_data['code'] : '';
-                    $coupons_data['description'][]  = ! empty( $coupon_meta['description'] ) ? $coupon_meta['description'] : '';
-                    $coupons_data['date_expires'][] = ! empty( $coupon_meta['date_expires'] ) ? Formatting::format_date( $coupon_meta['date_expires'] ) : '';
+                    $coupons_data['description'][]  = ! empty( $coupon_details['description'] ) ? $coupon_details['description'] : '';
+                    $coupons_data['date_expires'][] = ! empty( $coupon_details['date_expires'] ) ? Formatting::format_date( $coupon_details['date_expires'] ) : '';
                 }
 
                 if ( isset( $fields['coupon_code'] ) && ! empty( $coupons_data['code'] ) ) {
@@ -3114,6 +3392,69 @@ class Order extends Abstract_Class {
             }
         }
         return $data;
+    }
+
+    /**
+     * Get the description and expiry date of the coupon applied on an order coupon line item.
+     *
+     * Older WooCommerce versions store a full snapshot of the coupon in the `coupon_data`
+     * line item meta, which is preferred as it reflects the coupon at the time of the order.
+     * WooCommerce 8.7+ only stores a compact `coupon_info` meta without the description or
+     * expiry date, so the coupon's current description and expiry date are loaded instead.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param \WC_Order_Item_Coupon $item The order coupon line item.
+     * @return array {
+     *     @type string                       $description  The coupon description.
+     *     @type \WC_DateTime|string|int|null $date_expires The coupon expiry date.
+     * }
+     */
+    private function _get_order_item_coupon_details( $item ) {
+        $coupon_meta = $item->get_meta( 'coupon_data' );
+        if ( is_object( $coupon_meta ) ) {
+            $coupon_meta = (array) $coupon_meta;
+        }
+        if ( ! empty( $coupon_meta ) && is_array( $coupon_meta ) ) {
+            return array(
+                'description'  => $coupon_meta['description'] ?? '',
+                'date_expires' => $coupon_meta['date_expires'] ?? null,
+            );
+        }
+
+        // `coupon_info` is a JSON array of [ id, code, type, amount, free_shipping ].
+        $coupon_info = json_decode( (string) $item->get_meta( 'coupon_info' ), true );
+        $coupon_id   = is_array( $coupon_info ) && ! empty( $coupon_info[0] ) ? absint( $coupon_info[0] ) : 0;
+        $code        = (string) $item->get_code();
+
+        // Many orders use the same coupon, so the details are loaded once per coupon ID and code.
+        $memo_key = $coupon_id . '|' . $code;
+        if ( isset( $this->coupon_details_memo[ $memo_key ] ) ) {
+            return $this->coupon_details_memo[ $memo_key ];
+        }
+
+        $coupon = $coupon_id ? new \WC_Coupon( $coupon_id ) : null;
+
+        // Fall back to the coupon code when the stored ID is missing or no longer exists.
+        if ( ! $coupon || ! $coupon->get_id() ) {
+            $coupon_id = wc_get_coupon_id_by_code( $code );
+            $coupon    = $coupon_id ? new \WC_Coupon( $coupon_id ) : null;
+        }
+
+        $details = ( $coupon && $coupon->get_id() )
+            ? array(
+                'description'  => $coupon->get_description(),
+                'date_expires' => $coupon->get_date_expires(),
+            )
+            : array(
+                'description'  => '',
+                'date_expires' => null,
+            );
+
+        $this->coupon_details_memo[ $memo_key ] = $details;
+
+        return $details;
     }
 
     /**
@@ -3183,6 +3524,8 @@ class Order extends Abstract_Class {
      * Refund data in the order item level only available for 'line_item' and 'shipping'.
      *
      * @since 2.7.3
+     * @since 2.8.3 The two monetary refund totals are formatted like the other money
+     *              columns on the same row, so a zero total exports blank rather than "0".
      * @access private
      *
      * @param array         $data      The order data array.
@@ -3197,9 +3540,13 @@ class Order extends Abstract_Class {
             foreach ( $fields as $key => $field ) {
                 switch ( $key ) {
                     case 'order_items_refund_subtotal':
-                        $data['refund_subtotal'] = $order->get_total_refunded_for_item( $item->get_id(), $item_type );
+                        // Formatted like every other money column on the same row (Subtotal, Total, Tax),
+                        // so a refund total cannot export unrounded beside a rounded subtotal.
+                        $data['refund_subtotal'] = Formatting::format_price( $order->get_total_refunded_for_item( $item->get_id(), $item_type ) );
                         break;
                     case 'order_items_refund_quantity':
+                        // A count rather than a money value, so it is left unformatted — a
+                        // quantity of 0 stays "0" where a price of 0 exports blank.
                         $data['refund_quantity'] = $order->get_qty_refunded_for_item( $item->get_id(), $item_type );
                         break;
                     case 'order_items_refund_subtotal_incl_tax':
@@ -3210,7 +3557,8 @@ class Order extends Abstract_Class {
                                 $refunded_tax += $order->get_tax_refunded_for_item( $item->get_id(), $tax_line->get_rate_id(), $item_type );
                             }
                         }
-                        $data['refund_subtotal_incl_tax'] = $order->get_total_refunded_for_item( $item->get_id(), $item_type ) + $refunded_tax;
+                        // Formatted like the Refund Subtotal above, for the same reason.
+                        $data['refund_subtotal_incl_tax'] = Formatting::format_price( $order->get_total_refunded_for_item( $item->get_id(), $item_type ) + $refunded_tax );
                         break;
                 }
             }
@@ -3222,6 +3570,7 @@ class Order extends Abstract_Class {
      * Get the order item line item (product) data.
      *
      * @since 2.7.3
+     * @since 2.8.3 Variation line items export their parent product's categories.
      * @access private
      *
      * @param array         $data               The order data array.
@@ -3308,6 +3657,11 @@ class Order extends Abstract_Class {
                     case 'order_items_category':
                         $categories_name = array();
                         $categories      = $product_data['category_ids'];
+                        // Categories are assigned to the parent product, never to its variations.
+                        if ( $product instanceof \WC_Product_Variation ) {
+                            $parent_id  = $product->get_parent_id();
+                            $categories = $parent_id ? wc_get_product_term_ids( $parent_id, 'product_cat' ) : array();
+                        }
                         if ( ! empty( $categories ) ) {
                             foreach ( $categories as $category_id ) {
                                 $category = get_term_by( 'id', $category_id, 'product_cat' );
@@ -3490,14 +3844,23 @@ class Order extends Abstract_Class {
         // Check if Variation fields are selected.
         $selected_attributes_fields = $this->_get_selected_order_item_attribute_fields( $fields );
         if ( ! empty( $selected_attributes_fields ) && ! empty( $product_data['attributes'] ) ) {
+            $filled_by_global = array();
             foreach ( $product_data['attributes'] as $attribute_key => $attribute ) {
-                if ( 'pa_' === substr( $attribute_key, 0, 3 ) ) {
-                    // Remove 'pa_' prefix from the attribute key.
-                    $attribute_key_no_prefix = substr( $attribute_key, 3 );
+                // Global attributes are keyed by their 'pa_' taxonomy name, product-level (custom) attributes by
+                // their sanitize_title() name; both are stored on the order line item under that same key.
+                $is_global               = 'pa_' === substr( $attribute_key, 0, 3 );
+                $attribute_key_no_prefix = $is_global ? substr( $attribute_key, 3 ) : $attribute_key;
 
-                    $data[ 'attribute_' . $attribute_key_no_prefix ]         = $item->get_meta( $attribute_key );
-                    $data[ 'product_attribute_' . $attribute_key_no_prefix ] = $product->get_attribute( $attribute_key );
+                // A custom attribute never overwrites the column of a global attribute with the same name.
+                if ( ! $is_global && isset( $filled_by_global[ $attribute_key_no_prefix ] ) ) {
+                    continue;
                 }
+                if ( $is_global ) {
+                    $filled_by_global[ $attribute_key_no_prefix ] = true;
+                }
+
+                $data[ 'attribute_' . $attribute_key_no_prefix ]         = $item->get_meta( $attribute_key );
+                $data[ 'product_attribute_' . $attribute_key_no_prefix ] = $product->get_attribute( $attribute_key );
             }
         }
         return $data;
@@ -3507,6 +3870,7 @@ class Order extends Abstract_Class {
      * Get the order item line custom data.
      *
      * @since 2.7.3
+     * @since 2.8.3 Match Custom Order Products and Custom Products on their sanitize_key() field name, skipping a name another field owns.
      * @access private
      *
      * @param array      $data              The order data array.
@@ -3515,25 +3879,12 @@ class Order extends Abstract_Class {
      * @return array
      */
     private function _get_order_item_line_custom_data( &$data, $fields, $product ) {
-        $product_meta_data = Product::instance()->get_product_meta_data( $product->get_id() );
-
-        // Custom Order Products.
-        $custom_order_products = get_option( WOO_CE_PREFIX . '_custom_order_products', '' );
-        if ( ! empty( $custom_order_products ) ) {
-            foreach ( $custom_order_products as $custom_order_product ) {
-                if ( isset( $fields[ 'order_items_' . $custom_order_product ] ) && 'on' === $fields[ 'order_items_' . $custom_order_product ] ) {
-                    $data[ $custom_order_product ] = $product_meta_data[ $custom_order_product ] ?? '';
-                }
-            }
-        }
-
-        // Custom Products.
-        $custom_products = get_option( WOO_CE_PREFIX . '_custom_products', '' );
-        if ( ! empty( $custom_products ) ) {
-            foreach ( $custom_products as $custom_product ) {
-                if ( isset( $fields[ 'order_items_' . $custom_product ] ) && 'on' === $fields[ 'order_items_' . $custom_product ] ) {
-                    $data[ $custom_product ] = $product_meta_data[ $custom_product ] ?? '';
-                }
+        // Custom Order Products and Custom Products, matched on the order_items_<sanitize_key(key)> field name.
+        $selected_keys = $this->get_selected_custom_order_item_keys( $fields, array( 'custom_order_products', 'custom_products' ) );
+        if ( ! empty( $selected_keys ) ) {
+            $product_meta_data = Product::instance()->get_product_meta_data( $product->get_id() );
+            foreach ( $selected_keys as $data_key => $meta_key ) {
+                $data[ $data_key ] = $product_meta_data[ $meta_key ] ?? '';
             }
         }
         return $data;
@@ -3648,6 +3999,9 @@ class Order extends Abstract_Class {
      * Get the order item refund data.
      *
      * @since 2.7.3
+     * @since 2.8.3 Modified Date and Type ID are stored under their own keys. Modified
+     *              Date was formatted and discarded, so it exported blank; Type ID was
+     *              written over Type, so Type exported the raw item type slug.
      * @access private
      *
      * @param array           $data        The order data array.
@@ -3669,13 +4023,13 @@ class Order extends Abstract_Class {
                     $data['type'] = Formatting::format_order_item_type( $refund->get_type() );
                     break;
                 case 'order_items_type_id':
-                    $data['type'] = $refund->get_type();
+                    $data['type_id'] = $refund->get_type();
                     break;
                 case 'order_items_publish_date':
                     $data['publish_date'] = Formatting::format_date( $refund_data['date_created'] );
                     break;
                 case 'order_items_modified_date':
-                    Formatting::format_date( $refund_data['date_modified'] );
+                    $data['modified_date'] = Formatting::format_date( $refund_data['date_modified'] );
                     break;
                 case 'order_items_refund_quantity':
                     $qty = 0;
@@ -3716,6 +4070,7 @@ class Order extends Abstract_Class {
      * The custom order item data is stored in the order item meta.
      *
      * @since 2.7.3
+     * @since 2.8.3 Match on the sanitize_key() field name, skipping a name another field owns.
      * @access private
      *
      * @param array         $data   The order data array.
@@ -3724,16 +4079,119 @@ class Order extends Abstract_Class {
      * @return array
      */
     private function _get_order_item_custom_data( &$data, $fields, $item ) {
-        $custom_order_items = get_option( WOO_CE_PREFIX . '_custom_order_items', '' );
-        if ( ! empty( $custom_order_items ) ) {
+        $selected_keys = $this->get_selected_custom_order_item_keys( $fields, array( 'custom_order_items' ) );
+        if ( ! empty( $selected_keys ) ) {
             $item_meta_data = $this->_get_order_item_meta_data( $item->get_id() );
-            foreach ( $custom_order_items as $custom_order_item ) {
-                if ( isset( $fields[ 'order_items_' . $custom_order_item ] ) && 'on' === $fields[ 'order_items_' . $custom_order_item ] ) {
-                    $data[ $custom_order_item ] = $item_meta_data[ $custom_order_item ] ?? '';
-                }
+            foreach ( $selected_keys as $data_key => $meta_key ) {
+                $data[ $data_key ] = $item_meta_data[ $meta_key ] ?? '';
             }
         }
         return $data;
+    }
+
+    /**
+     * Map the custom meta keys registered as Order Items fields to their field name.
+     *
+     * Order Item Meta, Order Item Product Meta and Product Meta keys all register as
+     * order_items_<sanitize_key(key)> and store their value under the sanitized key.
+     * The first source to claim a name keeps it, in that order, and a name a built-in
+     * field already uses is skipped, so one key's value never overwrites another column.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param string[] $reserved_names Field names already registered.
+     * @return array<string,array<string,string>> Source option and meta key, keyed by field name.
+     */
+    private function build_custom_order_item_fields( array $reserved_names ): array {
+        $custom_fields = array();
+        foreach ( array_keys( self::CUSTOM_ORDER_ITEM_SOURCES ) as $source ) {
+            $meta_keys = get_option( WOO_CE_PREFIX . '_' . $source, '' );
+            if ( empty( $meta_keys ) || ! is_array( $meta_keys ) ) {
+                continue;
+            }
+            foreach ( $meta_keys as $meta_key ) {
+                $field_name = self::get_order_item_field_name( (string) $meta_key );
+                if ( self::ORDER_ITEM_FIELD_PREFIX === $field_name || isset( $custom_fields[ $field_name ] ) || in_array( $field_name, $reserved_names, true ) ) {
+                    continue;
+                }
+                $custom_fields[ $field_name ] = array(
+                    'source' => $source,
+                    'key'    => $meta_key,
+                );
+            }
+        }
+        return $custom_fields;
+    }
+
+    /**
+     * Get the custom meta keys registered as Order Items fields, keyed by field name.
+     *
+     * Built from the saved options on every call, so a picker reads the same owner
+     * of each name as the export.
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @return array<string,array<string,string>> Source option and meta key, keyed by field name.
+     */
+    public function get_custom_order_item_fields(): array {
+        list( $fields, $order_item_fields ) = $this->get_builtin_field_lists();
+        return $this->build_custom_order_item_fields( array_column( array_merge( $fields, $order_item_fields ), 'name' ) );
+    }
+
+    /**
+     * Build the Order Items field name a custom meta key registers under.
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @param string $meta_key Stored meta key.
+     * @return string
+     */
+    public static function get_order_item_field_name( string $meta_key ): string {
+        return self::ORDER_ITEM_FIELD_PREFIX . sanitize_key( $meta_key );
+    }
+
+    /**
+     * Get the hover label of each custom Order Items meta source.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @return array<string,string> Labels keyed by the CUSTOM_ORDER_ITEM_SOURCES option names.
+     */
+    private function get_custom_order_item_source_labels(): array {
+        return array(
+            'custom_order_items'    => __( 'Custom Order Item', 'woocommerce-exporter' ),
+            'custom_order_products' => __( 'Custom Order Item Product', 'woocommerce-exporter' ),
+            'custom_products'       => __( 'Custom Product', 'woocommerce-exporter' ),
+        );
+    }
+
+    /**
+     * Get the ticked custom meta keys of the given sources.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param array    $fields  The fields array.
+     * @param string[] $sources Option names the keys come from.
+     * @return array<string,string> Stored meta key, keyed by the data key its value is written under.
+     */
+    private function get_selected_custom_order_item_keys( array $fields, array $sources ): array {
+        if ( null === $this->custom_order_item_fields ) {
+            // A batch request builds the dataset without registering the fields.
+            $this->custom_order_item_fields = $this->get_custom_order_item_fields();
+        }
+
+        $selected = array();
+        foreach ( $this->custom_order_item_fields as $field_name => $custom_field ) {
+            if ( in_array( $custom_field['source'], $sources, true ) && isset( $fields[ $field_name ] ) && 'on' === $fields[ $field_name ] ) {
+                $selected[ substr( $field_name, strlen( self::ORDER_ITEM_FIELD_PREFIX ) ) ] = $custom_field['key'];
+            }
+        }
+        return $selected;
     }
 
     /**
@@ -3755,6 +4213,38 @@ class Order extends Abstract_Class {
             }
         );
         return $selected;
+    }
+
+    /**
+     * Get the product-level (custom) attributes of the Custom Product attribute
+     * setting, keyed the way WooCommerce keys them on a product and on an order
+     * line item (sanitize_title() of the name).
+     *
+     * A key that a global attribute already uses is left out, so each Order
+     * Items attribute column is registered once.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param string[] $global_names The global attribute names, without the 'pa_' prefix.
+     * @return array<string,string> The attribute labels, keyed by attribute key.
+     */
+    private static function get_custom_attribute_keys( array $global_names ): array {
+        $stored = woo_ce_get_option( 'custom_attributes', '' );
+        if ( ! is_array( $stored ) ) {
+            $stored = '' === trim( (string) $stored ) ? array() : explode( "\n", (string) $stored );
+        }
+
+        $keys = array();
+        foreach ( $stored as $name ) {
+            $name = trim( (string) $name );
+            $key  = sanitize_title( $name );
+            if ( '' === $key || isset( $keys[ $key ] ) || in_array( $key, $global_names, true ) ) {
+                continue;
+            }
+            $keys[ $key ] = $name;
+        }
+        return $keys;
     }
 
     /**

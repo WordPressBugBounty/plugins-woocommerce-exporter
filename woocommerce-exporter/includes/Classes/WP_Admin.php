@@ -21,6 +21,25 @@ defined( 'ABSPATH' ) || exit;
 class WP_Admin extends Abstract_Class {
 
     /**
+     * Plugin-relative path the SPA's script translations are resolved against.
+     *
+     * The build writes every translatable SPA string into this file (see
+     * src/js/build-tools/wpI18nStrings.js), so it is the source `wp i18n
+     * make-pot` references and `wp i18n make-json` names its JSON after.
+     *
+     * @since 2.8.3
+     */
+    const ADMIN_APP_TRANSLATION_SOURCE = 'build/admin-app/i18n-strings.js';
+
+    /**
+     * URL of the enqueued SPA entry script, whose translations are remapped.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    private $admin_app_src = '';
+
+    /**
      * Enqueue admin scripts.
      *
      * @param string $hook_suffix The current admin page.
@@ -110,13 +129,16 @@ class WP_Admin extends Abstract_Class {
         wp_enqueue_script(
             'wse_admin_app',
             $build_url . $entry['file'],
-            array(),
+            // wp-i18n: the SPA's @wordpress/i18n calls run through wp.i18n.
+            array( 'wp-i18n' ),
             null, // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- Vite hashes filenames, so the version arg is intentionally null.
             true
         );
 
         // The entry is marked type="module" via the script_loader_tag filter
         // registered in run(); WordPress has no first-class module API < WP 6.5.
+
+        $this->set_admin_app_translations( $build_url . $entry['file'] );
 
         $export_type_options = array();
         if ( function_exists( 'woo_ce_get_export_types' ) ) {
@@ -147,6 +169,8 @@ class WP_Admin extends Abstract_Class {
                 // two can legitimately disagree. The constant is what gates the
                 // export, so the constant is what the banner must report.
                 'debugMode'        => defined( 'WOO_CE_DEBUG' ) && WOO_CE_DEBUG,
+                'dateLocale'       => $this->get_date_locale(),
+                'resetLanguage'    => Helper::is_language_reset(),
             )
         );
 
@@ -198,6 +222,107 @@ class WP_Admin extends Abstract_Class {
             wp_enqueue_style( 'wse_admin_app_chrome' );
             wp_add_inline_style( 'wse_admin_app_chrome', $chrome_css );
         }
+    }
+
+    /**
+     * The admin's language and its date names, for the SPA's date labels.
+     *
+     * Names are taken from `$wp_locale` so the SPA formats dates with the same
+     * names as WordPress core's `wp_date()`, translated by the core language
+     * pack. `locale` is the BCP 47 tag the SPA passes to `Intl`.
+     *
+     * Empty when "Reset language to English" is on, so the SPA's dates stay
+     * English along with its strings.
+     *
+     * @since 2.8.3
+     *
+     * @return array{locale?: string, months?: string[], monthsShort?: string[], weekdays?: string[], weekdaysShort?: string[], meridiem?: array<string, string>}
+     */
+    private function get_date_locale() {
+        global $wp_locale;
+
+        if ( Helper::is_language_reset() ) {
+            return array();
+        }
+
+        // Without a core language pack $wp_locale holds English names, so tell Intl
+        // English too; otherwise its dates would mix languages with those names.
+        $locale = is_textdomain_loaded( 'default' ) ? determine_locale() : 'en_US';
+
+        return array(
+            'locale'        => str_replace( '_', '-', $locale ),
+            'months'        => array_values( $wp_locale->month ),
+            'monthsShort'   => array_values( $wp_locale->month_abbrev ),
+            'weekdays'      => array_values( $wp_locale->weekday ),
+            'weekdaysShort' => array_values( $wp_locale->weekday_abbrev ),
+            'meridiem'      => $wp_locale->meridiem,
+        );
+    }
+
+    /**
+     * Load the plugin's translations for the Vue SPA.
+     *
+     * Skipped when the "Reset language to English" setting is on, the same way
+     * wse_textdomain() skips the PHP translations.
+     *
+     * @since 2.8.3
+     *
+     * @param string $src URL of the enqueued SPA entry script.
+     * @return void
+     */
+    private function set_admin_app_translations( $src ) {
+        if ( Helper::is_language_reset() ) {
+            return;
+        }
+
+        $this->admin_app_src = $src;
+        add_filter( 'load_script_textdomain_relative_path', array( $this, 'admin_app_translation_path' ), 10, 2 );
+        add_filter( 'load_script_translation_file', array( $this, 'admin_app_custom_translation_file' ), 10, 2 );
+
+        wp_set_script_translations( 'wse_admin_app', 'woocommerce-exporter', WOO_CE_PATH . 'languages' );
+    }
+
+    /**
+     * Resolve the SPA's script translations against its string catalogue.
+     *
+     * The entry file name carries a Vite content hash that changes every build,
+     * and WordPress names script translation JSON files after the md5 of that
+     * path — so translations would never be found. Map it to the stable
+     * catalogue file that make-pot references instead.
+     *
+     * @since 2.8.3
+     *
+     * @param string|false $relative Script path relative to the plugin root.
+     * @param string       $src      Full script URL.
+     * @return string|false
+     */
+    public function admin_app_translation_path( $relative, $src ) {
+        return $src === $this->admin_app_src ? self::ADMIN_APP_TRANSLATION_SOURCE : $relative;
+    }
+
+    /**
+     * Prefer an SPA translation file in WP_LANG_DIR/woocommerce-exporter/.
+     *
+     * The PHP translations load from that directory first (wse_textdomain()),
+     * ahead of the plugin's own, so a site that keeps custom translations there
+     * gets them in the SPA too. WordPress looks only in the plugin's languages/
+     * directory and WP_LANG_DIR/plugins, so swap in the custom file when one
+     * with the same name exists.
+     *
+     * @since 2.8.3
+     *
+     * @param string|false $file   Translation file WordPress is about to read.
+     * @param string       $handle Script handle.
+     * @return string|false
+     */
+    public function admin_app_custom_translation_file( $file, $handle ) {
+        if ( 'wse_admin_app' !== $handle || ! is_string( $file ) ) {
+            return $file;
+        }
+
+        $custom_file = WP_LANG_DIR . '/woocommerce-exporter/' . basename( $file );
+
+        return is_readable( $custom_file ) ? $custom_file : $file;
     }
 
     /**
@@ -411,7 +536,9 @@ class WP_Admin extends Abstract_Class {
             // components out of the export directory.
             $filename = basename( sanitize_text_field( wp_unslash( $_GET['filename'] ) ) );
 
-            $instance->set_export_settings( get_transient( WOO_CE_PREFIX . '_export_settings' ) );
+            // A download whose settings were stored before 2.8.3 carries no
+            // line_ending, and its rows are already written in LF.
+            $instance->set_export_settings( Exporter::restore_legacy_line_ending( get_transient( WOO_CE_PREFIX . '_export_settings' ) ) );
             // While another export runs, the settings transient is that export's.
             $instance->set_settings_match_file( ! $export_in_progress );
             // Coerce through the same allowlist that guards Abstract_Exporter's

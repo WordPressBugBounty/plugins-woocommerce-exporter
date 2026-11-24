@@ -41,7 +41,10 @@ export const useCustomMetaFieldsStore = defineStore('customMetaFields', () => {
     currentType.value = null
     fieldDefinitions.value = []
     try {
-      const data = await api.get(`custom-meta-fields/${type}`)
+      // The type comes off the route, which comes off ?tab=. Encoding it keeps a
+      // crafted value a single path segment instead of letting it open a query
+      // string on a request that carries the administrator's nonce (issue #121).
+      const data = await api.get(`custom-meta-fields/${encodeURIComponent(type)}`)
       currentType.value = data
       fieldDefinitions.value = (data.field_definitions ?? []).map(def => ({
         name: def.name,
@@ -65,7 +68,7 @@ export const useCustomMetaFieldsStore = defineStore('customMetaFields', () => {
     isSaving.value = true
     formError.value = null
     try {
-      const data = await api.put(`custom-meta-fields/${type}`, {
+      const data = await api.put(`custom-meta-fields/${encodeURIComponent(type)}`, {
         field_definitions: fieldDefinitions.value.map(def => ({
           name: def.name,
           meta_keys: def.metaKeysText.split('\n').map(k => k.trim()).filter(Boolean),

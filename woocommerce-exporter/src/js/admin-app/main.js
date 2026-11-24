@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
 import { useSettingsStore } from './stores/settings'
+import { initialViewFromSearch } from './lib/tabRoute'
 import '../../css/app.css'
 
 const app = createApp(App)
@@ -11,53 +12,32 @@ app.use(router)
 
 // With memory history the router never reads from the URL automatically.
 // Derive the initial route from ?tab= so that page refreshes land on the right
-// view. The tab value may include a sub-path (e.g. custom_meta_fields/product).
-const tabParam = new URLSearchParams(window.location.search).get('tab') || ''
-const initialRoute = tabToRoute(tabParam) || window.wseAdminData?.initialRoute || '/'
+// view. The tab value may include a sub-path (e.g. custom_meta_fields/product);
+// tabToRoute is what decides whether that sub-path is one the app will accept.
+const urlParams = new URLSearchParams(window.location.search)
+// initialViewFromSearch always resolves a route, so the wseAdminData.initialRoute fallback that
+// used to sit here could never fire. PHP still sends that value, and it does NOT apply this
+// module's slug rule to the sub-path — do not revive it as a fallback without one.
+const { path: initialPath, settingsCategory } = initialViewFromSearch(window.location.search)
+// ?type= preselects an export type in Quick Export. It is a one-shot hand-off:
+// drop it from the address bar so a later refresh or in-app navigation never
+// forces that type again.
+const typeParam = initialPath === '/quick-export' ? urlParams.get('type') : null
+if (typeParam) {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('type')
+  history.replaceState(null, '', url.pathname + url.search + url.hash)
+}
+const initialRoute = typeParam
+  ? { path: initialPath, query: { type: typeParam } }
+  : initialPath
 
 // Restore the active settings category from ?tab=settings/{category} before mount.
-const settingsCategoryMatch = tabParam.match(/^settings\/(.+)$/)
-if (settingsCategoryMatch) {
-  useSettingsStore().activeCategory = settingsCategoryMatch[1]
+// An empty result means the tab named no usable category, so the store keeps its default.
+if (settingsCategory) {
+  useSettingsStore().activeCategory = settingsCategory
 }
 
 router.replace(initialRoute).finally(() => {
   app.mount('#wse-admin-app')
 })
-
-/**
- * Convert a ?tab= value back to a Vue Router path.
- *
- * Deluxe-only tabs (scheduled_export, export_template, archive, audit_log)
- * resolve to their in-app upsell route in the free plugin.
- *
- * @param {string} tab - e.g. 'custom_meta_fields/product'
- * @returns {string} Vue route path, e.g. '/custom-meta-fields/product'
- */
-function tabToRoute (tab) {
-  const baseRoutes = {
-    overview: '/',
-    export_items: '/export-items',
-    quick_export: '/quick-export',
-    scheduled_export: '/scheduled-exports',
-    export_template: '/export-templates',
-    archive: '/archives',
-    settings: '/settings',
-    tools: '/tools',
-    custom_meta_fields: '/custom-meta-fields',
-    audit_log: '/audit-log',
-    ai_mcp: '/ai-mcp',
-  }
-  const slash = tab.indexOf('/')
-  if (slash === -1) return baseRoutes[tab] ?? '/'
-  const base = tab.slice(0, slash)
-  const sub = tab.slice(slash) // leading slash included
-  const baseRoute = baseRoutes[base]
-  if (!baseRoute) return '/'
-  // settings/{category} encodes the active section, not a distinct route — route to /settings only.
-  if (base === 'settings') return baseRoute
-  // Custom Meta Fields is the only free route with a real sub-path (/:type).
-  if (base === 'custom_meta_fields') return baseRoute + sub
-  // Deluxe-only bases have no sub-routes in the free plugin — land on the upsell.
-  return baseRoute
-}

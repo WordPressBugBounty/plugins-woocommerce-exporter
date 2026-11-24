@@ -90,6 +90,11 @@ if( is_admin() ) {
 		if( $export_type <> 'user' )
 			return $args;
 
+        // Quick Export may submit the direction as `user_orderby_direction`; `user_order` is the legacy key.
+        if ( isset( $form_data['user_orderby_direction'] ) ) {
+            $form_data['user_order'] = $form_data['user_orderby_direction'];
+        }
+
 		// Merge in the form data for this dataset
 		$defaults = array(
 			'user_user_roles' => ( isset( $form_data['user_filter_user_role'] ) ? woo_ce_format_user_role_filters( array_map( 'sanitize_text_field', (array)$form_data['user_filter_user_role'] ) ) : false ),
@@ -689,13 +694,19 @@ function woo_ce_get_users( $export_args = array(), $export = array() ) {
 					break;
 		}
 	}
-	$args = array(
-		'offset' => $offset,
-		'number' => $limit_volume,
-		'order' => $order,
-		'offset' => $offset,
-		'fields' => 'ids'
-	);
+
+    // The legacy Scheduled Export "Name" sort value is not recognised by WP_User_Query.
+    if ( 'user_name' === $orderby ) {
+        $orderby = 'display_name';
+    }
+
+    $args = array(
+        'offset'  => $offset,
+        'number'  => $limit_volume,
+        'orderby' => ( ! empty( $orderby ) ? $orderby : 'login' ),
+        'order'   => ( 'DESC' === strtoupper( (string) $order ) ? 'DESC' : 'ASC' ),
+        'fields'  => 'ids',
+    );
 
 	// Filter Order dates
 	if( !empty( $user_dates_from ) && !empty( $user_dates_to ) ) {
@@ -735,7 +746,18 @@ function woo_ce_get_users( $export_args = array(), $export = array() ) {
 		$args['role__in'] = $user_roles;
 	}
 
+    // WP_User_Query has no random orderby, so swap in ORDER BY RAND() for this query only.
+    $order_randomly = static function ( $query ) {
+        $query->query_orderby = 'ORDER BY RAND()';
+    };
+    if ( isset( $args['orderby'] ) && 'rand' === $args['orderby'] ) {
+        // A cached result would repeat the same "random" order.
+        $args['cache_results'] = false;
+        add_action( 'pre_user_query', $order_randomly );
+    }
+
 	$user_ids = new WP_User_Query( $args );
+    remove_action( 'pre_user_query', $order_randomly );
 	if( false !== $user_ids ) {
 		$users = $user_ids->results;
 

@@ -1,9 +1,10 @@
 <script setup>
+import { __ } from '@wordpress/i18n'
 import ViewAllButton from './ViewAllButton.vue'
 
 defineProps({
   viewAllUrl: { type: String, default: '' },
-  viewAllLabel: { type: String, default: 'View All' },
+  viewAllLabel: { type: String, default: () => __('View All', 'woocommerce-exporter') },
   subtitle: { type: String, default: '' }
 })
 </script>

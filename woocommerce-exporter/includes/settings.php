@@ -322,8 +322,16 @@ function woo_ce_export_settings_csv() {
         <label for="delimiter"><?php esc_html_e( 'Field delimiter', 'woocommerce-exporter' ); ?></label>
     </th>
     <td>
-        <input type="text" size="3" id="delimiter" name="delimiter" value="<?php echo esc_attr( $delimiter ); ?>" maxlength="5" class="text" />
-        <p class="description"><?php esc_html_e( 'The field delimiter is the character separating each cell in your CSV. This is typically the \',\' (comma) character. To use the TAB character as the delimiter enter <code>TAB</code>.', 'woocommerce-exporter' ); ?></p>
+        <input type="text" size="3" id="delimiter" name="delimiter" value="<?php echo esc_attr( $delimiter ); ?>" maxlength="3" class="text" />
+        <p class="description">
+            <?php
+            printf(
+                /* translators: %s: the TAB keyword, shown as code */
+                esc_html__( 'The field delimiter is the single character separating each cell in your CSV. This is typically the \',\' (comma) character. To use the TAB character as the delimiter enter %s.', 'woocommerce-exporter' ),
+                '<code>TAB</code>'
+            );
+            ?>
+        </p>
     </td>
     </tr>
 
@@ -954,14 +962,28 @@ function woo_ce_export_settings_save() {
         wp_die( 'Security check failed.' );
     }
 
-    $export_filename = sanitize_file_name( wp_unslash( $_POST['export_filename'] ?? '' ) );
-    // Strip file extension from export filename.
-    $export_filename = preg_replace( '/\.(csv|tsv|xml|xls|xlsx)$/', '', $export_filename );
+    // Not sanitize_file_name(): it strips the `%` and `{}` of the Filename tags.
+    // Helper::sanitize_filename() keeps them and strips the file extension.
+    $export_filename = \VisserLabs\WSE\Helpers\Helper::sanitize_filename( wp_unslash( $_POST['export_filename'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized by Helper::sanitize_filename().
     woo_ce_update_option( 'export_filename', $export_filename );
 
     woo_ce_update_option( 'delete_file', isset( $_POST['delete_file'] ) ? absint( $_POST['delete_file'] ) : '' );
     woo_ce_update_option( 'encoding', isset( $_POST['encoding'] ) ? sanitize_text_field( wp_unslash( $_POST['encoding'] ) ) : '' );
-    woo_ce_update_option( 'delimiter', isset( $_POST['delimiter'] ) ? sanitize_text_field( wp_unslash( $_POST['delimiter'] ) ) : '' );
+
+    // Only a delimiter the delimited writer can use is stored, the rule
+    // Export::is_valid_delimiter() owns. An unusable one leaves the stored
+    // setting alone, and the screen says so: the settings endpoint refuses the
+    // same value with wse_invalid_delimiter.
+    $posted_delimiter   = isset( $_POST['delimiter'] ) ? sanitize_text_field( wp_unslash( $_POST['delimiter'] ) ) : '';
+    $delimiter_rejected = false;
+    if ( \VisserLabs\WSE\Helpers\Export::is_valid_delimiter( $posted_delimiter ) ) {
+        woo_ce_update_option( 'delimiter', $posted_delimiter );
+    } else {
+        woo_cd_admin_notice( __( 'The Field Delimiter must be a single ASCII character, or TAB. The Field Delimiter was not changed.', 'woocommerce-exporter' ), 'error' );
+        $delimiter_rejected = true;
+    }
+    unset( $posted_delimiter );
+
     woo_ce_update_option( 'category_separator', isset( $_POST['category_separator'] ) ? sanitize_text_field( wp_unslash( $_POST['category_separator'] ) ) : '' );
     woo_ce_update_option( 'line_ending_formatting', isset( $_POST['line_ending'] ) ? sanitize_text_field( wp_unslash( $_POST['line_ending'] ) ) : '' );
     woo_ce_update_option( 'bom', isset( $_POST['bom'] ) ? absint( $_POST['bom'] ) : '' );
@@ -1123,6 +1145,9 @@ function woo_ce_export_settings_save() {
     // Allow Plugin/Theme authors to save custom Setting options.
     do_action( 'woo_ce_extend_export_settings_save' );
 
-    $message = __( 'Changes have been saved.', 'woocommerce-exporter' );
+    // With a rejected delimiter, the error notice already shows, so the success notice names only the other settings.
+    $message = $delimiter_rejected
+        ? __( 'Your other changes have been saved.', 'woocommerce-exporter' )
+        : __( 'Changes have been saved.', 'woocommerce-exporter' );
     woo_cd_admin_notice( $message );
 }

@@ -1,44 +1,25 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __ } from '@wordpress/i18n'
 import { FilePen, FileText, Calendar, Shield, Table2, Database, FileInput, Clock, SlidersHorizontal, BookOpen, X } from 'lucide-vue-next'
 import { BaseRadio, BaseSelect, BaseInput, FilenameTokenInput } from '../ui'
 import { useSettingsStore } from '../../stores/settings'
+import { formatWpDate } from '../../lib/formatWpDate'
+import { DEFAULT_FILENAME_PATTERN, SETTINGS_FILENAME_TOKENS, previewFilename } from '../../lib/filenamePattern'
 
 const { settings } = storeToRefs(useSettingsStore())
 
-const FILENAME_DEFAULT = 'export-{type}-{store}-{date}-{time}'
-
-const filenameVariables = [
-  '{date}', '{time}', '{type}', '{store}', '{year}', '{month}', '{day}', '{hour}', '{minute}', '{second}'
-]
-
-const filenamePreview = computed(() => {
-  const pattern = settings.value.filename
-  if (!pattern) return ''
-  const now = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return pattern
-    .replace(/\{date\}/g,   `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`)
-    .replace(/\{time\}/g,   `${pad(now.getHours())}-${pad(now.getMinutes())}`)
-    .replace(/\{year\}/g,   String(now.getFullYear()))
-    .replace(/\{month\}/g,  pad(now.getMonth() + 1))
-    .replace(/\{day\}/g,    pad(now.getDate()))
-    .replace(/\{hour\}/g,   pad(now.getHours()))
-    .replace(/\{minute\}/g, pad(now.getMinutes()))
-    .replace(/\{second\}/g, pad(now.getSeconds()))
-    .replace(/\{type\}/g,   'product')
-    .replace(/\{store\}/g,  'my-store')
-})
+const filenamePreview = computed(() => previewFilename(settings.value.export_filename))
 
 const PREDEFINED_DATE_FORMATS = ['F j, Y', 'Y/m/d', 'm/d/Y', 'd/m/Y']
+const DATE_FORMAT_SAMPLE = '2026-05-16'
 
 const dateFormatOptions = [
-  { value: 'F j, Y', label: 'May 16, 2026', hint: 'F, j, Y' },
-  { value: 'Y/m/d', label: '2026/05/16', hint: 'Y/m/d' },
-  { value: 'm/d/Y', label: '05/16/2026', hint: 'm/d/Y' },
-  { value: 'd/m/Y', label: '16/05/2026', hint: 'd/m/Y' },
-  { value: 'custom', label: 'Custom', hint: 'Define your own' }
+  // Each preset labelled with a sample date, month names in the admin's language.
+  { value: 'F j, Y', label: formatWpDate(DATE_FORMAT_SAMPLE, 'F j, Y'), hint: 'F j, Y' },
+  ...PREDEFINED_DATE_FORMATS.slice(1).map((format) => ({ value: format, label: formatWpDate(DATE_FORMAT_SAMPLE, format), hint: format })),
+  { value: 'custom', label: __('Custom', 'woocommerce-exporter'), hint: __('Define your own', 'woocommerce-exporter') }
 ]
 
 const encodingOptions = [
@@ -49,10 +30,10 @@ const encodingOptions = [
 ]
 
 const timeoutOptions = [
-  { value: '600', label: '10 minutes' },
-  { value: '1800', label: '30 minutes' },
-  { value: '3600', label: '1 hour' },
-  { value: '0', label: 'Unlimited' }
+  { value: '600', label: __('10 minutes', 'woocommerce-exporter') },
+  { value: '1800', label: __('30 minutes', 'woocommerce-exporter') },
+  { value: '3600', label: __('1 hour', 'woocommerce-exporter') },
+  { value: '0', label: __('Unlimited', 'woocommerce-exporter') }
 ]
 
 const timeoutValue = computed({
@@ -61,18 +42,18 @@ const timeoutValue = computed({
 })
 
 const DATE_TOKENS_DETAILED = [
-  { token: 'Y', description: '4-digit year' },
-  { token: 'y', description: '2-digit year' },
-  { token: 'm', description: 'Month (01-12)' },
-  { token: 'n', description: 'Month (1-12)' },
-  { token: 'd', description: 'Day (01-31)' },
-  { token: 'j', description: 'Day (1-31)' },
-  { token: 'F', description: 'Month name' },
-  { token: 'M', description: 'Short month' },
-  { token: 'D', description: 'Short day' },
-  { token: 'l', description: 'Full day name' },
-  { token: '/', description: 'Slash separator' },
-  { token: '-', description: 'Dash separator' },
+  { token: 'Y', description: __('4-digit year', 'woocommerce-exporter') },
+  { token: 'y', description: __('2-digit year', 'woocommerce-exporter') },
+  { token: 'm', description: __('Month (01-12)', 'woocommerce-exporter') },
+  { token: 'n', description: __('Month (1-12)', 'woocommerce-exporter') },
+  { token: 'd', description: __('Day (01-31)', 'woocommerce-exporter') },
+  { token: 'j', description: __('Day (1-31)', 'woocommerce-exporter') },
+  { token: 'F', description: __('Month name', 'woocommerce-exporter') },
+  { token: 'M', description: __('Short month', 'woocommerce-exporter') },
+  { token: 'D', description: __('Short day', 'woocommerce-exporter') },
+  { token: 'l', description: __('Full day name', 'woocommerce-exporter') },
+  { token: '/', description: __('Slash separator', 'woocommerce-exporter') },
+  { token: '-', description: __('Dash separator', 'woocommerce-exporter') },
 ]
 
 const DATE_FORMAT_EXAMPLES = ['Y-m-d', 'd/m/Y', 'F j, Y', 'M j, Y', 'Ymd']
@@ -117,30 +98,10 @@ function insertDateToken (token) {
   if (el) setTimeout(() => { el.focus(); el.setSelectionRange(cursor, cursor) }, 0)
 }
 
-function buildDateMap () {
-  const now = new Date()
-  const pad = n => String(n).padStart(2, '0')
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-  const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const daysShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  return {
-    Y: String(now.getFullYear()), y: String(now.getFullYear()).slice(-2),
-    m: pad(now.getMonth() + 1), n: String(now.getMonth() + 1),
-    d: pad(now.getDate()), j: String(now.getDate()),
-    H: pad(now.getHours()), G: String(now.getHours()),
-    h: pad(now.getHours() % 12 || 12), g: String(now.getHours() % 12 || 12),
-    i: pad(now.getMinutes()), s: pad(now.getSeconds()),
-    A: now.getHours() >= 12 ? 'PM' : 'AM', a: now.getHours() >= 12 ? 'pm' : 'am',
-    F: months[now.getMonth()], M: monthsShort[now.getMonth()],
-    l: days[now.getDay()], D: daysShort[now.getDay()],
-    N: String(now.getDay() || 7), w: String(now.getDay())
-  }
-}
-
+// Preview a PHP date format the way the export writes it (mysql2date), with
+// month and day names in the admin's language.
 function formatPhpDate (fmt) {
-  const map = buildDateMap()
-  return fmt.replace(/[YymndjHGhisAaFMlDNw]/g, ch => map[ch] ?? ch)
+  return formatWpDate(new Date(), fmt)
 }
 
 const customDatePreview = computed(() => {
@@ -159,44 +120,34 @@ const presetDateFull = computed(() => {
 })
 
 const PRESET_TOKEN_LABELS = {
-  Y: '4-digit year', y: '2-digit year',
-  m: 'Month (01-12)', n: 'Month (1-12)',
-  d: 'Day (01-31)', j: 'Day of the month',
-  F: 'Full month name', M: 'Short month name',
-  l: 'Full day name', D: 'Short day name',
+  Y: __('4-digit year', 'woocommerce-exporter'), y: __('2-digit year', 'woocommerce-exporter'),
+  m: __('Month (01-12)', 'woocommerce-exporter'), n: __('Month (1-12)', 'woocommerce-exporter'),
+  d: __('Day (01-31)', 'woocommerce-exporter'), j: __('Day of the month', 'woocommerce-exporter'),
+  F: __('Full month name', 'woocommerce-exporter'), M: __('Short month name', 'woocommerce-exporter'),
+  l: __('Full day name', 'woocommerce-exporter'), D: __('Short day name', 'woocommerce-exporter'),
 }
 
 const presetFormatBreakdown = computed(() => {
   if (isCustomDate.value) return []
   const fmt = settings.value.date_format
-  const map = buildDateMap()
+  const now = new Date()
   const items = []
   for (const ch of fmt) {
     if (PRESET_TOKEN_LABELS[ch]) {
-      items.push({ token: ch, label: PRESET_TOKEN_LABELS[ch], example: String(map[ch] ?? ch) })
+      items.push({ token: ch, label: PRESET_TOKEN_LABELS[ch], example: formatWpDate(now, ch) })
     } else if (ch.trim()) {
-      items.push({ token: ch, label: 'Separator', example: ch })
+      items.push({ token: ch, label: __('Separator', 'woocommerce-exporter'), example: ch })
     }
   }
   return items
 })
-
-function insertVariable (token) {
-  const el = filenameInput.value
-  const current = settings.value.filename || ''
-  const start = el ? el.selectionStart : current.length
-  const end = el ? el.selectionEnd : current.length
-  settings.value.filename = current.slice(0, start) + token + current.slice(end)
-  const cursor = start + token.length
-  if (el) setTimeout(() => el.setSelectionRange(cursor, cursor), 0)
-}
 </script>
 
 <template>
   <div class="bg-white border border-gray-200 rounded-[10px] overflow-hidden flex-shrink-0">
     <div class="py-5 px-6 border-b border-gray-100">
-      <h2 class="text-[20px] font-bold text-gray-900 m-0 leading-tight">General</h2>
-      <p class="text-[13px] text-gray-500 m-0 mt-1">Configure the basic behavior and default preferences for exports.</p>
+      <h2 class="text-[20px] font-bold text-gray-900 m-0 leading-tight">{{ __('General', 'woocommerce-exporter') }}</h2>
+      <p class="text-[13px] text-gray-500 m-0 mt-1">{{ __('Configure the basic behavior and default preferences for exports.', 'woocommerce-exporter') }}</p>
     </div>
 
     <div class="divide-y divide-gray-100">
@@ -208,18 +159,19 @@ function insertVariable (token) {
             <FilePen :size="15" :stroke-width="1.75" color="#6C7BFF" />
           </span>
           <div>
-            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Export Filename</p>
-            <p class="text-[12px] text-gray-400 m-0">Set the default filename for exported files.</p>
+            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Export Filename', 'woocommerce-exporter') }}</p>
+            <p class="text-[12px] text-gray-400 m-0">{{ __('Set the default filename for exported files.', 'woocommerce-exporter') }}</p>
           </div>
         </div>
         <FilenameTokenInput
-          v-model="settings.filename"
-          :tokens="filenameVariables"
-          :default-value="FILENAME_DEFAULT"
-          placeholder="{type}-export-{date}"
+          v-model="settings.export_filename"
+          data-testid="wse-settings-export-filename-input"
+          :tokens="SETTINGS_FILENAME_TOKENS"
+          :default-value="DEFAULT_FILENAME_PATTERN"
+          :placeholder="DEFAULT_FILENAME_PATTERN"
         />
         <div v-if="filenamePreview" class="flex items-center gap-2 mt-1.5">
-          <span class="text-[11px] text-gray-400 font-medium shrink-0">Live Preview</span>
+          <span class="text-[11px] text-gray-400 font-medium shrink-0">{{ __('Live Preview', 'woocommerce-exporter') }}</span>
           <code class="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-0.5 font-mono truncate">{{ filenamePreview }}.csv</code>
         </div>
       </div>
@@ -231,8 +183,8 @@ function insertVariable (token) {
             <FileText :size="15" :stroke-width="1.75" color="#6C7BFF" />
           </span>
           <div>
-            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Character Encoding</p>
-            <p class="text-[12px] text-gray-400 m-0">Choose the character encoding for export files.</p>
+            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Character Encoding', 'woocommerce-exporter') }}</p>
+            <p class="text-[12px] text-gray-400 m-0">{{ __('Choose the character encoding for export files.', 'woocommerce-exporter') }}</p>
           </div>
         </div>
         <BaseSelect v-model="settings.encoding" :options="encodingOptions" />
@@ -245,8 +197,8 @@ function insertVariable (token) {
             <Calendar :size="15" :stroke-width="1.75" color="#6C7BFF" />
           </span>
           <div>
-            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Date Format</p>
-            <p class="text-[12px] text-gray-400 m-0">Choose the date format to use in exports.</p>
+            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Date Format', 'woocommerce-exporter') }}</p>
+            <p class="text-[12px] text-gray-400 m-0">{{ __('Choose the date format to use in exports.', 'woocommerce-exporter') }}</p>
           </div>
         </div>
 
@@ -304,14 +256,14 @@ function insertVariable (token) {
               ref="customDateInputEl"
               v-model="customDateFormat"
               type="text"
-              placeholder="e.g. Y-m-d H:i"
+              :placeholder="__('e.g. Y-m-d H:i', 'woocommerce-exporter')"
               class="flex-1 h-[40px] pl-3.5 pr-10 text-[14px] text-gray-900 placeholder:text-gray-400 bg-transparent outline-none"
             />
             <button
               v-if="customDateFormat"
               type="button"
               class="absolute right-3 flex items-center justify-center w-4 h-4 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors cursor-pointer border-0 p-0"
-              aria-label="Clear format"
+              :aria-label="__('Clear format', 'woocommerce-exporter')"
               @click="customDateFormat = ''"
             >
               <X :size="10" color="#fff" :stroke-width="2.5" />
@@ -349,7 +301,7 @@ function insertVariable (token) {
 
           <!-- Quick examples -->
           <div class="flex items-center gap-1.5 mt-3 flex-wrap">
-            <span class="text-[11px] text-gray-400">Try:</span>
+            <span class="text-[11px] text-gray-400">{{ __('Try:', 'woocommerce-exporter') }}</span>
             <button
               v-for="example in DATE_FORMAT_EXAMPLES"
               :key="example"
@@ -368,7 +320,7 @@ function insertVariable (token) {
           class="inline-flex items-center gap-1.5 mt-3.5 text-[13px] text-indigo-600 no-underline hover:underline"
         >
           <BookOpen :size="13" :stroke-width="1.75" />
-          View formatting documentation
+          {{ __('View formatting documentation', 'woocommerce-exporter') }}
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </a>
       </div>
@@ -380,27 +332,27 @@ function insertVariable (token) {
             <Shield :size="15" :stroke-width="1.75" color="#6C7BFF" />
           </span>
           <div>
-            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Field Escape Formatting</p>
-            <p class="text-[12px] text-gray-400 m-0">Controls how cells are quoted in CSV and TSV exports. Excel formats (XLS, XLSX) are not affected.</p>
+            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Field Escape Formatting', 'woocommerce-exporter') }}</p>
+            <p class="text-[12px] text-gray-400 m-0">{{ __('Controls how cells are quoted in CSV and TSV exports. Excel formats (XLS, XLSX) are not affected.', 'woocommerce-exporter') }}</p>
           </div>
         </div>
         <div class="flex flex-col gap-2 pl-11">
           <BaseRadio v-model="settings.escape_formatting" value="all" align="start">
             <span>
-              <strong class="block text-[13px] text-gray-900">Escape all cells</strong>
-              <span class="text-[12px] text-gray-400">Wrap every cell in quotes, so field data is written exactly as it is saved in the database.</span>
+              <strong class="block text-[13px] text-gray-900">{{ __('Escape all cells', 'woocommerce-exporter') }}</strong>
+              <span class="text-[12px] text-gray-400">{{ __('Wrap every cell in quotes, so field data is written exactly as it is saved in the database.', 'woocommerce-exporter') }}</span>
             </span>
           </BaseRadio>
           <BaseRadio v-model="settings.escape_formatting" value="excel" align="start">
             <span>
-              <strong class="block text-[13px] text-gray-900">Escape cells as Excel would</strong>
-              <span class="text-[12px] text-gray-400">Quote a cell only where a delimiter, quote or line break makes it necessary.</span>
+              <strong class="block text-[13px] text-gray-900">{{ __('Escape cells as Excel would', 'woocommerce-exporter') }}</strong>
+              <span class="text-[12px] text-gray-400">{{ __('Quote a cell only where a delimiter, quote or line break makes it necessary.', 'woocommerce-exporter') }}</span>
             </span>
           </BaseRadio>
           <BaseRadio v-model="settings.escape_formatting" value="none" align="start">
             <span>
-              <strong class="block text-[13px] text-gray-900">Do not escape any cells</strong>
-              <span class="text-[12px] text-gray-400">Quote nothing, except a field containing a line break. Caution: this corrupts any field containing the delimiter character.</span>
+              <strong class="block text-[13px] text-gray-900">{{ __('Do not escape any cells', 'woocommerce-exporter') }}</strong>
+              <span class="text-[12px] text-gray-400">{{ __('Quote nothing, except a field containing a line break. Caution: this corrupts any field containing the delimiter character.', 'woocommerce-exporter') }}</span>
             </span>
           </BaseRadio>
         </div>
@@ -414,13 +366,13 @@ function insertVariable (token) {
               <Table2 :size="15" :stroke-width="1.75" color="#6C7BFF" />
             </span>
             <div>
-              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Header Formatting</p>
-              <p class="text-[12px] text-gray-400 m-0">Include or exclude column headers in exports.</p>
+              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Header Formatting', 'woocommerce-exporter') }}</p>
+              <p class="text-[12px] text-gray-400 m-0">{{ __('Include or exclude column headers in exports.', 'woocommerce-exporter') }}</p>
             </div>
           </div>
           <div class="flex flex-col gap-2 pl-11">
-            <BaseRadio v-model="settings.header_formatting" value="include" label="Include column headers" />
-            <BaseRadio v-model="settings.header_formatting" value="exclude" label="Exclude column headers" />
+            <BaseRadio v-model="settings.header_formatting" value="include" :label="__('Include column headers', 'woocommerce-exporter')" />
+            <BaseRadio v-model="settings.header_formatting" value="exclude" :label="__('Exclude column headers', 'woocommerce-exporter')" />
           </div>
         </div>
 
@@ -430,13 +382,13 @@ function insertVariable (token) {
               <Database :size="15" :stroke-width="1.75" color="#6C7BFF" />
             </span>
             <div>
-              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">WordPress Object Cache</p>
-              <p class="text-[12px] text-gray-400 m-0">Flush the cache before each export.</p>
+              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('WordPress Object Cache', 'woocommerce-exporter') }}</p>
+              <p class="text-[12px] text-gray-400 m-0">{{ __('Flush the cache before each export.', 'woocommerce-exporter') }}</p>
             </div>
           </div>
           <div class="flex flex-col gap-2 pl-11">
-            <BaseRadio v-model="settings.flush_cache" value="flush" label="Flush before each export" />
-            <BaseRadio v-model="settings.flush_cache" value="none" label="Do not flush" />
+            <BaseRadio v-model="settings.flush_cache" value="flush" :label="__('Flush before each export', 'woocommerce-exporter')" />
+            <BaseRadio v-model="settings.flush_cache" value="none" :label="__('Do not flush', 'woocommerce-exporter')" />
           </div>
         </div>
       </div>
@@ -450,8 +402,8 @@ function insertVariable (token) {
                 <FileInput :size="15" :stroke-width="1.75" color="#6C7BFF" />
               </span>
               <div class="min-w-0">
-                <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Add BOM Character</p>
-                <p class="text-[12px] text-gray-400 m-0">Mark the CSV file as UTF-8 by prepending a Byte Order Mark.</p>
+                <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Add BOM Character', 'woocommerce-exporter') }}</p>
+                <p class="text-[12px] text-gray-400 m-0">{{ __('Mark the CSV file as UTF-8 by prepending a Byte Order Mark.', 'woocommerce-exporter') }}</p>
               </div>
             </div>
             <div class="flex items-center gap-2.5 flex-shrink-0">
@@ -459,7 +411,9 @@ function insertVariable (token) {
                 type="button"
                 class="relative w-11 h-6 rounded-full border-none p-0 cursor-pointer flex-shrink-0 transition-colors"
                 :class="settings.bom ? 'bg-indigo-600' : 'bg-gray-300'"
-                :aria-pressed="settings.bom"
+                role="switch"
+                :aria-checked="settings.bom"
+                :aria-label="__('Add BOM Character', 'woocommerce-exporter')"
                 @click="settings.bom = !settings.bom"
               >
                 <span
@@ -468,7 +422,7 @@ function insertVariable (token) {
                 />
               </button>
               <span class="text-[13px] font-semibold" :class="settings.bom ? 'text-indigo-600' : 'text-gray-400'">
-                {{ settings.bom ? 'Yes' : 'No' }}
+                {{ settings.bom ? __('Yes', 'woocommerce-exporter') : __('No', 'woocommerce-exporter') }}
               </span>
             </div>
           </div>
@@ -481,8 +435,8 @@ function insertVariable (token) {
                 <SlidersHorizontal :size="15" :stroke-width="1.75" color="#6C7BFF" />
               </span>
               <div class="min-w-0">
-                <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Excel Formulas</p>
-                <p class="text-[12px] text-gray-400 m-0">Allow Excel formulas in exported files. By default formulas are stripped.</p>
+                <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Excel Formulas', 'woocommerce-exporter') }}</p>
+                <p class="text-[12px] text-gray-400 m-0">{{ __('Allow Excel formulas in exported files. By default formulas are stripped.', 'woocommerce-exporter') }}</p>
               </div>
             </div>
             <div class="flex items-center gap-2.5 flex-shrink-0">
@@ -490,7 +444,9 @@ function insertVariable (token) {
                 type="button"
                 class="relative w-11 h-6 rounded-full border-none p-0 cursor-pointer flex-shrink-0 transition-colors"
                 :class="settings.excel_formulas ? 'bg-indigo-600' : 'bg-gray-300'"
-                :aria-pressed="settings.excel_formulas"
+                role="switch"
+                :aria-checked="settings.excel_formulas"
+                :aria-label="__('Excel Formulas', 'woocommerce-exporter')"
                 @click="settings.excel_formulas = !settings.excel_formulas"
               >
                 <span
@@ -499,7 +455,7 @@ function insertVariable (token) {
                 />
               </button>
               <span class="text-[13px] font-semibold" :class="settings.excel_formulas ? 'text-indigo-600' : 'text-gray-400'">
-                {{ settings.excel_formulas ? 'Allowed' : 'Stripped' }}
+                {{ settings.excel_formulas ? __('Allowed', 'woocommerce-exporter') : __('Stripped', 'woocommerce-exporter') }}
               </span>
             </div>
           </div>
@@ -514,13 +470,12 @@ function insertVariable (token) {
               <SlidersHorizontal :size="15" :stroke-width="1.75" color="#6C7BFF" />
             </span>
             <div class="min-w-0">
-              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Escape Formulas in CSV/TSV</p>
+              <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Escape Formulas in CSV/TSV', 'woocommerce-exporter') }}</p>
               <p class="text-[12px] text-gray-400 m-0">
-                Prefix any CSV or TSV cell a spreadsheet would execute with a single quote. Negative amounts and
-                international phone numbers are left untouched.
+                {{ __('Prefix any CSV or TSV cell a spreadsheet would execute with a single quote. Negative amounts and international phone numbers are left untouched.', 'woocommerce-exporter') }}
               </p>
               <p v-if="settings.excel_formulas" class="text-[12px] text-gray-400 italic m-0 mt-1">
-                Only applies while Excel Formulas is set to Stripped.
+                {{ __('Only applies while Excel Formulas is set to Stripped.', 'woocommerce-exporter') }}
               </p>
             </div>
           </div>
@@ -532,7 +487,7 @@ function insertVariable (token) {
                 settings.csv_formula_escaping && !settings.excel_formulas ? 'bg-indigo-600' : 'bg-gray-300',
                 settings.excel_formulas ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
               ]"
-              aria-label="Escape formulas in CSV/TSV"
+              :aria-label="__('Escape formulas in CSV/TSV', 'woocommerce-exporter')"
               :aria-pressed="settings.csv_formula_escaping"
               :disabled="settings.excel_formulas"
               @click="settings.csv_formula_escaping = !settings.csv_formula_escaping"
@@ -546,7 +501,7 @@ function insertVariable (token) {
               class="text-[13px] font-semibold"
               :class="settings.csv_formula_escaping && !settings.excel_formulas ? 'text-indigo-600' : 'text-gray-400'"
             >
-              {{ settings.csv_formula_escaping ? 'Escaped' : 'Raw' }}
+              {{ settings.csv_formula_escaping ? __('Escaped', 'woocommerce-exporter') : __('Raw', 'woocommerce-exporter') }}
             </span>
           </div>
         </div>
@@ -559,8 +514,8 @@ function insertVariable (token) {
             <Clock :size="15" :stroke-width="1.75" color="#6C7BFF" />
           </span>
           <div>
-            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">Script Timeout</p>
-            <p class="text-[12px] text-gray-400 m-0">Maximum time allowed for an export to process before it halts.</p>
+            <p class="text-[13px] font-semibold text-gray-900 m-0 mb-0.5">{{ __('Script Timeout', 'woocommerce-exporter') }}</p>
+            <p class="text-[12px] text-gray-400 m-0">{{ __('Maximum time allowed for an export to process before it halts.', 'woocommerce-exporter') }}</p>
           </div>
         </div>
         <div class="pl-11">

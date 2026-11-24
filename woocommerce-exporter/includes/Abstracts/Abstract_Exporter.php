@@ -48,6 +48,43 @@ abstract class Abstract_Exporter {
     const EXPORT_DIR = WP_CONTENT_DIR . self::EXPORT_DIR_NAME . '/';
 
     /**
+     * The byte write_delimited_row() wraps a quoted cell in.
+     *
+     * The column delimiter may not be this byte: a separator equal to the
+     * enclosure produces a file no CSV reader can take apart.
+     * Export_Helper::UNUSABLE_DELIMITERS reads it from here.
+     *
+     * @since 2.8.3
+     *
+     * @var string
+     */
+    const CSV_ENCLOSURE = '"';
+
+    /**
+     * The escape byte many CSV readers apply inside a cell.
+     *
+     * The writer, write_delimited_row(), gives the backslash no special meaning, but a reader
+     * that does (and Store Exporter Deluxe's fputcsv() path) cannot split a file
+     * on it. It is excluded from the delimiter vocabulary for that reason.
+     *
+     * @since 2.8.3
+     *
+     * @var string
+     */
+    const CSV_ESCAPE = '\\';
+
+    /**
+     * Bytes read per pass when counting a delimited export's records.
+     *
+     * 1MB: large enough that a sizeable export is counted in a handful of reads,
+     * small enough that the buffer never exhausts the memory limit.
+     *
+     * @since 2.8.3
+     * @var int
+     */
+    const ROW_COUNT_CHUNK_BYTES = 1048576;
+
+    /**
      * Option storing the random slug appended to the archive sub-directory name.
      *
      * @since 2.8.1
@@ -381,7 +418,15 @@ abstract class Abstract_Exporter {
                 if ( $escape_formulas ) {
                     $data = array_map( array( $this, 'escape_formula_value' ), $data );
                 }
-                $this->write_delimited_row( $data, $escape_mode, $escape_formulas );
+
+                // Checked, like the header row in prepare_file(). A discarded
+                // failure is silent data loss: the record never reaches the
+                // file, and the row count, derived from the file's own
+                // terminators, agrees with the truncated export.
+                if ( false === $this->write_delimited_row( $data, $escape_mode, $escape_formulas ) ) {
+                    // translators: %s: file path.
+                    throw new Exception( sprintf( esc_html__( 'Failed to write a row to file %s.', 'woocommerce-exporter' ), esc_html( $this->file_path ) ) );
+                }
             }
 
             // Close the file.
@@ -413,85 +458,35 @@ abstract class Abstract_Exporter {
      * Generate filename of export file.
      *
      * @since 2.7.3
+     * @since 2.8.3 Reads the Filename pattern through Export_Helper::get_filename_pattern(), resolves
+     *              `{type}`-style tags alongside the legacy `%dataset%` ones, and keeps every dot in the name.
      * @access public
      *
-     * @param string $export_type The export type.
+     * @param string $export_type   The export type.
      * @param string $export_format The export format.
+     * @param string $override      The override filename.
+     * @return string The filename, with the format's extension.
      */
-    public function generate_filename( $export_type, $export_format ) {
-        // Check if a fixed filename hasn't been provided.
-        if ( ! empty( $override ) ) {
-            $filename = $override;
-        } else {
-            // Get the filename from WordPress options.
-            $filename = get_option( WOO_CE_PREFIX . '_export_filename', '%store_name%-export_%dataset%-%date%-%time%-%random%' );
-            // Check for empty filename.
-            if ( empty( $filename ) ) {
-                $filename = '%store_name%-export_%dataset%-%date%-%time%-%random%';
-            }
-            // Strip file extensions if present.
-            $filename = str_replace( array( '.csv', '.tsv', '.txt', '.xls', '.xlsx', '.xml', '.rss', '.json' ), '', $filename );
-        }
+    public function generate_filename( $export_type, $export_format, $override = '' ) {
+        // Use a fixed filename if one was provided, otherwise the saved Filename pattern.
+        $filename = ( ! empty( $override ) ? $override : \VisserLabs\WSE\Helpers\Export::get_filename_pattern() );
 
-        // Switch out the Tags for filled values.
-        $filename = str_replace( '%dataset%', $export_type, $filename );
-        if ( strstr( $filename, '%date%' ) !== false ) {
-            $date     = apply_filters( 'woo_ce_filename_tag_date', gmdate( 'Y_m_d' ) );
-            $filename = str_replace( '%date%', $date, $filename );
-        }
-        if ( strstr( $filename, '%year%' ) !== false ) {
-            $year     = apply_filters( 'woo_ce_filename_tag_year', gmdate( 'Y' ) );
-            $filename = str_replace( '%year%', $year, $filename );
-        }
-        if ( strstr( $filename, '%month%' ) !== false ) {
-            $month    = apply_filters( 'woo_ce_filename_tag_month', gmdate( 'm' ) );
-            $filename = str_replace( '%month%', $month, $filename );
-        }
-        if ( strstr( $filename, '%day%' ) !== false ) {
-            $day      = apply_filters( 'woo_ce_filename_tag_day', gmdate( 'd' ) );
-            $filename = str_replace( '%day%', $day, $filename );
-        }
-        if ( strstr( $filename, '%time%' ) !== false ) {
-            $time     = apply_filters( 'woo_ce_filename_tag_time', gmdate( 'H_i_s' ) );
-            $filename = str_replace( '%time%', $time, $filename );
-        }
-        if ( strstr( $filename, '%hour%' ) !== false ) {
-            $hour     = apply_filters( 'woo_ce_filename_tag_hour', gmdate( 'H' ) );
-            $filename = str_replace( '%hour%', $hour, $filename );
-        }
-        if ( strstr( $filename, '%minute%' ) !== false ) {
-            $minute   = apply_filters( 'woo_ce_filename_tag_minute', gmdate( 'i' ) );
-            $filename = str_replace( '%minute%', $minute, $filename );
-        }
-        if ( strstr( $filename, '%random%' ) !== false ) {
-            $random   = wp_rand( 10000000, 99999999 );
-            $filename = str_replace( '%random%', $random, $filename );
-        }
-        if ( strstr( $filename, '%store_name%' ) !== false ) {
-            $store_name = sanitize_title( get_bloginfo( 'name' ) );
-            $filename   = str_replace( '%store_name%', $store_name, $filename );
-        }
-        if ( strstr( $filename, '%order_id%' ) !== false ) {
-            // Check if the Transient is set.
-            $order_id = ( $this->export_settings->scheduled_export ? absint( get_transient( WOO_CE_PREFIX . '_single_export_post_ids' ) ) : 0 );
-            if ( ! empty( $order_id ) ) {
-                $filename = str_replace( '%order_id%', $order_id, $filename );
-            }
-        }
+        return \VisserLabs\WSE\Helpers\Export::build_export_filename( $filename, $export_type, $export_format, $this->get_filename_order_id( $filename ) );
+    }
 
-        $file_extension = $export_format;
-        if ( 'rss' === $export_format ) {
-            $file_extension = 'xml';
-        }
-
-        /**
-         * Filter the generated filename.
-         *
-         * @since 2.7.3
-         * @param string $filename    The generated filename.
-         * @param string $export_type The export type.
-         */
-        return sanitize_file_name( apply_filters( 'wsed_generate_filename', $filename, $export_type ) ) . '.' . $file_extension;
+    /**
+     * Get the order ID a Filename pattern's `order_id` tag resolves to.
+     *
+     * Only scheduled exports triggered by a single order carry an order ID, and
+     * only the order_id tag needs it, so any other export or pattern gets 0.
+     *
+     * @since 2.8.3
+     *
+     * @param string $filename The Filename pattern.
+     * @return int The order ID, or 0.
+     */
+    protected function get_filename_order_id( $filename ) {
+        return ( false !== strpos( (string) $filename, 'order_id' ) && ! empty( $this->export_settings->scheduled_export ) ? absint( get_transient( WOO_CE_PREFIX . '_single_export_post_ids' ) ) : 0 );
     }
 
     /**
@@ -595,7 +590,18 @@ abstract class Abstract_Exporter {
     /**
      * Count file total rows.
      *
+     * The count has to agree with the bytes actually written, so it counts the
+     * Line ending formatting setting's terminator rather than reading lines with
+     * fgets(). fgets() splits on LF alone and would report a Mac (CR) export as
+     * a single row.
+     *
+     * Like the fgets() count it replaces, this counts terminators rather than
+     * parsed records, so a cell that contains a line break can still inflate
+     * it. Under the default `windows`, a cell holding a bare LF no longer
+     * inflates the count, while one holding CRLF still does.
+     *
      * @since 2.7.3
+     * @since 2.8.3 Counts the configured row terminator instead of LF-delimited lines.
      * @access public
      */
     public function count_file_total_rows() {
@@ -603,19 +609,95 @@ abstract class Abstract_Exporter {
         if ( in_array( $this->export_format, array( 'csv', 'tsv' ), true ) ) {
             // Change file stream to read mode.
             // For scheduled exports the file is on write mode.
-            if ( $this->is_scheduled ) {
+            $opened_here = $this->is_scheduled;
+            if ( $opened_here ) {
                 $file = fopen( $this->file_path, 'r' ); // phpcs:ignore
             } else {
                 $file = $this->file;
             }
 
-            while ( ! feof( $file ) ) {
-                $line = fgets( $file );
-                if ( ! empty( $line ) ) {
-                    ++$rows;
-                }
+            // A missing or unreadable file yields false, and feof()/rewind() on
+            // false is a TypeError on PHP 8.
+            if ( ! is_resource( $file ) ) {
+                return 0;
+            }
+
+            $rows = $this->count_terminated_rows( $file );
+
+            // Close only the handle opened above. The quick-export handle
+            // belongs to the caller, which closes it itself.
+            if ( $opened_here ) {
+                fclose( $file ); // phpcs:ignore
             }
         }
+        return $rows;
+    }
+
+    /**
+     * Read the row terminator of an open delimited export from its first row.
+     *
+     * The header row is the first row and its labels hold no line breaks, so
+     * the first CR or LF in the file starts the terminator.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param resource $file Handle positioned anywhere; rewound before reading.
+     * @return string "\r\n", "\n" or "\r". The Line Ending setting when the file has no terminator.
+     */
+    private function detect_file_line_ending( $file ) {
+        rewind( $file );
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+        $head = fread( $file, self::ROW_COUNT_CHUNK_BYTES );
+        rewind( $file );
+
+        $position = is_string( $head ) ? strcspn( $head, "\r\n" ) : 0;
+        if ( ! is_string( $head ) || strlen( $head ) === $position ) {
+            return woo_ce_get_line_ending();
+        }
+
+        if ( "\n" === $head[ $position ] ) {
+            return "\n";
+        }
+
+        return ( isset( $head[ $position + 1 ] ) && "\n" === $head[ $position + 1 ] ) ? "\r\n" : "\r";
+    }
+
+    /**
+     * Count the records in an open delimited export by its row terminator.
+     *
+     * Read in chunks, because an export can be far larger than the memory
+     * limit. A two-byte terminator can straddle a chunk boundary, so the tail of
+     * each chunk is carried into the next.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param resource $file Handle positioned anywhere; rewound before reading.
+     * @return int The number of terminated records.
+     */
+    private function count_terminated_rows( $file ) {
+        // The settings line ending describes this file only when the settings
+        // belong to it. Otherwise the terminator is read from the file itself.
+        $terminator = $this->settings_match_file ? $this->resolve_line_ending() : $this->detect_file_line_ending( $file );
+        $carry_size = strlen( $terminator ) - 1;
+        $rows       = 0;
+        $carry      = '';
+
+        rewind( $file );
+
+        while ( ! feof( $file ) ) {
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+            $chunk = fread( $file, self::ROW_COUNT_CHUNK_BYTES );
+            if ( false === $chunk || '' === $chunk ) {
+                break;
+            }
+
+            $buffer = $carry . $chunk;
+            $rows  += substr_count( $buffer, $terminator );
+            $carry  = $carry_size > 0 ? substr( $buffer, -$carry_size ) : '';
+        }
+
         return $rows;
     }
 
@@ -634,7 +716,7 @@ abstract class Abstract_Exporter {
         // EXPORT_DIR: the export's temp file still sits there at this point and
         // would force a "-1" suffix onto every archive.
         $archive_dir     = self::get_archive_dir();
-        $unique_filename = wp_unique_filename( $archive_dir, $this->filename );
+        $unique_filename = \VisserLabs\WSE\Helpers\Export::get_unique_filename( $archive_dir, $this->filename );
         $file_path       = $archive_dir . $unique_filename;
 
         // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
@@ -1094,10 +1176,12 @@ abstract class Abstract_Exporter {
      * reader and put the formula at the start of a new cell. Here every
      * embedded quote is doubled and the backslash has no special meaning.
      *
-     * The line terminator is "\n" in every mode, matching what fputcsv() wrote,
-     * so switching modes changes quoting and nothing else.
+     * The row terminator is independent of the mode: all three end a record
+     * with the bytes the Line ending formatting setting names, so switching
+     * Escape formatting modes changes quoting and nothing else.
      *
      * @since 2.8.2
+     * @since 2.8.3 Terminates each row with the Line ending formatting setting's bytes rather than always "\n".
      * @access protected
      *
      * @param array  $fields          The row's cell values, in column order.
@@ -1154,10 +1238,36 @@ abstract class Abstract_Exporter {
         }
 
         // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
-        $written = fwrite( $this->file, implode( $delimiter, $cells ) . "\n" );
+        $written = fwrite( $this->file, implode( $delimiter, $cells ) . $this->resolve_line_ending() );
         // phpcs:enable WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 
         return false !== $written;
+    }
+
+    /**
+     * The row terminator this export writes, from the snapshot taken when the
+     * export was set up.
+     *
+     * Read off the settings object rather than from the option, so every batch
+     * of one export agrees on the terminator. A Quick Export crosses HTTP
+     * requests, and re-reading the option per row would let a mid-export change
+     * at the Settings screen mix terminators in one file.
+     *
+     * A missing or unusable property means the settings object never went
+     * through setup_export_settings(). Nothing has been written under an older
+     * terminator in that case, so the option is the right answer. A batch
+     * resumed from a settings transient written before 2.8.3 is handled where
+     * that transient is read, by Exporter::restore_legacy_line_ending().
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @return string The bytes to end a record with.
+     */
+    private function resolve_line_ending() {
+        $line_ending = $this->export_settings->line_ending ?? '';
+
+        return ( is_string( $line_ending ) && '' !== $line_ending ) ? $line_ending : woo_ce_get_line_ending();
     }
 
     /**
@@ -1228,6 +1338,8 @@ abstract class Abstract_Exporter {
      *              overrides the caller sent, keyed by field slug and already
      *              applied to `$export->columns`. Empty when the caller sent
      *              none.
+     * @since 2.8.3 `$export->line_ending` carries the row terminator, and is
+     *              re-snapshotted after the `wsed_export_settings` filter.
      *
      * @param array $settings The settings to be exported.
      *                        Obtained from the form data via quick export or the post data and meta via scheduled export.
@@ -1247,9 +1359,9 @@ abstract class Abstract_Exporter {
         $export->bom                = $settings['bom'] ?? get_option( WOO_CE_PREFIX . '_bom', 1 );
         $export->excel_formulas     = $settings['excel_formulas'] ?? get_option( WOO_CE_PREFIX . '_excel_formulas' );
         $export->header_formatting  = self::normalize_header_formatting( $settings['header_formatting'] ?? '' );
-        $export->delimiter          = $settings['delimiter'] ?? get_option( WOO_CE_PREFIX . '_delimiter', ',' );
         $export->category_separator = $settings['category_separator'] ?? get_option( WOO_CE_PREFIX . '_category_separator', '|' );
         $export->escape_formatting  = self::normalize_escape_formatting( $settings['escape_formatting'] ?? '' );
+        $export->line_ending        = woo_ce_get_line_ending(); // Snapshot, not a per-row read. See resolve_line_ending().
         $export->batch_size         = $settings['batch_size'] ?? get_option( WOO_CE_PREFIX . '_batch_size', WSED_DEFAULT_BATCH_SIZE );
         $export->export_template    = ( isset( $settings['export_template'] ) ? absint( $settings['export_template'] ) : false );
         $export->type               = ( isset( $settings['dataset'] ) ? sanitize_text_field( $settings['dataset'] ) : false );
@@ -1268,17 +1380,30 @@ abstract class Abstract_Exporter {
         // Set the offset to 0 if it's empty.
         $export->offset = empty( $export->offset ) ? 0 : $export->offset;
 
-        // Set the delimiter to comma if it's empty.
-        $export->delimiter = empty( $export->delimiter ) ? ',' : $export->delimiter;
-
         // Set the description excerpt formatting.
         if ( in_array( $export->type, array( 'product', 'category', 'tag', 'brand', 'order' ), true ) ) {
             $export->description_excerpt_formatting = ( isset( $settings['description_excerpt_formatting'] ) ? absint( $settings['description_excerpt_formatting'] ) : false );
         }
 
-        // If delimiter is TAB, override it to the actual tab character.
-        if ( 'TAB' === $export->delimiter ) {
-            $export->delimiter = "\t";
+        /*
+         * Resolve the delimiter the writer will receive, through the one rule
+         * Export_Helper::is_valid_delimiter() owns. A store that saved an unusable
+         * value through an older build exports on a comma, with a log line,
+         * instead of writing a file no CSV reader can parse.
+         *
+         * A per-export delimiter falls back to the GLOBAL value, not straight to a
+         * comma. The global is read only when it is the value in play, so an
+         * export with its own usable delimiter does not log the global's notice.
+         */
+        if ( empty( $settings['delimiter'] ) ) {
+            $export->delimiter = \VisserLabs\WSE\Helpers\Export::coerce_delimiter( get_option( WOO_CE_PREFIX . '_delimiter', ',' ) );
+        } elseif ( \VisserLabs\WSE\Helpers\Export::is_valid_delimiter( $settings['delimiter'] ) ) {
+            $export->delimiter = \VisserLabs\WSE\Helpers\Export::decode_delimiter( $settings['delimiter'] );
+        } else {
+            $export->delimiter = \VisserLabs\WSE\Helpers\Export::coerce_delimiter(
+                $settings['delimiter'],
+                \VisserLabs\WSE\Helpers\Export::coerce_delimiter( get_option( WOO_CE_PREFIX . '_delimiter', ',' ) )
+            );
         }
 
         // Override for line break (LF) support in Category Separator.
@@ -1305,7 +1430,18 @@ abstract class Abstract_Exporter {
         // Set writer type.
         $export->writer_type = $this->get_writer_type( $export->export_format );
 
-        return apply_filters( 'wsed_export_settings', $export, $export->type );
+        $export = apply_filters( 'wsed_export_settings', $export, $export->type );
+
+        // Re-snapshot the row terminator. A filter is free to return a rebuilt
+        // object without `line_ending`. Filling it here keeps the header row,
+        // every batch and the stored settings transient on one terminator, and
+        // leaves a missing property on a transient meaning only one thing: the
+        // transient predates 2.8.3.
+        if ( is_object( $export ) && ( ! isset( $export->line_ending ) || ! is_string( $export->line_ending ) || '' === $export->line_ending ) ) {
+            $export->line_ending = woo_ce_get_line_ending();
+        }
+
+        return $export;
     }
 
     /**
@@ -1319,6 +1455,8 @@ abstract class Abstract_Exporter {
      *              rename. An integration that needs the last word on a column
      *              label must therefore hook `wsed_export_settings` and edit
      *              `$export->field_labels` instead.
+     * @since 2.8.3 Resolves each override through get_field_label(), which the
+     *              Order exporter now shares for its item columns.
      * @access public
      *
      * @param array  $fields The default fields.
@@ -1381,33 +1519,97 @@ abstract class Abstract_Exporter {
         // Without any of this the rename reached the server and was silently
         // dropped, and the file kept the field's default header.
         if ( ! empty( $export->field_labels ) ) {
-            $export_format = isset( $export->export_format ) ? $export->export_format : '';
-
-            foreach ( $export->field_labels as $key => $label ) {
+            foreach ( array_keys( $export->field_labels ) as $key ) {
                 // A nested value is a column GROUP a filter consumer built, never
                 // a single header one rename can stand in for.
                 //
-                // Item columns are the known gap here: the Order exporter re-keys
-                // them (`order_items_sku` becomes `order_items_1_sku`), so a rename
-                // on one has no matching key left to find.
+                // Item columns never match here: the Order exporter re-keys them
+                // (`order_items_sku` becomes `order_items_1_sku`), so it resolves
+                // the rename itself, against the original field name, through
+                // get_field_label().
                 if ( ! isset( $columns[ $key ] ) || is_array( $columns[ $key ] ) ) {
                     continue;
                 }
 
-                // Keep the field's default label when this format's writer would
-                // derive a broken identifier from the rename. Silently, because
-                // that is exactly the behaviour before this override existed —
-                // those writers only ever saw the default label — so no export
-                // that works today starts failing.
-                if ( ! self::label_is_usable_by_writer( $label, $export_format ) ) {
-                    continue;
-                }
-
-                $columns[ $key ] = $label;
+                $columns[ $key ] = self::get_field_label( $export, $key, $columns[ $key ] );
             }
         }
 
         return $columns;
+    }
+
+    /**
+     * Resolve the column label for one field, honouring the per-export override.
+     *
+     * Returns the label the caller renamed the field to for this export
+     * (`$export->field_labels`), or the given default when there is none.
+     *
+     * The default is also kept when this format's writer would derive a broken
+     * identifier from the rename. Silently, because that is exactly the
+     * behaviour before the override existed — those writers only ever saw the
+     * default label — so no export that works today starts failing.
+     *
+     * Public so the Order exporter can resolve its item columns against the
+     * ORIGINAL field name while it re-keys them (`order_items_sku` becomes
+     * `order_items_1_sku`, or nests under `order_items`), which
+     * get_export_columns() can no longer match. Those columns drop their group
+     * prefix ('Order Items: ') from the label, so `$strip_prefix` removes it from
+     * both the default and the override — the override before the writer check,
+     * and an override that is nothing but the prefix keeps the default. Pass the
+     * English prefix and its translation together, so a translated site has the
+     * prefix stripped too.
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @param object          $export        The export settings object.
+     * @param string          $field_name    The field slug, as the caller keyed the override.
+     * @param string          $default_label The label to use when there is no usable override.
+     * @param string|string[] $strip_prefix  Optional. Group prefixes to remove from the label. Default empty.
+     * @return string The resolved column label.
+     */
+    public static function get_field_label( $export, $field_name, $default_label, $strip_prefix = '' ) {
+        $prefixes      = array_filter( array_unique( (array) $strip_prefix ), 'strlen' );
+        $default_label = self::strip_label_prefixes( (string) $default_label, $prefixes );
+
+        if ( ! isset( $export->field_labels[ $field_name ] ) ) {
+            return $default_label;
+        }
+
+        $label = self::strip_label_prefixes( $export->field_labels[ $field_name ], $prefixes );
+
+        $export_format = isset( $export->export_format ) ? $export->export_format : '';
+
+        if ( '' === $label || ! self::label_is_usable_by_writer( $label, $export_format ) ) {
+            return $default_label;
+        }
+
+        return $label;
+    }
+
+    /**
+     * Remove the first matching group prefix from the start of a column label.
+     *
+     * Matched loosely on the prefix's trailing whitespace: sanitize_field_labels()
+     * has already trimmed an override, so 'Order Items: ' arrives as 'Order Items:'.
+     *
+     * @since 2.8.3
+     * @access private
+     *
+     * @param string   $label    The column label.
+     * @param string[] $prefixes The group prefixes to try, in order.
+     * @return string The label without its group prefix, trimmed.
+     */
+    private static function strip_label_prefixes( $label, $prefixes ) {
+        foreach ( $prefixes as $prefix ) {
+            $pattern = '/^' . preg_quote( rtrim( $prefix ), '/' ) . '\s*/u';
+
+            if ( preg_match( $pattern, $label ) ) {
+                return trim( preg_replace( $pattern, '', $label ) );
+            }
+        }
+
+        return trim( $label );
     }
 
     /**

@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount, watch } from 'vue'
 import { X } from 'lucide-vue-next'
+import { __ } from '@wordpress/i18n'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -56,7 +57,7 @@ watch(() => props.modelValue, (open) => {
           <button
             class="wse-ui-modal-close p-1 rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900 border-0 bg-transparent cursor-pointer"
             type="button"
-            aria-label="Close"
+            :aria-label="__('Close', 'woocommerce-exporter')"
             @click="close"
           >
             <X :size="18" />

@@ -654,8 +654,11 @@ function woo_ce_enqueue_scripts() {
 	wp_enqueue_style( 'woo_vm_styles', plugins_url( '/templates/admin/woocommerce-admin_dashboard_vm-plugins.css', WOO_CE_RELPATH ) );
 
 	// Growth Tools.
-	
-	if ( (isset($_GET['tab']) && strpos( $_GET['tab'], 'tools' ) !== false)) { // phpcs:ignore
+	// Read through the shared resolver rather than $_GET directly: strpos() takes a string, so
+	// ?tab[]=x used to reach it as an array and fatal the whole Store Export screen. Compared
+	// exactly rather than by substring, the way woo_ce_is_spa_tab() compares the base — the old
+	// strpos() test also matched ?tab=mytools and ?tab=toolsX.
+	if ( 'tools' === woo_ce_resolve_current_tab() ) {
 		wp_enqueue_script( 'woo_ce_tools', plugins_url( '/js/growth-tools.js', WOO_CE_RELPATH ), array( 'jquery' ), WOO_CE_VERSION );
 	}
 }
@@ -2130,42 +2133,7 @@ function woo_cd_tab_template( $tab = '' ) {
 			break;
 
 		case 'tools':
-			// Product Importer Deluxe
-			$woo_pd_url    = 'https://visser.com.au/how-to-import-woocommerce-products/';
-			$woo_pd_target = ' target="_blank"';
-			if ( function_exists( 'woo_pd_init' ) ) {
-				$woo_pd_url    = esc_url(
-                    add_query_arg(
-                        array(
-							'page' => 'woo_pd',
-							'tab'  => null,
-                        )
-                    )
-                );
-				$woo_pd_target = false;
-			}
-
-			// Store Toolkit
-			$woo_st_url    = 'https://wordpress.org/plugins/woocommerce-store-toolkit/';
-			$woo_st_target = ' target="_blank"';
-			if ( function_exists( 'woo_st_admin_init' ) ) {
-				$woo_st_url    = esc_url(
-                    add_query_arg(
-                        array(
-							'page' => 'woo_st',
-							'tab'  => null,
-                        )
-                    )
-                );
-				$woo_st_target = false;
-			}
-
-			// Export modules
-			$module_status    = ( isset( $_GET['module_status'] ) ? sanitize_text_field( $_GET['module_status'] ) : false );
-			$modules          = woo_ce_modules_list( $module_status );
-			$modules_all      = get_transient( WOO_CE_PREFIX . '_modules_all_count' );
-			$modules_active   = get_transient( WOO_CE_PREFIX . '_modules_active_count' );
-			$modules_inactive = get_transient( WOO_CE_PREFIX . '_modules_inactive_count' );
+			// Handled by the Vue SPA; no server-side pre-processing required.
 			break;
 
 	}
@@ -3096,7 +3064,12 @@ function woo_ce_admin_dashboard_setup() {
 // HTML template for header prompt on Store Exporter screen
 function woo_ce_support_donate() {
 	$output = '';
-	$tab    = isset( $_GET['tab'] ) ? str_replace( '_', '', $_GET['tab'] ) : 'overview';
+	// Through the shared resolver: this value is interpolated into the upsell URL below, and
+	// a raw $_GET['tab'] let a link append its own parameters to it. The isset() check keeps the
+	// old default: the resolver answers quick_export for an absent tab when skip_overview is on,
+	// which would silently move this link's utm_medium bucket.
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$tab    = isset( $_GET['tab'] ) ? str_replace( '_', '', woo_ce_resolve_current_tab() ) : 'overview';
 	$show 	= true;
 	if( $show ) {
 		$rate_url 	 = 'https://wordpress.org/support/plugin/woocommerce-exporter/reviews/?filter=5#new-post';

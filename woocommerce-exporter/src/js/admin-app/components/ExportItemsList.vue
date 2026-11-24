@@ -5,6 +5,8 @@ import { useQuickExportStore } from '../stores/quickExport'
 import { useUpsellStore } from '../stores/upsell'
 import { TYPE_VISUALS, DEFAULT_VISUAL } from '../exportTypeVisuals'
 import { computed, ref } from 'vue'
+import { __, _n, _x, sprintf } from '@wordpress/i18n'
+import { formatCount } from '../lib/formatWpDate'
 
 const router = useRouter()
 const quickExport = useQuickExportStore()
@@ -45,7 +47,21 @@ const pages = computed(() => {
 
 const visual = (slug) => TYPE_VISUALS[slug] ?? DEFAULT_VISUAL
 
-const formatRecords = (n) => (n > 0 ? n.toLocaleString() : '—')
+const showingLabel = computed(() => sprintf(
+  /* translators: 1: first item number on page, 2: last item number on page, 3: total number of items */
+  _n('Showing %1$s to %2$s of %3$s item', 'Showing %1$s to %2$s of %3$s items', props.items.length, 'woocommerce-exporter'),
+  startIndex.value,
+  endIndex.value,
+  props.items.length
+))
+
+const perPageLabel = computed(() => sprintf(
+  /* translators: %s: number of items shown per page */
+  __('%s per page', 'woocommerce-exporter'),
+  props.perPage
+))
+
+const formatRecords = (n) => (n > 0 ? formatCount(n) : '—')
 </script>
 
 <template>
@@ -53,11 +69,11 @@ const formatRecords = (n) => (n > 0 ? n.toLocaleString() : '—')
     <table class="w-full border-collapse bg-white border border-gray-200 rounded-[10px] overflow-hidden text-[13px]">
       <thead>
         <tr>
-          <th class="px-3.5 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">Name</th>
-          <th class="px-3.5 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">Category</th>
-          <th class="px-3.5 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap w-[35%]">Description</th>
-          <th class="px-3.5 py-2.5 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">Records</th>
-          <th class="px-3.5 py-2.5 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">Last Export</th>
+          <th class="px-3.5 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">{{ __('Name', 'woocommerce-exporter') }}</th>
+          <th class="px-3.5 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">{{ __('Category', 'woocommerce-exporter') }}</th>
+          <th class="px-3.5 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap w-[35%]">{{ __('Description', 'woocommerce-exporter') }}</th>
+          <th class="px-3.5 py-2.5 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">{{ __('Records', 'woocommerce-exporter') }}</th>
+          <th class="px-3.5 py-2.5 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-[0.05em] bg-gray-50 border-b border-gray-200 whitespace-nowrap">{{ __('Last Export', 'woocommerce-exporter') }}</th>
           <th class="px-3.5 py-2.5 bg-gray-50 border-b border-gray-200 w-[80px]" />
         </tr>
       </thead>
@@ -99,7 +115,7 @@ const formatRecords = (n) => (n > 0 ? n.toLocaleString() : '—')
               class="inline-flex items-center gap-[4px] text-xs font-semibold text-amber-700 no-underline hover:underline"
               @click.prevent="onRowAction(item)"
             >
-              <Lock :size="11" :stroke-width="2.5" /> Deluxe
+              <Lock :size="11" :stroke-width="2.5" /> {{ __('Deluxe', 'woocommerce-exporter') }}
             </a>
             <a
               v-else
@@ -107,7 +123,7 @@ const formatRecords = (n) => (n > 0 ? n.toLocaleString() : '—')
               class="inline-flex items-center gap-[3px] text-xs font-medium text-indigo-600 no-underline hover:underline hover:text-indigo-700"
               @click.prevent="onRowAction(item)"
             >
-              Export <ArrowRight :size="11" :stroke-width="2" />
+              {{ _x('Export', 'button label', 'woocommerce-exporter') }} <ArrowRight :size="11" :stroke-width="2" />
             </a>
           </td>
         </tr>
@@ -116,10 +132,10 @@ const formatRecords = (n) => (n > 0 ? n.toLocaleString() : '—')
 
     <!-- Pagination -->
     <div v-if="items.length > 0" class="flex items-center justify-between py-[2px] text-[12.5px] text-gray-500">
-      <span>Showing {{ startIndex }} to {{ endIndex }} of {{ items.length }} items</span>
+      <span>{{ showingLabel }}</span>
 
       <div class="flex items-center gap-1.5">
-        <span class="text-xs text-gray-400 mr-1.5">{{ perPage }} per page</span>
+        <span class="text-xs text-gray-400 mr-1.5">{{ perPageLabel }}</span>
         <button
           v-for="page in pages"
           :key="page"

@@ -1,4 +1,5 @@
 import { createRouter, createMemoryHistory } from 'vue-router'
+import { __ } from '@wordpress/i18n'
 import { KB_HUB_URL, KB_ARTICLES } from './docLinks'
 
 // All routes use dynamic import() so each view is its own chunk.
@@ -36,12 +37,12 @@ const routes = [
     meta: {
       helpUrl: KB_HUB_URL,
       upsell: {
-        feature: 'Scheduled Exports',
-        lead: 'Set exports to run automatically and deliver themselves — no manual runs, no timeouts.',
+        feature: __('Scheduled Exports', 'woocommerce-exporter'),
+        lead: __('Set exports to run automatically and deliver themselves — no manual runs, no timeouts.', 'woocommerce-exporter'),
         bullets: [
-          'DST-safe daily, weekly, monthly & yearly schedules',
-          'Deliver by email, SFTP/FTP, or webhook',
-          'Powered by Action Scheduler — reliable at scale',
+          __('DST-safe daily, weekly, monthly & yearly schedules', 'woocommerce-exporter'),
+          __('Deliver by email, SFTP/FTP, or webhook', 'woocommerce-exporter'),
+          __('Powered by Action Scheduler — reliable at scale', 'woocommerce-exporter'),
         ],
         utmMedium: 'scheduled_exports',
         preview: 'scheduled_exports',
@@ -55,12 +56,12 @@ const routes = [
     meta: {
       helpUrl: KB_HUB_URL,
       upsell: {
-        feature: 'Export Templates',
-        lead: 'Stop rebuilding the same field list every time. Save it as a template and pick it in one click.',
+        feature: __('Export Templates', 'woocommerce-exporter'),
+        lead: __('Stop rebuilding the same field list every time. Save it as a template and pick it in one click.', 'woocommerce-exporter'),
         bullets: [
-          'Reusable field & filter presets per export type',
-          'Shareable across manual and scheduled exports',
-          'Ready-made feeds (Google Merchant, supplier)',
+          __('Reusable field & filter presets per export type', 'woocommerce-exporter'),
+          __('Shareable across manual and scheduled exports', 'woocommerce-exporter'),
+          __('Ready-made feeds (Google Merchant, supplier)', 'woocommerce-exporter'),
         ],
         utmMedium: 'export_templates',
         preview: 'export_templates',
@@ -74,11 +75,11 @@ const routes = [
     meta: {
       helpUrl: KB_HUB_URL,
       upsell: {
-        feature: 'Archives',
-        lead: 'Deluxe keeps a history of every export file so you can re-download past runs anytime.',
+        feature: __('Archives', 'woocommerce-exporter'),
+        lead: __('Deluxe keeps a history of every export file so you can re-download past runs anytime.', 'woocommerce-exporter'),
         bullets: [
-          'Automatic retention of every generated file',
-          'Re-download without re-running the export',
+          __('Automatic retention of every generated file', 'woocommerce-exporter'),
+          __('Re-download without re-running the export', 'woocommerce-exporter'),
         ],
         utmMedium: 'archives',
         preview: 'archives',
@@ -92,11 +93,11 @@ const routes = [
     meta: {
       helpUrl: KB_HUB_URL,
       upsell: {
-        feature: 'Audit Log',
-        lead: 'Track every export and download for compliance and team accountability.',
+        feature: __('Audit Log', 'woocommerce-exporter'),
+        lead: __('Track every export and download for compliance and team accountability.', 'woocommerce-exporter'),
         bullets: [
-          'Per-user export & download history',
-          'Filterable, exportable activity trail',
+          __('Per-user export & download history', 'woocommerce-exporter'),
+          __('Filterable, exportable activity trail', 'woocommerce-exporter'),
         ],
         utmMedium: 'audit_log',
         preview: 'audit_log',

@@ -129,7 +129,7 @@ function woo_ce_extend_tag_item( $tag ) {
 		if( $meta !== false ) {
 			// Check if the WordPress Option is an array
 			if( is_array( $meta ) ) {
-				// Check if the product_cat Taxonomy exists within the WordPress Option
+                // Check if the product_tag Taxonomy exists within the WordPress Option.
 				$term_taxonomy = 'product_tag';
 				if( array_key_exists( $term_taxonomy, $meta ) ) {
 					$meta = $meta[$term_taxonomy];

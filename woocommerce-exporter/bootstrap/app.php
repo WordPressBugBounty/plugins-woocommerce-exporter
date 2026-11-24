@@ -174,7 +174,16 @@ class App {
 
             $sitewide = is_plugin_active_for_network( 'woocommerce-store-exporter/exporter.php' );
             $this->activation_actions( $sitewide );
+            return;
         }
+
+        /*
+         * On multisite the installed version is a network option, so after an upgrade
+         * only the first site that loads runs the activation code. Each site moves its
+         * own old Filename key here. An autoloaded per-site flag records that the
+         * migration ran, so later requests run no query for it.
+         */
+        Activation::migrate_filename_option();
     }
 
     /**

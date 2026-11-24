@@ -9,6 +9,8 @@ namespace VisserLabs\WSE\Classes;
 
 use Exception;
 use VisserLabs\WSE\Abstracts\Abstract_Exporter;
+use VisserLabs\WSE\Helpers\Export as Export_Helper;
+use VisserLabs\WSE\Helpers\Helper;
 use VisserLabs\WSE\Traits\Singleton_Trait;
 
 defined( 'ABSPATH' ) || exit;
@@ -21,6 +23,14 @@ defined( 'ABSPATH' ) || exit;
 class Exporter extends Abstract_Exporter {
 
     use Singleton_Trait;
+
+    /**
+     * Option that counts successful Quick Exports. uninstall.php deletes it.
+     *
+     * @since 2.8.3
+     * @var string
+     */
+    const QUICK_EXPORT_COUNT_OPTION = 'wse_quick_export_count';
 
     /**
      * The exporter.
@@ -85,6 +95,10 @@ class Exporter extends Abstract_Exporter {
      * @throws Exception If the exporter is not found.
      */
     public function ajax_prepare() {
+        // Only the request that took the lock may release it: a request refused
+        // because another export is running must leave that export's state alone.
+        $holds_lock = false;
+
         try {
             $form_data = $this->get_form_data();
 
@@ -98,6 +112,7 @@ class Exporter extends Abstract_Exporter {
 
             // Set transient with 30 minute expiration to auto-clear if export crashes.
             set_transient( WOO_CE_PREFIX . '_export_running', true, 30 * MINUTE_IN_SECONDS );
+            $holds_lock = true;
 
             $this->prepare_server();
 
@@ -112,6 +127,10 @@ class Exporter extends Abstract_Exporter {
 
             // Get default fields.
             $this->default_fields = $this->_exporter->get_default_fields();
+
+            // Must stay BEFORE the export settings are built: that is where the ID
+            // filter is parsed and a rejected range recorded.
+            Export_Helper::reset_rejected_id_ranges();
 
             // Setup & set the export settings.
             $export = $this->setup_export_settings( $form_data );
@@ -147,7 +166,14 @@ class Exporter extends Abstract_Exporter {
 
             $object_ids = $this->_exporter->get_object_ids( $export );
             if ( empty( $object_ids ) ) {
-                throw new Exception( __( 'No objects found to export.', 'woocommerce-exporter' ) );
+                // Not always the generic "no objects" message: when the ID budget
+                // discarded a range, that message says no order matched when the
+                // range was never expanded.
+                //
+                // Deliberately NOT escaped: this text is JSON-encoded and rendered
+                // as text by the SPA, so esc_html() would surface literal entities.
+                // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Rendered as text by the SPA; see above.
+                throw new Exception( Export_Helper::get_no_objects_error_message() );
             }
 
             // Generate batches in array.
@@ -167,7 +193,9 @@ class Exporter extends Abstract_Exporter {
                 )
             );
         } catch ( Exception $e ) {
-            $this->clear_export_transient();
+            if ( $holds_lock ) {
+                $this->clear_export_transient();
+            }
             wp_send_json_error( array( 'message' => $e->getMessage() ) );
         }
     }
@@ -189,7 +217,7 @@ class Exporter extends Abstract_Exporter {
              * This is the only way to do it currently without changing the whole logic of the plugin.
              */
             global $export;
-            $export = get_transient( WOO_CE_PREFIX . '_export_settings' );
+            $export = self::restore_legacy_line_ending( get_transient( WOO_CE_PREFIX . '_export_settings' ) );
 
             if ( empty( $export ) ) {
                 throw new Exception( __( 'Export arguments not found.', 'woocommerce-exporter' ) );
@@ -238,12 +266,27 @@ class Exporter extends Abstract_Exporter {
                     )
                 );
 
-                wp_send_json_success(
-                    array(
-                        'done'     => true,
-                        'file_url' => add_query_arg( $query_args, admin_url( 'admin.php?page=woo_ce&tab=export' ) ),
-                    )
+                $response = array(
+                    'done'     => true,
+                    'file_url' => add_query_arg( $query_args, admin_url( 'admin.php?page=woo_ce&tab=export' ) ),
                 );
+
+                // Count every successful Quick Export. The 1st and every 10th one
+                // show the upgrade card, but only to users who can install
+                // the Deluxe plugin. Exports from the classic tab=export screen also
+                // count on purpose: the count is for all Quick Exports, but only the
+                // admin app shows the card. The read and the write are not atomic, but the
+                // 30-minute run lock stops two exports from finishing together, so a
+                // lost count is rare and harmless.
+                $quick_export_count = (int) get_option( self::QUICK_EXPORT_COUNT_OPTION, 0 ) + 1;
+                update_option( self::QUICK_EXPORT_COUNT_OPTION, $quick_export_count, false );
+
+                if ( current_user_can( 'install_plugins' ) && Helper::is_post_export_prompt_count( $quick_export_count ) ) {
+                    $response['post_export_prompt'] = 'upgrade';
+                    $response['upgrade_url']        = woo_ce_get_post_export_upsell_url();
+                }
+
+                wp_send_json_success( $response );
             } else {
                 wp_send_json_success(
                     array(
@@ -344,6 +387,29 @@ class Exporter extends Abstract_Exporter {
          * @param array  $form_data The form data from front end export form.
          */
         do_action( 'wsed_save_export_fields', $export, $form_data );
+    }
+
+    /**
+     * Give a settings object restored from a pre-2.8.3 transient the terminator
+     * its already-written rows used.
+     *
+     * Before 2.8.3 every row ended in "\n" and the settings object carried no
+     * `line_ending` property. A batch that resumes from such a transient after
+     * the upgrade, or the download that counts the finished file's rows, has to
+     * keep LF. Reading the option instead would switch terminator mid-file.
+     *
+     * @since 2.8.3
+     * @access public
+     *
+     * @param mixed $export Settings object read from a transient, or any falsy value when there was none.
+     * @return mixed The settings object with `line_ending` filled in, or the value unchanged.
+     */
+    public static function restore_legacy_line_ending( $export ) {
+        if ( is_object( $export ) && ! isset( $export->line_ending ) ) {
+            $export->line_ending = "\n";
+        }
+
+        return $export;
     }
 
     /**

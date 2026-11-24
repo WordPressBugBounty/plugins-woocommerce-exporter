@@ -1,4 +1,5 @@
 <script setup>
+import { __ } from '@wordpress/i18n'
 import BaseCheckbox from './BaseCheckbox.vue'
 
 defineProps({
@@ -11,17 +12,17 @@ defineEmits(['update:modelValue'])
   <div class="wse-ui-availability-checkboxes">
     <BaseCheckbox
       :model-value="modelValue.quick_export"
-      label="Quick Export"
+      :label="__('Quick Export', 'woocommerce-exporter')"
       @update:model-value="v => $emit('update:modelValue', { ...modelValue, quick_export: v })"
     />
     <BaseCheckbox
       :model-value="modelValue.scheduled_export"
-      label="Scheduled Export"
+      :label="__('Scheduled Export', 'woocommerce-exporter')"
       @update:model-value="v => $emit('update:modelValue', { ...modelValue, scheduled_export: v })"
     />
     <BaseCheckbox
       :model-value="modelValue.export_template"
-      label="Export Templates"
+      :label="__('Export Templates', 'woocommerce-exporter')"
       @update:model-value="v => $emit('update:modelValue', { ...modelValue, export_template: v })"
     />
   </div>

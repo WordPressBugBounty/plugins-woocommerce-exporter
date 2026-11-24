@@ -1,9 +1,10 @@
 <script setup>
 import { Search, X } from 'lucide-vue-next'
+import { __ } from '@wordpress/i18n'
 
 defineProps({
   modelValue: { type: String, default: '' },
-  placeholder: { type: String, default: 'Search...' }
+  placeholder: { type: String, default: () => __('Search...', 'woocommerce-exporter') }
 })
 
 defineEmits(['update:modelValue'])
@@ -22,7 +23,7 @@ defineEmits(['update:modelValue'])
       v-if="modelValue"
       type="button"
       class="flex-shrink-0 flex items-center justify-center w-4 h-4 rounded-full bg-gray-300 hover:bg-gray-400 transition-colors cursor-pointer border-0 p-0"
-      aria-label="Clear search"
+      :aria-label="__('Clear search', 'woocommerce-exporter')"
       @click="$emit('update:modelValue', '')"
     >
       <X :size="10" color="#fff" :stroke-width="2.5" />

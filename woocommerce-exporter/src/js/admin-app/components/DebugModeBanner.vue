@@ -12,6 +12,8 @@
  */
 import { storeToRefs } from 'pinia'
 import { AlertTriangle } from 'lucide-vue-next'
+import I18nText from './ui/I18nText.vue'
+import { __ } from '@wordpress/i18n'
 import { useSettingsStore } from '../stores/settings'
 
 const { debugModeActive } = storeToRefs(useSettingsStore())
@@ -33,12 +35,13 @@ const { debugModeActive } = storeToRefs(useSettingsStore())
       COPY SYNC — this sentence also lives in the legacy admin notice
       (includes/functions.php, woo_ce_admin_fail_notices) and in the AJAX
       refusal payload (includes/functions.php, woo_ce_send_debug_mode_error).
-      Change one, change all three. The SPA is hardcoded English throughout, so
-      this copy is deliberately not translated.
+      Change one, change all three. The msgid is the same in all three places.
     -->
+    <!-- translators: %s: the PHP constant name, WOO_CE_DEBUG -->
     <span class="m-0 text-xs text-amber-800 leading-normal">
-      Store Exporter is currently in debugging mode (<code>WOO_CE_DEBUG</code>). Exports are
-      refused and no export files are generated until debugging mode is de-activated.
+      <I18nText :text="__('Store Exporter is currently in debugging mode (%s). Exports are refused and no export files are generated until debugging mode is de-activated.', 'woocommerce-exporter')">
+        <template #1><code>WOO_CE_DEBUG</code></template>
+      </I18nText>
     </span>
   </div>
 </template>

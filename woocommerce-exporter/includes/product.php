@@ -1858,15 +1858,24 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
     }
 
     // Filter Products by Language.
+    $wpml_where_filters = array();
     if ( $product_language ) {
 
-        global $sitepress;
+        global $sitepress, $wpml_query_filter;
 
-        if ( method_exists( $sitepress, 'posts_where_filter' ) ) {
-            remove_filter( 'posts_where', array( $sitepress, 'posts_where_filter' ), 10 );
+        /*
+         * Lift WPML's own current-language clause for this query, or it is ANDed with
+         * the selected languages and a non-default language matches nothing.
+         * WPML 4.x hooks it on $wpml_query_filter; older releases on $sitepress.
+         */
+        foreach ( array( $wpml_query_filter, $sitepress ) as $wpml_object ) {
+            $wpml_callback = array( $wpml_object, 'posts_where_filter' );
+            $wpml_priority = is_object( $wpml_object ) ? has_filter( 'posts_where', $wpml_callback ) : false;
+            if ( false !== $wpml_priority ) {
+                remove_filter( 'posts_where', $wpml_callback, $wpml_priority );
+                $wpml_where_filters[] = array( $wpml_callback, $wpml_priority );
+            }
         }
-		add_filter( 'posts_where', 'woo_ce_wp_query_product_where_override_language' );
-		add_filter( 'posts_where', 'woo_ce_wp_query_product_where_override_language' );
 
         add_filter( 'posts_where', 'woo_ce_wp_query_product_where_override_language' );
 
@@ -2497,11 +2506,9 @@ function woo_ce_get_products( $args = array(), $export = array() ) {
 
     // Filter Products by Language.
     if ( $product_language ) {
-
-        global $sitepress;
-
-        if ( method_exists( $sitepress, 'posts_where_filter' ) ) {
-            add_filter( 'posts_where', array( $sitepress, 'posts_where_filter' ), 10, 2 );
+        // Put back exactly the WPML clauses lifted above, at their original priority.
+        foreach ( $wpml_where_filters as $wpml_where_filter ) {
+            add_filter( 'posts_where', $wpml_where_filter[0], $wpml_where_filter[1], 2 );
         }
         remove_filter( 'posts_where', 'woo_ce_wp_query_product_where_override_language' );
     }
@@ -2745,7 +2752,7 @@ function woo_ce_get_product_data( $product_id = 0, $args = array(), $fields = ar
         if ( isset( $export->export_format ) && $export->export_format == 'xlsx' ) {
             if ( $metadata = wp_get_attachment_metadata( $image_id ) ) {
                 // Override for the image embed thumbnail size; use registered WordPress image size names.
-                $thumbnail_size = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'shop_thumbnail' );
+                $thumbnail_size = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'woocommerce_thumbnail' );
                 if ( isset( $metadata['sizes'][ $thumbnail_size ] ) && $metadata['sizes'][ $thumbnail_size ]['file'] ) {
                     $image_path           = pathinfo( $metadata['file'] );
                     $product->image_embed = trailingslashit( $upload_dir['basedir'] ) . trailingslashit( $image_path['dirname'] ) . $metadata['sizes'][ $thumbnail_size ]['file'];
@@ -2782,7 +2789,7 @@ function woo_ce_get_product_data( $product_id = 0, $args = array(), $fields = ar
                 if ( isset( $export->export_format ) && $export->export_format == 'xlsx' ) {
                     if ( $metadata = wp_get_attachment_metadata( $image_id ) ) {
                         // Override for the image embed thumbnail size; use registered WordPress image size names.
-                        $thumbnail_size = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'shop_thumbnail' );
+                        $thumbnail_size = apply_filters( 'woo_ce_override_embed_thumbnail_size', 'woocommerce_thumbnail' );
                         if ( isset( $metadata['sizes'][ $thumbnail_size ] ) && $metadata['sizes'][ $thumbnail_size ]['file'] ) {
                             $image_path = pathinfo( $metadata['file'] );
                             // Override for using relative image embed filepath.
@@ -4034,7 +4041,7 @@ function woo_ce_get_product_attributes( $slice = '' ) {
 
         $output = array();
         // Check if there are any records in wp_woocommerce_attribute_taxonomies.
-        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'woocommerce_attribute_taxonomies' ) ) ) {
+        if ( woo_ce_table_exists( $wpdb->prefix . 'woocommerce_attribute_taxonomies' ) ) {
             $attributes = $wpdb->get_results( 'SELECT * FROM `' . esc_sql( $wpdb->prefix ) . 'woocommerce_attribute_taxonomies`' );
             $wpdb->flush();
             if ( WOO_CE_LOGGING ) {
@@ -4054,9 +4061,11 @@ function woo_ce_get_product_attributes( $slice = '' ) {
     if ( ! empty( $custom_attributes ) ) {
         foreach ( $custom_attributes as $custom_attribute ) {
             if ( ! empty( $custom_attribute ) ) {
+                // Capped at 48 characters whether or not the field builders' sanitize_key filter is
+                // hooked, so the field name and the value written for a Product always match.
                 $output[] = (object) array(
                     'attribute_id'      => 0,
-                    'attribute_name'    => remove_accents( sanitize_key( $custom_attribute ) ),
+                    'attribute_name'    => remove_accents( woo_ce_filter_sanitize_key( sanitize_key( $custom_attribute ) ) ),
                     'attribute_label'   => $custom_attribute,
                     'attribute_type'    => 'select',
                     'attribute_orderby' => 'menu_order',

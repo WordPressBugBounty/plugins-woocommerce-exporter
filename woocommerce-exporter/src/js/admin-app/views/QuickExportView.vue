@@ -2,6 +2,7 @@
 import { onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
+import { __, _n, sprintf } from '@wordpress/i18n'
 import {
   ChevronDown, ChevronRight,
   Zap, ArrowLeft, Check,
@@ -9,7 +10,8 @@ import {
   List, Box, FileText,
   Filter as FilterIcon, ArrowUpDown,
 } from 'lucide-vue-next'
-import { BaseButton } from '../components/ui/index'
+import { formatCount } from '../lib/formatWpDate'
+import { BaseButton, I18nText } from '../components/ui/index'
 import { useQuickExportStore, STEPS } from '../stores/quickExport'
 import { useOverviewStore } from '../stores/overview'
 import { useToastsStore } from '../stores/toasts'
@@ -32,8 +34,8 @@ const toasts = useToastsStore()
 const {
   config, configLoading, configError,
   expandedStep, activeStep,
-  selectedType, enabledFieldNames,
-  currentFields, currentFilters,
+  selectedType, exportFieldCount,
+  currentFilters,
   filterValues, sortField, sortDirection,
   exportFormat,
   showManageFields, showExportProgress,
@@ -62,21 +64,6 @@ const typeSummary = computed(() => {
   return config.value.types.find(t => t.slug === selectedType.value)?.label ?? null
 })
 
-const fieldsChips = computed(() => {
-  if (!selectedType.value || !currentFields.value?.groups) return []
-  const all = []
-  currentFields.value.groups.forEach(g => g.fields.forEach(f => all.push(f)))
-  const enabled = all.filter(f => store.getFieldEnabled(selectedType.value, f.name))
-  const order = store.fieldOrder[selectedType.value]
-  if (!order || !order.length) return enabled
-  return [...enabled].sort((a, b) => {
-    const ai = order.indexOf(a.name), bi = order.indexOf(b.name)
-    if (ai === -1 && bi === -1) return 0
-    if (ai === -1) return 1; if (bi === -1) return -1
-    return ai - bi
-  })
-})
-
 const activeFilterCount = computed(() => {
   if (!selectedType.value) return 0
   return Object.values(filterValues.value[selectedType.value] ?? {}).filter(v => v && v !== false && v !== '').length
@@ -91,7 +78,37 @@ const sortFieldLabel = computed(() => {
 const sortSummary = computed(() => {
   if (!sortFieldLabel.value) return null
   const dir = sortDirection.value[selectedType.value] ?? 'ASC'
-  return `${sortFieldLabel.value} (${dir === 'ASC' ? 'Asc' : 'Desc'})`
+  /* translators: 1: sort field label, 2: sort direction (Asc or Desc) */
+  return sprintf(__('%1$s (%2$s)', 'woocommerce-exporter'), sortFieldLabel.value, dir === 'ASC' ? __('Asc', 'woocommerce-exporter') : __('Desc', 'woocommerce-exporter'))
+})
+
+// Rendered by I18nText, which puts the bold export type name in the placeholder.
+/* translators: %s: export type name, shown in bold */
+const noRecordsMessage = __('The selected %s export has 0 records. Pick a different type, or refresh to recheck.', 'woocommerce-exporter')
+
+const fieldsSelectedLabel = computed(() => {
+  /* translators: %s: formatted number of selected fields */
+  return sprintf(_n('%s Field Selected', '%s Fields Selected', exportFieldCount.value, 'woocommerce-exporter'), formatCount(exportFieldCount.value))
+})
+
+const filterCountLabel = computed(() => {
+  /* translators: %s: formatted number of active filters */
+  return sprintf(_n('%s Filter', '%s Filters', activeFilterCount.value, 'woocommerce-exporter'), formatCount(activeFilterCount.value))
+})
+
+const sortedByLabel = computed(() => {
+  /* translators: %s: sort field label and direction */
+  return sprintf(__('Sorted by: %s', 'woocommerce-exporter'), sortSummary.value ?? '')
+})
+
+const formatSummaryLabel = computed(() => {
+  /* translators: %s: export file format, e.g. CSV */
+  return sprintf(__('Format: %s', 'woocommerce-exporter'), formatLabel.value)
+})
+
+const templateSummaryLabel = computed(() => {
+  /* translators: %s: export template name */
+  return sprintf(__('Template: %s', 'woocommerce-exporter'), templateLabel.value ?? '')
 })
 
 const formatLabel = computed(() => exportFormat.value?.toUpperCase() ?? 'CSV')
@@ -102,6 +119,13 @@ const templateLabel = computed(() => {
 })
 
 const estimatedRows  = computed(() => currentTypeConfig.value?.records ?? 0)
+const summaryStats = computed(() => [
+  { label: __('Export type', 'woocommerce-exporter'),    value: typeSummary.value ?? '—' },
+  { label: __('Fields', 'woocommerce-exporter'),         value: exportFieldCount.value || '—' },
+  { label: __('Filters', 'woocommerce-exporter'),        value: activeFilterCount.value },
+  { label: __('Format', 'woocommerce-exporter'),         value: formatLabel.value },
+  { label: __('Estimated rows', 'woocommerce-exporter'), value: '~' + formatCount(estimatedRows.value) },
+])
 const selectedHasNoRecords = computed(() => !!currentTypeConfig.value && currentTypeConfig.value.records === 0)
 
 // ── Mount ────────────────────────────────────────────────────────────────────
@@ -112,11 +136,16 @@ onMounted(async () => {
   const templateId = route.query.template_id
   if (templateId) {
     try {
-      const templateData = await api.get(`export-templates/${templateId}`)
+      // Encoded for the same reason as every other route-derived path value (issue #121).
+      // Nothing can reach this today — main.js forwards only ?type= into a memory-history
+      // router — so it guards the day something can.
+      const templateData = await api.get(`export-templates/${encodeURIComponent(templateId)}`)
       await store.applyTemplate(templateData)
     } catch {
       // Silently fail — Quick Export opens normally without preselection
     }
+  } else {
+    store.preselectType(route.query.type)
   }
 })
 </script>
@@ -126,20 +155,20 @@ onMounted(async () => {
     <!-- Page header -->
     <div class="wse-header">
       <div>
-        <h1 class="wse-page-title">Quick Export</h1>
-        <p class="wse-page-sub">Configure and run a one-time export operation instantly.</p>
+        <h1 class="wse-page-title">{{ __('Quick Export', 'woocommerce-exporter') }}</h1>
+        <p class="wse-page-sub">{{ __('Configure and run a one-time export operation instantly.', 'woocommerce-exporter') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button class="wse-qe-back inline-flex items-center gap-[5px] bg-transparent border-[1.5px] border-gray-200 rounded-lg text-[12.5px] font-medium text-gray-700 py-[6px] px-3 cursor-pointer hover:bg-gray-100" @click="router.push('/')">
           <ArrowLeft :size="14" :stroke-width="2" />
-          Back
+          {{ __('Back', 'woocommerce-exporter') }}
         </button>
         <button class="wse-qe-cancel bg-transparent border-[1.5px] border-gray-200 rounded-lg text-[12.5px] font-medium text-gray-700 py-[6px] px-3.5 cursor-pointer hover:bg-gray-100" @click="store.reset(); router.push('/')">
-          Cancel
+          {{ __('Cancel', 'woocommerce-exporter') }}
         </button>
-        <BaseButton data-testid="quick-export-run" class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
+        <BaseButton data-testid="quick-export-run-header" class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
           <template #icon><Zap :size="13" color="#fff" fill="#fff" :stroke-width="1.75" /></template>
-          Run Export
+          {{ __('Run Export', 'woocommerce-exporter') }}
         </BaseButton>
         <PageActions />
       </div>
@@ -147,7 +176,7 @@ onMounted(async () => {
 
     <!-- Loading / error states -->
     <div v-if="configLoading" class="wse-loading">
-      <span class="wse-spinner" /> Loading…
+      <span class="wse-spinner" /> {{ __('Loading…', 'woocommerce-exporter') }}
     </div>
     <div v-else-if="configError" class="wse-error">{{ configError }}</div>
 
@@ -172,8 +201,8 @@ onMounted(async () => {
                 <Box :size="18" color="#6C7BFF" :stroke-width="1.75" />
               </span>
               <div class="flex flex-col gap-[1px] flex-1 min-w-0">
-                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">Select Export Type</span>
-                <span class="text-[11.5px] text-gray-400 leading-[1.3]">Choose what you want to export.</span>
+                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">{{ __('Select Export Type', 'woocommerce-exporter') }}</span>
+                <span class="text-[11.5px] text-gray-400 leading-[1.3]">{{ __('Choose what you want to export.', 'woocommerce-exporter') }}</span>
               </div>
               <div v-if="typeSummary && expandedStep !== 'type'" class="flex items-center gap-1.5 flex-wrap flex-shrink-0">
                 <span class="text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] py-[3px] px-2 whitespace-nowrap">{{ typeSummary }}</span>
@@ -187,8 +216,8 @@ onMounted(async () => {
           <div v-if="selectedHasNoRecords" class="flex items-center gap-3 py-3.5 px-4 bg-red-50 border border-red-200 rounded-[10px] my-3 mx-[18px]">
             <AlertCircle :size="18" color="#DC2626" :stroke-width="1.75" />
             <div class="flex-1 min-w-0">
-              <p class="text-[13.5px] font-semibold text-red-700 m-0 mb-0.5">No records to export</p>
-              <p class="text-[12.5px] text-red-900 m-0">The selected <strong>{{ typeSummary }}</strong> export has 0 records. Pick a different type, or refresh to recheck.</p>
+              <p class="text-[13.5px] font-semibold text-red-700 m-0 mb-0.5">{{ __('No records to export', 'woocommerce-exporter') }}</p>
+              <p class="text-[12.5px] text-red-900 m-0"><I18nText :text="noRecordsMessage"><template #1><strong>{{ typeSummary }}</strong></template></I18nText></p>
             </div>
           </div>
 
@@ -209,13 +238,13 @@ onMounted(async () => {
                 <List :size="18" color="#6C7BFF" :stroke-width="1.75" />
               </span>
               <div class="flex flex-col gap-[1px] flex-1 min-w-0">
-                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">Export Fields</span>
-                <span class="text-[11.5px] text-gray-400 leading-[1.3]">Select and organize the fields to include in your export.</span>
+                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">{{ __('Export Fields', 'woocommerce-exporter') }}</span>
+                <span class="text-[11.5px] text-gray-400 leading-[1.3]">{{ __('Select and organize the fields to include in your export.', 'woocommerce-exporter') }}</span>
               </div>
-              <div v-if="fieldsChips.length && expandedStep !== 'fields'" class="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+              <div v-if="exportFieldCount && expandedStep !== 'fields'" class="flex items-center gap-1.5 flex-wrap flex-shrink-0">
                 <span class="inline-flex items-center gap-[5px] py-1 px-[9px] text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] whitespace-nowrap">
                   <Database :size="11" :stroke-width="2" />
-                  {{ fieldsChips.length }} Fields Selected
+                  {{ fieldsSelectedLabel }}
                 </span>
               </div>
               <component :is="expandedStep === 'fields' ? ChevronDown : ChevronRight" :size="15" color="#9CA3AF" :stroke-width="2" />
@@ -240,17 +269,17 @@ onMounted(async () => {
                 <FilterIcon :size="18" color="#6C7BFF" :stroke-width="1.75" />
               </span>
               <div class="flex flex-col gap-[1px] flex-1 min-w-0">
-                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">Filters &amp; Sorting</span>
-                <span class="text-[11.5px] text-gray-400 leading-[1.3]">Filter data and sort the results to export exactly what you need.</span>
+                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">{{ __('Filters & Sorting', 'woocommerce-exporter') }}</span>
+                <span class="text-[11.5px] text-gray-400 leading-[1.3]">{{ __('Filter data and sort the results to export exactly what you need.', 'woocommerce-exporter') }}</span>
               </div>
               <div v-if="expandedStep !== 'filters'" class="flex items-center gap-1.5 flex-wrap flex-shrink-0">
                 <span v-if="activeFilterCount > 0" class="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] py-[3px] px-2 whitespace-nowrap">
                   <FilterIcon :size="11" :stroke-width="2" />
-                  {{ activeFilterCount }} Filter{{ activeFilterCount > 1 ? 's' : '' }}
+                  {{ filterCountLabel }}
                 </span>
                 <span v-if="sortSummary" class="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] py-[3px] px-2 whitespace-nowrap">
                   <ArrowUpDown :size="11" :stroke-width="2" />
-                  Sorted by: {{ sortSummary }}
+                  {{ sortedByLabel }}
                 </span>
               </div>
               <component :is="expandedStep === 'filters' ? ChevronDown : ChevronRight" :size="15" color="#9CA3AF" :stroke-width="2" />
@@ -275,12 +304,12 @@ onMounted(async () => {
                 <FileText :size="18" color="#6C7BFF" :stroke-width="1.75" />
               </span>
               <div class="flex flex-col gap-[1px] flex-1 min-w-0">
-                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">Export Options</span>
-                <span class="text-[11.5px] text-gray-400 leading-[1.3]">Choose file format, template and advanced export settings.</span>
+                <span class="text-[13.5px] font-semibold text-gray-900 leading-[1.3]">{{ __('Export Options', 'woocommerce-exporter') }}</span>
+                <span class="text-[11.5px] text-gray-400 leading-[1.3]">{{ __('Choose file format, template and advanced export settings.', 'woocommerce-exporter') }}</span>
               </div>
               <div v-if="expandedStep !== 'options'" class="flex items-center gap-1.5 flex-wrap flex-shrink-0">
-                <span class="text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] py-[3px] px-2 whitespace-nowrap">Format: {{ formatLabel }}</span>
-                <span v-if="templateLabel" class="text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] py-[3px] px-2 whitespace-nowrap">Template: {{ templateLabel }}</span>
+                <span class="text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] py-[3px] px-2 whitespace-nowrap">{{ formatSummaryLabel }}</span>
+                <span v-if="templateLabel" class="text-[11.5px] font-medium text-gray-700 bg-gray-100 rounded-[5px] py-[3px] px-2 whitespace-nowrap">{{ templateSummaryLabel }}</span>
               </div>
               <component :is="expandedStep === 'options' ? ChevronDown : ChevronRight" :size="15" color="#9CA3AF" :stroke-width="2" />
             </button>
@@ -296,18 +325,12 @@ onMounted(async () => {
           <Zap :size="18" color="#F59E0B" fill="#F59E0B" />
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-[13.5px] font-semibold text-gray-900 m-0 mb-0.5">You're almost ready to export!</p>
-          <p class="text-xs text-gray-500 m-0">Review your selections above and run the export.</p>
+          <p class="text-[13.5px] font-semibold text-gray-900 m-0 mb-0.5">{{ __("You're almost ready to export!", 'woocommerce-exporter') }}</p>
+          <p class="text-xs text-gray-500 m-0">{{ __('Review your selections above and run the export.', 'woocommerce-exporter') }}</p>
         </div>
         <div class="flex gap-5 flex-wrap">
           <div
-            v-for="stat in [
-              { label: 'EXPORT TYPE',    value: typeSummary ?? '—' },
-              { label: 'FIELDS',         value: enabledFieldNames.length || '—' },
-              { label: 'FILTERS',        value: activeFilterCount },
-              { label: 'FORMAT',         value: formatLabel },
-              { label: 'ESTIMATED ROWS', value: '~' + estimatedRows.toLocaleString() },
-            ]"
+            v-for="stat in summaryStats"
             :key="stat.label"
             class="flex flex-col gap-0.5"
           >
@@ -316,10 +339,10 @@ onMounted(async () => {
           </div>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <button class="wse-qe-cancel inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100" @click="store.reset(); router.push('/')">Cancel</button>
-          <BaseButton data-testid="quick-export-run" class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
+          <button class="wse-qe-cancel inline-flex items-center gap-[5px] rounded-lg text-[12.5px] font-semibold py-[7px] px-3.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100" @click="store.reset(); router.push('/')">{{ __('Cancel', 'woocommerce-exporter') }}</button>
+          <BaseButton data-testid="quick-export-run-summary" class="wse-qe-run shadow-[0_1px_4px_rgba(108,123,255,0.3)]" :disabled="!canRunExport" @click="store.startExport()">
             <template #icon><Zap :size="13" color="#fff" fill="#fff" :stroke-width="1.75" /></template>
-            Run Export
+            {{ __('Run Export', 'woocommerce-exporter') }}
           </BaseButton>
         </div>
       </div>

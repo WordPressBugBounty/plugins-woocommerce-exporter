@@ -1046,11 +1046,8 @@ if ( is_admin() ) {
                 // We need to verify the nonce.
                 if ( ! empty( $_GET ) && check_admin_referer( 'woo_ce_refresh_module_counts' ) ) {
 
-                    // Delete the existing count Transients.
-                    delete_transient( WOO_CE_PREFIX . '_modules_active' );
-                    delete_transient( WOO_CE_PREFIX . '_modules_all_count' );
-                    delete_transient( WOO_CE_PREFIX . '_modules_active_count' );
-                    delete_transient( WOO_CE_PREFIX . '_modules_inactive_count' );
+                    // Delete the existing module Transients.
+                    woo_ce_clear_modules_cache();
 
                     // Refresh the count Transients.
                     woo_ce_modules_list();
@@ -2089,6 +2086,36 @@ function woo_ce_raise_export_memory_limit() {
 }
 
 /**
+ * Map the export args of a term export type onto get_terms() query args.
+ *
+ * The export engine stores the chosen sort under type-prefixed keys
+ * (`category_orderby`, `tag_order`, ...) and the volume options as
+ * `limit_volume` / `offset`, none of which get_terms() reads.
+ *
+ * @since 2.8.3
+ *
+ * @param array  $args        The export args.
+ * @param string $export_type The term export type, e.g. `category` or `tag`.
+ * @return array The args with `orderby`, `order`, `number` and `offset` set.
+ */
+function woo_ce_get_term_export_query_args( $args, $export_type ) {
+    foreach ( array( 'orderby', 'order' ) as $key ) {
+        if ( ! empty( $args[ $export_type . '_' . $key ] ) ) {
+            $args[ $key ] = $args[ $export_type . '_' . $key ];
+        }
+    }
+
+    if ( isset( $args['limit_volume'] ) ) {
+        // Like the post-based exports, Volume offset only applies together with a Limit volume.
+        $args['number'] = max( 0, (int) $args['limit_volume'] );
+        $args['offset'] = ( $args['number'] && isset( $args['offset'] ) ? absint( $args['offset'] ) : 0 );
+        unset( $args['limit_volume'] );
+    }
+
+    return $args;
+}
+
+/**
  * Export process for CSV file.
  *
  * @param string $export_type Export type.
@@ -2103,7 +2130,6 @@ function woo_ce_export_dataset( $export_type = null, &$output = null ) {
 	}
 
 	$separator             = $export->delimiter;
-	$line_ending           = woo_ce_get_line_ending();
 	$export->columns       = array();
 	$export->total_rows    = 0;
 	$export->total_columns = 0;
@@ -2131,7 +2157,7 @@ function woo_ce_export_dataset( $export_type = null, &$output = null ) {
 					$export->columns[] = woo_ce_get_product_field( $key );
 				}
 			}
-			if ( $export->args['gallery_unique'] ) {
+			if ( ! empty( $export->args['gallery_unique'] ) ) {
 				$export->fields  = woo_ce_unique_product_gallery_fields( $export->fields );
 				$export->columns = woo_ce_unique_product_gallery_columns( $export->columns, $export->fields );
 			}
@@ -2734,7 +2760,17 @@ function woo_ce_get_export_type_upsell_url( $export_type = '' ) {
 		'?utm_source=wse&utm_medium=export&utm_campaign=exporttype%slink',
 		str_replace( '_', '', $export_type )
 	);
-	return esc_url_raw( 'https://visser.com.au/plugins/woocommerce-export/' . $utm );
+	return esc_url_raw( WOO_CE_UPSELL_URL . $utm );
+}
+
+/**
+ * Build the marketing upsell URL for the upgrade card shown after a Quick Export.
+ *
+ * @since 2.8.3
+ * @return string Upsell URL with campaign UTM parameters.
+ */
+function woo_ce_get_post_export_upsell_url() {
+	return esc_url_raw( WOO_CE_UPSELL_URL . '?utm_source=wse&utm_medium=exportcomplete&utm_campaign=postexportupgradebutton' );
 }
 
 /**
@@ -2788,7 +2824,7 @@ function woo_ce_is_premium_export_format( $format = '' ) {
  */
 function woo_ce_get_export_format_upsell_url( $format = '' ) {
 	$utm = sprintf( '?utm_source=wse&utm_medium=export&utm_campaign=optionsformat%slink', sanitize_key( $format ) );
-	return esc_url_raw( 'https://visser.com.au/plugins/woocommerce-export/' . $utm );
+	return esc_url_raw( WOO_CE_UPSELL_URL . $utm );
 }
 
 /**
@@ -2974,6 +3010,9 @@ function woo_ce_generate_file_headers( $post_mime_type = 'text/csv' ) {
 /**
  * Generate filename of export file based on the Export type.
  *
+ * @since 2.8.3 Tags are resolved by Export_Helper::resolve_filename_tags(), so `{type}`-style tags work alongside the legacy `%dataset%` ones.
+ *              The date and time tags now use UTC, as the Quick Export already did. They used the site's local time here before.
+ *
  * @param string $export_type Export type.
  * @param string $override    Override filename.
  * @return string Generated filename.
@@ -2982,65 +3021,14 @@ function woo_ce_generate_filename( $export_type = '', $override = '' ) {
 
 	global $export;
 
-	// Check if a fixed filename hasn't been provided.
-	if ( ! empty( $override ) ) {
-		$filename = $override;
-	} else {
-		// Get the filename from WordPress options.
-		$filename = woo_ce_get_option( 'export_filename', '%store_name%-export_%dataset%-%date%-%time%-%random%' );
-		// Check for empty filename.
-		if ( empty( $filename ) ) {
-			$filename = '%store_name%-export_%dataset%-%date%-%time%-%random%';
-		}
-		// Strip file extensions if present.
-		$filename = str_replace( array( '.csv', '.tsv', '.txt', '.xls', '.xlsx', '.xml', '.rss', '.json' ), '', $filename );
-	}
+	// Use a fixed filename if one was provided, otherwise the saved Filename pattern.
+	$filename = ( ! empty( $override ) ? $override : \VisserLabs\WSE\Helpers\Export::get_filename_pattern() );
+
+	// Only scheduled exports triggered by a single order carry an order ID, and only the order_id tag needs it.
+	$order_id = ( false !== strpos( $filename, 'order_id' ) && ! empty( $export->scheduled_export ) ? absint( get_transient( WOO_CE_PREFIX . '_single_export_post_ids' ) ) : 0 );
 
 	// Switch out the Tags for filled values.
-	$filename = str_replace( '%dataset%', $export_type, $filename );
-	if ( strstr( $filename, '%date%' ) !== false ) {
-		$date     = apply_filters( 'woo_ce_filename_tag_date', gmdate( 'Y_m_d', current_time( 'timestamp' ) ) );
-		$filename = str_replace( '%date%', $date, $filename );
-	}
-	if ( strstr( $filename, '%year%' ) !== false ) {
-		$year     = apply_filters( 'woo_ce_filename_tag_year', gmdate( 'Y', current_time( 'timestamp' ) ) );
-		$filename = str_replace( '%year%', $year, $filename );
-	}
-	if ( strstr( $filename, '%month%' ) !== false ) {
-		$month    = apply_filters( 'woo_ce_filename_tag_month', gmdate( 'm', current_time( 'timestamp' ) ) );
-		$filename = str_replace( '%month%', $month, $filename );
-	}
-	if ( strstr( $filename, '%day%' ) !== false ) {
-		$day      = apply_filters( 'woo_ce_filename_tag_day', gmdate( 'd', current_time( 'timestamp' ) ) );
-		$filename = str_replace( '%day%', $day, $filename );
-	}
-	if ( strstr( $filename, '%time%' ) !== false ) {
-		$time     = apply_filters( 'woo_ce_filename_tag_time', gmdate( 'H_i_s', current_time( 'timestamp' ) ) );
-		$filename = str_replace( '%time%', $time, $filename );
-	}
-	if ( strstr( $filename, '%hour%' ) !== false ) {
-		$hour     = apply_filters( 'woo_ce_filename_tag_hour', gmdate( 'H', current_time( 'timestamp' ) ) );
-		$filename = str_replace( '%hour%', $hour, $filename );
-	}
-	if ( strstr( $filename, '%minute%' ) !== false ) {
-		$minute   = apply_filters( 'woo_ce_filename_tag_minute', gmdate( 'i', current_time( 'timestamp' ) ) );
-		$filename = str_replace( '%minute%', $minute, $filename );
-	}
-	if ( strstr( $filename, '%random%' ) !== false ) {
-		$random   = wp_rand( 10000000, 99999999 );
-		$filename = str_replace( '%random%', $random, $filename );
-	}
-	if ( strstr( $filename, '%store_name%' ) !== false ) {
-		$store_name = sanitize_title( get_bloginfo( 'name' ) );
-		$filename   = str_replace( '%store_name%', $store_name, $filename );
-	}
-	if ( strstr( $filename, '%order_id%' ) !== false ) {
-		// Check if the Transient is set.
-		$order_id = ( $export->scheduled_export ? absint( get_transient( WOO_CE_PREFIX . '_single_export_post_ids' ) ) : 0 );
-		if ( ! empty( $order_id ) ) {
-			$filename = str_replace( '%order_id%', $order_id, $filename );
-		}
-	}
+	$filename = \VisserLabs\WSE\Helpers\Export::resolve_filename_tags( $filename, $export_type, ( isset( $export->export_format ) ? $export->export_format : '' ), $order_id );
 
 	// Allow Plugin/Theme authors to add Tags to the filename as needed.
 	$filename = apply_filters( 'woo_ce_generate_filename', $filename );
@@ -3630,6 +3618,15 @@ function woo_ce_validate_ip( $ip ) {
 /**
  * Get line ending.
  *
+ * The single source of truth for the Line ending formatting setting's
+ * vocabulary. The export engine ends every CSV/TSV record with this value
+ * (Abstract_Exporter::write_delimited_row()). An unrecognised stored value
+ * falls through to `windows`, the default both settings screens advertise.
+ *
+ * Since 2.8.3 the `woo_ce_get_line_ending` filter must return a non-empty
+ * string. A non-string or empty return is discarded in favour of the mapped
+ * terminator.
+ *
  * @return string Line ending.
  */
 function woo_ce_get_line_ending() {
@@ -3652,7 +3649,13 @@ function woo_ce_get_line_ending() {
 			$output = "\n";
 			break;
 	}
-	return apply_filters( 'woo_ce_get_line_ending', $output, $line_ending_formatting );
+
+	$filtered = apply_filters( 'woo_ce_get_line_ending', $output, $line_ending_formatting );
+
+	// A filter returning a non-string, or an empty string, would leave every
+	// record unterminated. This value ends each row, so fail safe to the mapped
+	// terminator instead.
+	return ( is_string( $filtered ) && '' !== $filtered ) ? $filtered : $output;
 }
 
 /**
@@ -3699,6 +3702,246 @@ function woo_ce_wpml_get_language_name( $language_code = '' ) {
 function woo_ce_detect_wpml() {
 	return defined( 'ICL_LANGUAGE_CODE' );
 }
+
+/**
+ * Get the languages offered by the active multilingual plugin.
+ *
+ * Polylang is checked first because it ships a WPML compatibility layer
+ * (icl_get_languages, ICL_LANGUAGE_CODE) that would otherwise be mistaken for WPML.
+ *
+ * @since 2.8.3
+ *
+ * @return array Language labels keyed by language code, empty when no multilingual plugin is active.
+ */
+function woo_ce_get_multilingual_languages() {
+    $languages = array();
+
+    if ( function_exists( 'pll_languages_list' ) ) {
+        $slugs = (array) pll_languages_list();
+        $names = (array) pll_languages_list( array( 'fields' => 'name' ) );
+        foreach ( $slugs as $index => $slug ) {
+            $languages[ $slug ] = isset( $names[ $index ] ) ? $names[ $index ] : $slug;
+        }
+        return $languages;
+    }
+
+    if ( woo_ce_detect_wpml() && function_exists( 'icl_get_languages' ) ) {
+        foreach ( (array) icl_get_languages( 'skip_missing=N' ) as $code => $language ) {
+            $languages[ $code ] = is_array( $language ) && isset( $language['native_name'] ) ? $language['native_name'] : (string) $code;
+        }
+    }
+
+    return $languages;
+}
+
+/**
+ * Switch WPML to a language and return the language that was active before.
+ *
+ * @since 2.8.3
+ *
+ * @param string $language Language code to switch to, or 'all' for every language.
+ * @return string|null The previous language, null when WPML is not active.
+ */
+function woo_ce_wpml_switch_language( $language ) {
+    if ( function_exists( 'pll_languages_list' ) || ! woo_ce_detect_wpml() ) {
+        return null;
+    }
+
+    $previous_language = apply_filters( 'wpml_current_language', null );
+    do_action( 'wpml_switch_language', $language );
+
+    return $previous_language;
+}
+
+/**
+ * Restore the WPML language returned by woo_ce_wpml_switch_language().
+ *
+ * @since 2.8.3
+ *
+ * @param string|null $previous_language The language to restore, null to do nothing.
+ * @return void
+ */
+function woo_ce_wpml_restore_language( $previous_language ) {
+    if ( null !== $previous_language ) {
+        do_action( 'wpml_switch_language', $previous_language );
+    }
+}
+
+/**
+ * Run a get_terms() query scoped to the given languages.
+ *
+ * Under Polylang an empty language list queries every language, bypassing the admin's content language filter.
+ * Under WPML an empty language list keeps WPML's default scope (the current language).
+ * Selecting every language queries every language with no language scope, so terms with no language are kept.
+ * A language selection always replaces a lang a third party set through the getter's args filter;
+ * with no selection that lang is kept.
+ * Under WPML a subset selection is filtered after the query, so number/offset are applied after that filter.
+ *
+ * @since 2.8.3
+ *
+ * @param array       $query_args get_terms() arguments.
+ * @param array|false $languages  Language codes to keep, empty to leave the query unscoped.
+ * @return array|WP_Error|string Result of get_terms().
+ */
+function woo_ce_get_terms_in_languages( $query_args, $languages = array() ) {
+    $languages      = array_filter( (array) $languages );
+    $site_languages = array_keys( woo_ce_get_multilingual_languages() );
+    $all_languages  = ! empty( $languages ) && ! empty( $site_languages ) && ! array_diff( $site_languages, $languages );
+
+    if ( function_exists( 'pll_languages_list' ) ) {
+        if ( ! empty( $languages ) || ! isset( $query_args['lang'] ) ) {
+            $query_args['lang'] = $all_languages ? '' : implode( ',', $languages );
+        }
+        return get_terms( $query_args );
+    }
+
+    if ( empty( $languages ) || ! woo_ce_detect_wpml() ) {
+        return get_terms( $query_args );
+    }
+
+    if ( $all_languages ) {
+        // WPML filters get_terms() by the current language, so query every language.
+        $previous_language = woo_ce_wpml_switch_language( 'all' );
+        $terms             = get_terms( $query_args );
+        woo_ce_wpml_restore_language( $previous_language );
+        return $terms;
+    }
+
+    // Page after the language filter, so a batch is not cut short by terms in other languages.
+    $number = isset( $query_args['number'] ) ? absint( $query_args['number'] ) : 0;
+    $offset = isset( $query_args['offset'] ) ? absint( $query_args['offset'] ) : 0;
+    unset( $query_args['number'], $query_args['offset'] );
+
+    $term_ids = woo_ce_get_wpml_term_ids_in_languages( $query_args, $languages );
+    if ( is_wp_error( $term_ids ) ) {
+        return $term_ids;
+    }
+
+    $term_ids = array_slice( $term_ids, $offset, $number ? $number : null );
+    if ( empty( $term_ids ) ) {
+        return array();
+    }
+
+    // Load only this batch, in the order of the filtered list.
+    $previous_language = woo_ce_wpml_switch_language( 'all' );
+    $terms             = get_terms(
+        array_merge(
+            $query_args,
+            array(
+                'include'    => $term_ids,
+                'orderby'    => 'include',
+                'order'      => 'ASC',
+                'hide_empty' => false,
+                'number'     => 0,
+                'offset'     => 0,
+            )
+        )
+    );
+    woo_ce_wpml_restore_language( $previous_language );
+
+    return $terms;
+}
+
+/**
+ * Get the IDs of the terms in the given WPML languages, in query order.
+ *
+ * WPML has no language argument for get_terms(), so every language is queried and
+ * filtered. The filtered list is cached, so each export batch slices it instead of
+ * querying and filtering all terms again. A term change or a WPML language change
+ * starts a new cache, see woo_ce_bump_wpml_terms_cache_version().
+ *
+ * @since 2.8.3
+ *
+ * @param array    $query_args get_terms() arguments, without number and offset.
+ * @param string[] $languages  Language codes to keep.
+ * @return int[]|WP_Error The term IDs, or the get_terms() error.
+ */
+function woo_ce_get_wpml_term_ids_in_languages( $query_args, $languages ) {
+    static $memo = array();
+
+    $languages = array_values( $languages );
+    sort( $languages );
+    $cache_key = WOO_CE_PREFIX . '_wpml_terms_' . md5( wp_json_encode( array( $query_args, $languages, woo_ce_get_wpml_terms_cache_version() ) ) );
+
+    if ( isset( $memo[ $cache_key ] ) ) {
+        return $memo[ $cache_key ];
+    }
+
+    $term_ids = get_transient( $cache_key );
+    if ( is_array( $term_ids ) ) {
+        $memo[ $cache_key ] = $term_ids;
+        return $term_ids;
+    }
+
+    $previous_language = woo_ce_wpml_switch_language( 'all' );
+    $terms             = get_terms( $query_args );
+    woo_ce_wpml_restore_language( $previous_language );
+
+    if ( is_wp_error( $terms ) ) {
+        return $terms;
+    }
+
+    $term_ids = array();
+    foreach ( (array) $terms as $term ) {
+        $term_language = apply_filters(
+            'wpml_element_language_code',
+            null,
+            array(
+                'element_id'   => $term->term_taxonomy_id,
+                'element_type' => $term->taxonomy,
+            )
+        );
+        if ( in_array( $term_language, $languages, true ) ) {
+            $term_ids[] = (int) $term->term_id;
+        }
+    }
+
+    set_transient( $cache_key, $term_ids, HOUR_IN_SECONDS );
+    $memo[ $cache_key ] = $term_ids;
+
+    return $term_ids;
+}
+
+/**
+ * Get the version of the cached WPML term ID lists.
+ *
+ * Stored in an option, so the version is the same in each export batch request.
+ * wp_cache_get_last_changed( 'terms' ) is not: without a persistent object cache
+ * it returns a new value in each request.
+ *
+ * @since 2.8.3
+ *
+ * @return string The cache version.
+ */
+function woo_ce_get_wpml_terms_cache_version() {
+    $version = get_option( WOO_CE_PREFIX . '_wpml_terms_version', '' );
+
+    return ( is_string( $version ) && '' !== $version ) ? $version : '0';
+}
+
+/**
+ * Start a new version of the cached WPML term ID lists.
+ *
+ * Runs when a term cache is cleaned or WPML changes the language of an element.
+ * The old cache entries are not read again and expire with their transient.
+ * Writes the option at most once per request, and only when WPML is active.
+ *
+ * @since 2.8.3
+ *
+ * @return void
+ */
+function woo_ce_bump_wpml_terms_cache_version() {
+    static $bumped = false;
+
+    if ( $bumped || function_exists( 'pll_languages_list' ) || ! woo_ce_detect_wpml() ) {
+        return;
+    }
+
+    $bumped = true;
+    update_option( WOO_CE_PREFIX . '_wpml_terms_version', uniqid( '', true ), false );
+}
+add_action( 'clean_term_cache', 'woo_ce_bump_wpml_terms_cache_version', 10, 0 );
+add_action( 'wpml_translation_update', 'woo_ce_bump_wpml_terms_cache_version', 10, 0 );
 
 /**
  * Get the list of WordPress plugins that Store Exporter integrates with.
@@ -4673,10 +4916,14 @@ function woo_ce_modules_list( $module_status = false ) {
 
 	$modules = apply_filters( 'woo_ce_modules_addons', $modules );
 
+	// A request that has toggled a Plugin still has its code loaded, so the
+	// detection below cannot be trusted to outlive this request.
+	$may_cache = ! woo_ce_modules_cache_is_stale();
+
 	// Check if the existing Transient exists.
 	$modules_all = count( $modules );
 	$cached      = get_transient( WOO_CE_PREFIX . '_modules_all_count' );
-	if ( false === $cached ) {
+	if ( $may_cache && false === $cached ) {
 		set_transient( WOO_CE_PREFIX . '_modules_all_count', $modules_all, DAY_IN_SECONDS );
 	}
 
@@ -4769,19 +5016,55 @@ function woo_ce_modules_list( $module_status = false ) {
 
 	// Check if the existing Transient exists.
 	$cached = get_transient( WOO_CE_PREFIX . '_modules_active_count' );
-	if ( false === $cached ) {
+	if ( $may_cache && false === $cached ) {
 		set_transient( WOO_CE_PREFIX . '_modules_active_count', $modules_active, DAY_IN_SECONDS );
 	}
 
 	// Check if the existing Transient exists.
 	$cached = get_transient( WOO_CE_PREFIX . '_modules_inactive_count' );
-	if ( false === $cached ) {
+	if ( $may_cache && false === $cached ) {
 		$modules_inactive = $modules_all - $modules_active;
 		set_transient( WOO_CE_PREFIX . '_modules_inactive_count', $modules_inactive, DAY_IN_SECONDS );
 	}
 
 	return $modules;
 }
+
+/**
+ * Returns whether a database table with exactly the given name exists.
+ *
+ * `SHOW TABLES LIKE` treats `_` and `%` as wildcards, and every WordPress table
+ * name contains underscores, so the name is escaped with esc_like(). Otherwise a
+ * lookalike such as `wpXwoocommerce_attribute_taxonomies` would match. The result
+ * is compared case-insensitively because servers running `lower_case_table_names=1`
+ * report table names lowercased.
+ *
+ * The answer is cached for the rest of the request: the order-item and product
+ * callers probe once per exported row.
+ *
+ * @since 2.8.3
+ * @param string $table_name Full table name, including the prefix.
+ * @return bool True if the table exists, false otherwise.
+ */
+function woo_ce_table_exists( $table_name = '' ) {
+	global $wpdb;
+
+	static $exists = array();
+
+	if ( ! is_string( $table_name ) || '' === $table_name ) {
+		return false;
+	}
+
+	if ( ! isset( $exists[ $table_name ] ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Table existence check, cached per request.
+		$found_table = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) );
+
+		$exists[ $table_name ] = null !== $found_table && 0 === strcasecmp( (string) $found_table, $table_name );
+	}
+
+	return $exists[ $table_name ];
+}
+
 /**
  * Returns whether a supported export plugin is activated.
  *
@@ -4793,10 +5076,28 @@ function woo_ce_detect_export_plugin( $plugin_name = '' ) {
 		return;
 	}
 
-	// Check if a cached list of active modules is available.
-	$active_modules = get_transient( WOO_CE_PREFIX . '_modules_active' );
-	if ( false === $active_modules ) {
-		$active_modules = woo_ce_refresh_active_export_plugins();
+	// The extend files call this once per field on every exported row, so the
+	// list is kept for the request. The memo is dropped when the cache generation
+	// changes, and it is not used while this request has marked the cache stale.
+	static $memo = array(
+		'generation' => null,
+		'modules'    => false,
+	);
+
+	$generation = woo_ce_modules_cache_generation();
+	if ( woo_ce_modules_cache_is_stale() || $memo['generation'] !== $generation || false === $memo['modules'] ) {
+		// Check if a cached list of active modules is available.
+		$active_modules = woo_ce_get_integration_cache( WOO_CE_PREFIX . '_modules_active' );
+		if ( false === $active_modules ) {
+			$active_modules = woo_ce_refresh_active_export_plugins();
+		}
+
+		$memo = array(
+			'generation' => $generation,
+			'modules'    => woo_ce_modules_cache_is_stale() ? false : $active_modules,
+		);
+	} else {
+		$active_modules = $memo['modules'];
 	}
 
 	// Check if the requested plugin is in the list of active export plugins.
@@ -4806,27 +5107,203 @@ function woo_ce_detect_export_plugin( $plugin_name = '' ) {
 }
 
 /**
+ * Deletes every cached view of which integrations are active, rebuilding none
+ * of them.
+ *
+ * The export type record counts are cleared alongside the module list because
+ * several of them are gated on woo_ce_detect_export_plugin(), so a count cached
+ * while a Plugin was off keeps that export type's tile disabled after it is
+ * turned on.
+ *
+ * delete_transient() only reaches the current blog, so the cache generation is
+ * bumped as well: it is network-wide, and every other blog of a Multisite
+ * network treats its own cache as a miss on the next read.
+ *
+ * @since 2.8.3
+ * @return void
+ */
+function woo_ce_clear_modules_cache() {
+	$transients = array(
+		WOO_CE_PREFIX . '_modules_active',
+		WOO_CE_PREFIX . '_modules_all_count',
+		WOO_CE_PREFIX . '_modules_active_count',
+		WOO_CE_PREFIX . '_modules_inactive_count',
+		WOO_CE_PREFIX . '_export_type_count',
+	);
+
+	foreach ( $transients as $transient ) {
+		delete_transient( $transient );
+		delete_transient( woo_ce_integration_cache_generation_key( $transient ) );
+	}
+
+	update_site_option( WOO_CE_PREFIX . '_modules_generation', woo_ce_modules_cache_generation() + 1 );
+}
+
+/**
+ * Whether this request has toggled a Plugin, making its view of the loaded
+ * code untrustworthy for module detection.
+ *
+ * WordPress fires `deactivated_plugin` while the deactivated Plugin's classes
+ * and functions are still in memory, so anything rebuilt after that point would
+ * cache the dead Plugin as active for a day. Pass true to mark the rest of the
+ * request, which only woo_ce_invalidate_modules_cache() does.
+ *
+ * @since 2.8.3
+ * @param bool $mark_stale Optional. True to mark this request stale. Default false.
+ * @return bool True when this request's module detection must not be cached.
+ */
+function woo_ce_modules_cache_is_stale( $mark_stale = false ) {
+	static $stale = false;
+
+	if ( $mark_stale ) {
+		$stale = true;
+	}
+
+	return $stale;
+}
+
+/**
+ * The name of the transient holding the generation an integration cache was
+ * built under.
+ *
+ * @since 2.8.3
+ * @param string $transient The integration cache's own transient name.
+ * @return string The companion transient name.
+ */
+function woo_ce_integration_cache_generation_key( $transient ) {
+	return $transient . '_generation';
+}
+
+/**
+ * The current generation of the integration caches.
+ *
+ * A counter bumped by every woo_ce_clear_modules_cache() call and stored
+ * network-wide, so that a cache built under an older generation can be spotted
+ * as out of date on any blog, by any request.
+ *
+ * @since 2.8.3
+ * @return int The current generation. Zero before the first invalidation.
+ */
+function woo_ce_modules_cache_generation() {
+	return (int) get_site_option( WOO_CE_PREFIX . '_modules_generation', 0 );
+}
+
+/**
+ * Reads a cached view of integration state, treating one that predates the
+ * most recent Plugin toggle as a miss.
+ *
+ * A stamp older than the current generation means the cache was written after
+ * the clear but computed before it: a request already in flight when another
+ * request toggled a Plugin, or another blog of a Multisite network. A value
+ * carrying no stamp is honoured, which keeps a cache written by an older
+ * release valid.
+ *
+ * @since 2.8.3
+ * @param string $transient The integration cache's transient name.
+ * @return mixed The cached value, or false when there is none worth trusting.
+ */
+function woo_ce_get_integration_cache( $transient ) {
+	$cached = get_transient( $transient );
+
+	if ( false === $cached ) {
+		return false;
+	}
+
+	$built_under = get_transient( woo_ce_integration_cache_generation_key( $transient ) );
+
+	if ( false !== $built_under && (int) $built_under < woo_ce_modules_cache_generation() ) {
+		return false;
+	}
+
+	return $cached;
+}
+
+/**
+ * Caches a view of integration state, stamped with the generation it was
+ * computed under.
+ *
+ * The generation has to be read BEFORE the value is computed and passed in
+ * here: a toggle that lands mid-computation must leave the write stamped with
+ * the older generation for woo_ce_get_integration_cache() to discard it.
+ *
+ * @since 2.8.3
+ * @param string $transient  The integration cache's transient name.
+ * @param mixed  $value      The value to cache.
+ * @param int    $expiration Time until expiration, in seconds.
+ * @param int    $generation The generation read before $value was computed.
+ * @return void
+ */
+function woo_ce_set_integration_cache( $transient, $value, $expiration, $generation ) {
+	set_transient( $transient, $value, $expiration );
+	set_transient( woo_ce_integration_cache_generation_key( $transient ), (int) $generation, $expiration );
+}
+
+/**
+ * Drops the cached integration state after a Plugin is activated or
+ * deactivated, leaving the next request to rebuild it.
+ *
+ * Deliberately does not rebuild anything here: see
+ * woo_ce_modules_cache_is_stale() for why this request cannot be trusted to do
+ * so. It clears on every hook it is registered on, because core fires
+ * `deactivated_plugin` inside its loop and writes `active_plugins` once the
+ * loop ends, so the clear that matters is the last one.
+ *
+ * @since 2.8.3
+ * @return void
+ */
+function woo_ce_invalidate_modules_cache() {
+	woo_ce_modules_cache_is_stale( true );
+	woo_ce_clear_modules_cache();
+}
+
+/**
  * Refreshes the list of active export plugins.
  *
- * @return array|bool Array of active modules or false if empty.
+ * @since 2.8.3 Returns an empty array rather than false when no module is
+ *              active, and skips caching on a request that toggled a Plugin.
+ * @return array Array of active module names, empty when none are active.
  */
 function woo_ce_refresh_active_export_plugins() {
-	// Delete the existing count transients.
-	delete_transient( WOO_CE_PREFIX . '_modules_all_count' );
-	delete_transient( WOO_CE_PREFIX . '_modules_active_count' );
-	delete_transient( WOO_CE_PREFIX . '_modules_inactive_count' );
+	static $computed = null;
+
+	$may_cache = ! woo_ce_modules_cache_is_stale();
+
+	// Nothing may be written to a transient once a Plugin has been toggled in
+	// this request, so the scan is memoised instead. Without this, every
+	// woo_ce_detect_export_plugin() call would re-scan every module entry for
+	// the rest of the request.
+	if ( ! $may_cache && null !== $computed ) {
+		return $computed;
+	}
+
+	// Read before the scan, so that a Plugin toggled by another request while
+	// this one scans leaves the write below stamped with the older generation.
+	$generation = woo_ce_modules_cache_generation();
+
+	if ( $may_cache ) {
+		// Delete the existing count transients.
+		delete_transient( WOO_CE_PREFIX . '_modules_all_count' );
+		delete_transient( WOO_CE_PREFIX . '_modules_active_count' );
+		delete_transient( WOO_CE_PREFIX . '_modules_inactive_count' );
+	}
 
 	// Refresh the count transients.
 	$modules = woo_ce_modules_list( 'active' );
 
 	// Create a list of active export plugins.
-	$active_modules = false;
+	$active_modules = array();
 	if ( ! empty( $modules ) ) {
 		$active_modules = array_column( $modules, 'name' );
 	}
 
-	// Save the list of active export plugins.
-	set_transient( WOO_CE_PREFIX . '_modules_active', $active_modules, DAY_IN_SECONDS );
+	// Save the list of active export plugins. An empty array is cached as such:
+	// storing false would be indistinguishable from a cache miss under a
+	// persistent object cache, re-running detection on every call.
+	if ( $may_cache ) {
+		woo_ce_set_integration_cache( WOO_CE_PREFIX . '_modules_active', $active_modules, DAY_IN_SECONDS, $generation );
+	} else {
+		$computed = $active_modules;
+	}
 
 	return $active_modules;
 }

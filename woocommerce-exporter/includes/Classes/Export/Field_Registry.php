@@ -567,6 +567,90 @@ class Field_Registry {
     }
 
     /**
+     * Get the translated display label for a field category.
+     *
+     * The English category name stays the stable key (the SPA groups and
+     * filters on it); this is only the label to render.
+     *
+     * @param string $category Category key as returned by get_category().
+     *
+     * @since 2.8.3
+     * @return string Translated label; unknown categories are returned unchanged.
+     */
+    public static function get_category_label( string $category ): string {
+        switch ( $category ) {
+            case 'Account':
+                return __( 'Account', 'woocommerce-exporter' );
+            case 'Attribute Info':
+                return __( 'Attribute Info', 'woocommerce-exporter' );
+            case 'Basic Info':
+                return __( 'Basic Info', 'woocommerce-exporter' );
+            case 'Billing Address':
+                return __( 'Billing Address', 'woocommerce-exporter' );
+            case 'Categories & Tags':
+                return __( 'Categories & Tags', 'woocommerce-exporter' );
+            case 'Coupons':
+                return __( 'Coupons', 'woocommerce-exporter' );
+            case 'Customer':
+                return __( 'Customer', 'woocommerce-exporter' );
+            case 'Dates':
+                return __( 'Dates', 'woocommerce-exporter' );
+            case 'Downloads':
+                return __( 'Downloads', 'woocommerce-exporter' );
+            case 'Financial':
+                return __( 'Financial', 'woocommerce-exporter' );
+            case 'Hierarchy':
+                return __( 'Hierarchy', 'woocommerce-exporter' );
+            case 'Images & Media':
+                return __( 'Images & Media', 'woocommerce-exporter' );
+            case 'Inventory':
+                return __( 'Inventory', 'woocommerce-exporter' );
+            case 'Media':
+                return __( 'Media', 'woocommerce-exporter' );
+            case 'Notes & Downloads':
+                return __( 'Notes & Downloads', 'woocommerce-exporter' );
+            case 'Order History':
+                return __( 'Order History', 'woocommerce-exporter' );
+            case 'Order Info':
+                return __( 'Order Info', 'woocommerce-exporter' );
+            case 'Order Items':
+                return __( 'Order Items', 'woocommerce-exporter' );
+            case 'Payment':
+                return __( 'Payment', 'woocommerce-exporter' );
+            case 'Pricing':
+                return __( 'Pricing', 'woocommerce-exporter' );
+            case 'Product':
+                return __( 'Product', 'woocommerce-exporter' );
+            case 'Products & Categories':
+                return __( 'Products & Categories', 'woocommerce-exporter' );
+            case 'Profile':
+                return __( 'Profile', 'woocommerce-exporter' );
+            case 'Related Products':
+                return __( 'Related Products', 'woocommerce-exporter' );
+            case 'Restrictions':
+                return __( 'Restrictions', 'woocommerce-exporter' );
+            case 'Review':
+                return __( 'Review', 'woocommerce-exporter' );
+            case 'Shipping Address':
+                return __( 'Shipping Address', 'woocommerce-exporter' );
+            case 'Shipping Details':
+                return __( 'Shipping Details', 'woocommerce-exporter' );
+            case 'Shipping & Dimensions':
+                return __( 'Shipping & Dimensions', 'woocommerce-exporter' );
+            case 'Status & Schedule':
+                return __( 'Status & Schedule', 'woocommerce-exporter' );
+            case 'Subscription Info':
+                return __( 'Subscription Info', 'woocommerce-exporter' );
+            case 'Terms':
+                return __( 'Terms', 'woocommerce-exporter' );
+            case 'Usage':
+                return __( 'Usage', 'woocommerce-exporter' );
+            default:
+                return $category;
+        }
+    }
+
+    /**
      * Get the predefined (default-selected) field names for an export type.
      *
      * These represent a sensible starting selection for new export templates.

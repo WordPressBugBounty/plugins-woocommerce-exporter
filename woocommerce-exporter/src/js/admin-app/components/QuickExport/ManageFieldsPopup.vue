@@ -1,10 +1,12 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __, sprintf } from '@wordpress/i18n'
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
-import { useQuickExportStore } from '../../stores/quickExport'
+import { useQuickExportStore, orderByFieldOrder } from '../../stores/quickExport'
 import { useToastsStore } from '../../stores/toasts'
 import FieldSelectPopup from '../ui/FieldSelectPopup.vue'
+import CustomMetaKeyToggle from '../ui/CustomMetaKeyToggle.vue'
 import { api } from '../../lib/api'
 
 const store  = useQuickExportStore()
@@ -20,10 +22,20 @@ async function fetchSavedMeta (type) {
   if (!type) { savedDefinitions.value = []; return }
   loadingSavedMeta.value = true
   try {
-    const data = await api.get(`custom-meta-fields/${type}`)
-    const defs = (data.field_definitions ?? []).filter(
-      d => d.availability?.quick_export !== false
-    )
+    // Encoded for the same reason as the Custom Meta Fields store: the type is
+    // allow-listed upstream by preselectType(), and this does not depend on that.
+    const data = await api.get(`custom-meta-fields/${encodeURIComponent(type)}`)
+    // Keys added since the fields were cached need their export field name too.
+    store.setMetaFieldNames(type, data.meta_field_names)
+    // A key the engine does not export (its order_items_<key> name is owned by a
+    // built-in Order Items field or an earlier key) is not offered; Custom Meta
+    // Fields lists those keys and why.
+    const defs = (data.field_definitions ?? [])
+      .filter(d => d.availability?.quick_export !== false)
+      .map(d => {
+        const unavailable = data.unavailable_keys?.[d.name] ?? {}
+        return { ...d, meta_keys: (d.meta_keys ?? []).filter(k => !(k in unavailable)) }
+      })
     savedDefinitions.value = defs
     defs.forEach(d => {
       if (expandedDefs.value[d.name] === undefined) expandedDefs.value[d.name] = false
@@ -68,18 +80,39 @@ function buildInitialSelected () {
     }))
   }
 
-  // Append already-selected custom meta keys for every known definition.
+  // Append already-selected custom meta keys for every known definition. A row
+  // is named by its column key, not its meta key: the two differ when a plain
+  // and a prefixed definition register the same key, and a row has to be
+  // uniquely addressable to be dragged, renamed or removed on its own.
   const typeMetaValues = customMetaValues.value[selectedType.value] ?? {}
   Object.entries(typeMetaValues).forEach(([defName, raw]) => {
     String(raw ?? '').split(/[\n,]+/).map(k => k.trim()).filter(Boolean).forEach(key => {
-      result.push({ name: key, label: formatMetaKeyLabel(key), _isMeta: true, _defName: defName })
+      const columnKey = store.metaColumnKey(selectedType.value, defName, key)
+      result.push({
+        name: columnKey,
+        label: store.getFieldLabel(selectedType.value, columnKey, formatMetaKeyLabel(key)),
+        _isMeta: true,
+        _metaKey: key,
+        _defName: defName,
+      })
     })
   })
 
-  return result
+  // Meta rows follow the saved column order too, so a meta column keeps the
+  // position it was given. Rows with no saved position keep their place after.
+  return orderByFieldOrder(result, fieldOrder.value[selectedType.value], row => row.name)
 }
 
 const localSelected = ref(buildInitialSelected())
+
+// The selected row names, in order, as one comparable string.
+function selectionKey () {
+  return localSelected.value.map(f => f.name).join('\n')
+}
+
+// The rows the popup opened with. A confirm that leaves them unchanged keeps
+// the seeded column order, which also places the fields that are not ticked.
+const initialSelection = selectionKey()
 
 // ── Groups (left-panel accordion) ─────────────────────────────────────────────
 const groups = computed(() => {
@@ -93,15 +126,21 @@ const selectedNames = computed(() => localSelected.value.map(f => f.name))
 
 // ── Custom meta helpers ────────────────────────────────────────────────────────
 function isCustomKeySelected (key, defName) {
-  return localSelected.value.some(f => f.name === key && f._isMeta && f._defName === defName)
+  return localSelected.value.some(f => f._isMeta && f._metaKey === key && f._defName === defName)
 }
 
 function toggleCustomKey (key, defName) {
-  const idx = localSelected.value.findIndex(f => f.name === key && f._isMeta && f._defName === defName)
+  const idx = localSelected.value.findIndex(f => f._isMeta && f._metaKey === key && f._defName === defName)
   if (idx >= 0) {
     localSelected.value.splice(idx, 1)
   } else {
-    localSelected.value.push({ name: key, label: formatMetaKeyLabel(key), _isMeta: true, _defName: defName })
+    localSelected.value.push({
+      name: store.metaColumnKey(selectedType.value, defName, key),
+      label: formatMetaKeyLabel(key),
+      _isMeta: true,
+      _metaKey: key,
+      _defName: defName,
+    })
   }
 }
 
@@ -142,25 +181,31 @@ function onReorder (names) {
 
 // The label a field was registered with, so a cleared rename can be told apart
 // from a real one. Falls back to the slug only when the definition is not
-// loaded, which is also what onConfirm() assumed before this was shared.
-function defaultLabelFor (name) {
+// loaded, which is also what onConfirm() assumed before this was shared. A meta
+// row is labelled from its meta key, which is what the user typed, not from the
+// column key its position is held under.
+function defaultLabelFor (row) {
+  if (row._isMeta) return formatMetaKeyLabel(row._metaKey ?? row.name)
   for (const g of (currentFields.value?.groups ?? [])) {
-    const def = g.fields.find(gf => gf.name === name)
+    const def = g.fields.find(gf => gf.name === row.name)
     if (def) return def.label
   }
-  return name
+  return row.name
 }
 
 function onSetLabel (name, label) {
-  const f = localSelected.value.find(f => f.name === name && !f._isMeta)
+  const f = localSelected.value.find(f => f.name === name)
   if (!f) return
 
   // An empty label means "undo the rename", so put the field default back rather
   // than keeping the row's current text. onConfirm() then sees label ===
   // default and clears the stored override, matching the inline chip. Keeping
   // the current text would re-save the override the user just cleared.
-  f.label = label || defaultLabelFor(name)
-  if (label) toasts.push(`Field renamed to "${label}"`)
+  f.label = label || defaultLabelFor(f)
+  if (label) {
+    /* translators: %s: new field label */
+    toasts.push(sprintf(__('Field renamed to "%s"', 'woocommerce-exporter'), label))
+  }
 }
 
 function onSelectAllVisible (fields) {
@@ -182,7 +227,7 @@ function onSelectAllVisible (fields) {
 
 function onClearAll () {
   localSelected.value = []
-  toasts.push('All fields cleared', 'info')
+  toasts.push(__('All fields cleared', 'woocommerce-exporter'), 'info')
 }
 
 function onReset () {
@@ -194,7 +239,7 @@ function onReset () {
     all.filter(f => f.selected).forEach(f => result.push({ ...f }))
   }
   localSelected.value = result
-  toasts.push('Reset to default fields')
+  toasts.push(__('Reset to default fields', 'woocommerce-exporter'))
 }
 
 function onConfirm () {
@@ -215,14 +260,18 @@ function onConfirm () {
     fieldSelections.value[type] = overrides
   }
 
-  // Apply regular field drag order.
-  fieldOrder.value[type] = regularEntries.map(f => f.name)
+  // Apply the drag order of every selected row, meta rows included. An
+  // unchanged selection keeps the seeded order, which also places the fields
+  // that are not ticked.
+  if (selectionKey() !== initialSelection) {
+    fieldOrder.value[type] = localSelected.value.map(f => f.name)
+  }
 
   // Persist inline label renames: only when label differs from the field default.
   // A label back at the default clears any override the store still holds, so
   // clearing a rename here removes it instead of leaving the old one in place.
-  regularEntries.forEach(f => {
-    const defaultLabel = defaultLabelFor(f.name)
+  localSelected.value.forEach(f => {
+    const defaultLabel = defaultLabelFor(f)
     store.setFieldLabel(type, f.name, f.label && f.label !== defaultLabel ? f.label : '')
   })
 
@@ -233,14 +282,14 @@ function onConfirm () {
     savedDefinitions.value.forEach(def => {
       updated[def.name] = metaEntries
         .filter(f => f._defName === def.name)
-        .map(f => f.name)
+        .map(f => f._metaKey)
         .join('\n')
     })
     customMetaValues.value[type] = updated
   }
 
   store.saveFields()
-  toasts.push('Fields saved')
+  toasts.push(__('Fields saved', 'woocommerce-exporter'))
   store.showManageFields = false
 }
 
@@ -251,17 +300,17 @@ function onClose () {
 
 <template>
   <FieldSelectPopup
-    title="Select Export Fields"
-    subtitle="Choose the fields you want to include in your export and reorder them."
-    footer-hint="The fields will be available to export in the exported file."
-    confirm-label="Save Fields"
+    :title="__('Select Export Fields', 'woocommerce-exporter')"
+    :subtitle="__('Choose the fields you want to include in your export and reorder them.', 'woocommerce-exporter')"
+    :footer-hint="__('The fields will be available to export in the exported file.', 'woocommerce-exporter')"
+    :confirm-label="__('Save Fields', 'woocommerce-exporter')"
     :show-reset-default="true"
     :groups="groups"
     :selected-names="selectedNames"
     :selected-fields="localSelected"
     :loading="currentFields?.loading ?? false"
     :error="currentFields?.error ?? ''"
-    extra-section-label="Custom Meta Fields"
+    :extra-section-label="__('Custom Meta Fields', 'woocommerce-exporter')"
     @toggle="onToggle"
     @remove="onRemove"
     @reorder="onReorder"
@@ -274,7 +323,7 @@ function onClose () {
   >
     <template v-if="savedDefinitions.length || loadingSavedMeta" #extra-sections>
       <div v-if="loadingSavedMeta" class="flex items-center gap-2 px-4 py-3 text-[12.5px] text-gray-500">
-        <span class="wse-spinner" /> Loading&hellip;
+        <span class="wse-spinner" /> {{ __('Loading…', 'woocommerce-exporter') }}
       </div>
       <template v-else>
         <div
@@ -303,28 +352,14 @@ function onClose () {
 
           <div v-show="expandedDefs[def.name]">
             <ul class="list-none m-0 py-1 p-0">
-              <li
-                v-for="key in def.meta_keys"
-                :key="key"
-                class="flex items-center gap-[10px] py-[7px] pr-4 pl-[38px] cursor-pointer transition-colors hover:bg-gray-50"
-                :data-qe-meta-key="key"
-                :data-qe-meta-selected="String(isCustomKeySelected(key, def.name))"
-                @click="toggleCustomKey(key, def.name)"
-              >
-                <span
-                  class="w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors"
-                  :class="isCustomKeySelected(key, def.name)
-                    ? 'bg-indigo-600 border-indigo-600'
-                    : 'bg-white border-gray-300'"
-                >
-                  <svg v-if="isCustomKeySelected(key, def.name)" width="10" height="8" viewBox="0 0 10 8" fill="none">
-                    <path d="M1 4l3 3 5-6" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </span>
-                <span
-                  class="text-[12.5px] font-mono"
-                  :class="isCustomKeySelected(key, def.name) ? 'text-gray-900 font-medium' : 'text-gray-500'"
-                >{{ formatMetaKeyLabel(key) }}</span>
+              <li v-for="key in def.meta_keys" :key="key">
+                <CustomMetaKeyToggle
+                  :label="formatMetaKeyLabel(key)"
+                  :selected="isCustomKeySelected(key, def.name)"
+                  :data-qe-meta-key="key"
+                  :data-qe-meta-selected="String(isCustomKeySelected(key, def.name))"
+                  @toggle="toggleCustomKey(key, def.name)"
+                />
               </li>
             </ul>
           </div>

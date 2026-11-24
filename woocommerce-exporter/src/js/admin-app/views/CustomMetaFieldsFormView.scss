@@ -141,6 +141,15 @@
 .wse-spinner--sm    { width: 13px; height: 13px; }
 .wse-spinner--white { border-color: rgb(255 255 255 / 0.3); border-top-color: #fff; }
 
+.wse-cmf-unavailable-notice {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  font-size: $font-size-sm;
+  color: #92400e; // amber-800: 7:1 on the warning background, $color-warning-600 is under 4.5:1.
+  background: $color-warning-50;
+  border-radius: $radius-sm;
+}
+
 .wse-cmf-availability-box {
   margin-top: 16px;
   padding: 16px;

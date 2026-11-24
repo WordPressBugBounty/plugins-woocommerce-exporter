@@ -1,9 +1,11 @@
 <script setup>
+import { __ } from '@wordpress/i18n'
+
 defineProps({
   title: { type: String, required: true },
   description: { type: String, default: '' },
   meta: { type: String, default: '' },
-  buttonLabel: { type: String, default: 'Use Template' },
+  buttonLabel: { type: String, default: () => __('Use Template', 'woocommerce-exporter') },
 })
 defineEmits(['use'])
 </script>

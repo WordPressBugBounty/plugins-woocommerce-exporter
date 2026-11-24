@@ -1,13 +1,16 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __, _n } from '@wordpress/i18n'
 import {
   Search, Save, RotateCcw, Settings, AlertCircle,
   CheckCircle2, Lightbulb, ArrowRight, Info,
   FileText, SlidersHorizontal
 } from 'lucide-vue-next'
-import { BaseButton } from '../components/ui/index'
+import { BaseButton, I18nText } from '../components/ui/index'
+import { formatCount } from '../lib/formatWpDate'
 import { useSettingsStore } from '../stores/settings'
+import { SETTINGS_SUMMARY_LABELS, decodeStoredDelimiter, isValidDelimiter } from '../lib/delimiter'
 
 import GeneralSection from '../components/Settings/GeneralSection.vue'
 import FormatsSection from '../components/Settings/FormatsSection.vue'
@@ -22,17 +25,33 @@ const sectionComponents = {
 }
 
 const store = useSettingsStore()
-const { isLoading, isSaving, error, activeCategory, categories, settings, isDirty, unsavedCount } = storeToRefs(store)
+const { isLoading, isSaving, error, saveError, activeCategory, categories, settings, isDirty, unsavedCount } = storeToRefs(store)
 
 const categoryMeta = {
-  general: { icon: Settings, description: 'Export behavior and preferences' },
-  formats: { icon: FileText, description: 'Configure CSV export formatting. XML and RSS require Store Exporter Deluxe.' },
-  advanced: { icon: SlidersHorizontal, description: 'System, performance and debug options' }
+  general: { icon: Settings, description: __('Export behavior and preferences', 'woocommerce-exporter') },
+  formats: { icon: FileText, description: __('Configure CSV export formatting. XML and RSS require Store Exporter Deluxe.', 'woocommerce-exporter') },
+  advanced: { icon: SlidersHorizontal, description: __('System, performance and debug options', 'woocommerce-exporter') }
 }
 
 // Only free-plugin categories are supported; filter out any premium
 // categories the backend may still report so the nav never shows a dead tab.
 const visibleCategories = computed(() => categories.value.filter(cat => Object.prototype.hasOwnProperty.call(sectionComponents, cat.key)))
+
+const tips = [
+  __('Use export tags to make filenames dynamic.', 'woocommerce-exporter'),
+  __('Enable archives to keep a history of exported files.', 'woocommerce-exporter'),
+  __('UTF-8 is recommended for international data.', 'woocommerce-exporter')
+]
+
+// One plural sentence so translators control the whole notice; the count is
+// filled by I18nText slot 1 and shown in bold.
+/* translators: %1$s: number of unsaved settings changes, shown in bold */
+const unsavedMessage = computed(() => _n(
+  'You have %1$s unsaved change',
+  'You have %1$s unsaved changes',
+  unsavedCount.value,
+  'woocommerce-exporter'
+))
 
 const saveFeedbackText = ref('')
 let saveFeedbackTimer = null
@@ -50,7 +69,7 @@ async function handleSave () {
 
 const activeCategoryLabel = computed(() => {
   const cat = categories.value.find(c => c.key === activeCategory.value)
-  return cat ? cat.label : 'Settings'
+  return cat ? cat.label : __('Settings', 'woocommerce-exporter')
 })
 
 // Guard against a stale/bookmarked ?tab=settings/{category} pointing at a
@@ -76,13 +95,28 @@ watch(activeCategory, (newCat) => {
   history.replaceState(null, '', url.origin + url.pathname + qs)
 }, { immediate: true })
 
+// Anything the writer cannot use is resolved to a comma BEFORE the lookup, so
+// the summary always names the separator an export would really apply. A
+// delimiter outside the table (a Custom '^' or '~') is shown as itself.
 const delimiterDisplay = computed(() => {
-  const d = settings.value.delimiter
-  if (d === ',') return 'Comma (,)'
-  if (d === ';') return 'Semicolon (;)'
-  if (d === '\t' || d === 'TAB') return 'Tab'
-  return d || ','
+  const delimiter = decodeStoredDelimiter(settings.value.delimiter)
+  const effective = isValidDelimiter(delimiter) ? delimiter : ','
+
+  return SETTINGS_SUMMARY_LABELS[effective] ?? effective
 })
+
+// The settings endpoint refuses a delimiter the CSV writer cannot use, and it
+// refuses the WHOLE payload, so a half-typed Custom delimiter would take every
+// other edit on the screen down with it. The same rule runs server-side.
+const delimiterIsUsable = computed(() => isValidDelimiter(settings.value.delimiter))
+
+// Shown as text beside Save, not only as its title: a disabled button takes no
+// focus, so a tooltip on it reaches neither a screen reader nor a mouse.
+const saveDisabledReason = computed(() => (
+  delimiterIsUsable.value
+    ? ''
+    : __('Enter a valid Field Delimiter under Export Formats before saving.', 'woocommerce-exporter')
+))
 </script>
 
 <template>
@@ -95,13 +129,13 @@ const delimiterDisplay = computed(() => {
     <!-- Page header -->
     <div class="flex items-start justify-between px-7 pt-6 pb-5 flex-shrink-0">
       <div>
-        <h1 class="wse-page-title">Settings</h1>
-        <p class="wse-page-sub">Manage export behavior, formatting, automation, and integrations.</p>
+        <h1 class="wse-page-title">{{ __('Settings', 'woocommerce-exporter') }}</h1>
+        <p class="wse-page-sub">{{ __('Manage export behavior, formatting, automation, and integrations.', 'woocommerce-exporter') }}</p>
       </div>
       <div class="flex items-center gap-3">
         <div class="wse-search-field flex items-center gap-2 py-2 px-3 border border-gray-200 rounded-lg bg-white min-w-[210px] focus-within:border-indigo-400 transition-colors">
           <Search :size="14" color="#9CA3AF" :stroke-width="1.75" />
-          <input type="text" placeholder="Search settings..." class="flex-1 text-[13px] text-gray-900 placeholder:text-gray-400" />
+          <input type="text" :placeholder="__('Search settings...', 'woocommerce-exporter')" class="flex-1 text-[13px] text-gray-900 placeholder:text-gray-400" />
         </div>
         <button
           type="button"
@@ -109,11 +143,17 @@ const delimiterDisplay = computed(() => {
           @click="store.resetToSaved()"
         >
           <RotateCcw :size="13" :stroke-width="2" />
-          Reset Defaults
+          {{ __('Reset Defaults', 'woocommerce-exporter') }}
         </button>
-        <BaseButton class="wse-settings-save" :loading="isSaving" @click="handleSave">
+        <span
+          v-if="saveDisabledReason"
+          role="status"
+          class="max-w-[220px] text-[12px] text-red-600 leading-tight"
+          data-testid="settings-header-save-disabled-reason"
+        >{{ saveDisabledReason }}</span>
+        <BaseButton class="wse-settings-save" :loading="isSaving" :disabled="!delimiterIsUsable" :title="saveDisabledReason" data-testid="settings-header-save" @click="handleSave">
           <template #icon><Save :size="14" :stroke-width="2" /></template>
-          {{ isSaving ? 'Saving…' : saveFeedbackText === 'saved' ? 'Saved!' : 'Save Changes' }}
+          {{ isSaving ? __('Saving…', 'woocommerce-exporter') : saveFeedbackText === 'saved' ? __('Saved!', 'woocommerce-exporter') : __('Save Changes', 'woocommerce-exporter') }}
         </BaseButton>
         <PageActions />
       </div>
@@ -121,7 +161,7 @@ const delimiterDisplay = computed(() => {
 
     <!-- Loading -->
     <div v-if="isLoading" class="flex-1 wse-loading">
-      <span class="wse-spinner" />Loading settings&hellip;
+      <span class="wse-spinner" />{{ __('Loading settings…', 'woocommerce-exporter') }}
     </div>
 
     <!-- Error -->
@@ -130,6 +170,12 @@ const delimiterDisplay = computed(() => {
     </div>
 
     <template v-else>
+
+      <!-- A rejected save: shown ABOVE the form, never in place of it, so the
+           control the message is about is still on screen to be corrected. -->
+      <div v-if="saveError" class="mx-7 mb-4 flex-shrink-0 wse-error" data-testid="settings-save-error">
+        <AlertCircle :size="16" color="#DC2626" :stroke-width="1.75" />{{ saveError }}
+      </div>
 
       <!-- 3-column grid -->
       <div
@@ -140,7 +186,7 @@ const delimiterDisplay = computed(() => {
         <!-- Left: Category Nav -->
         <div class="overflow-hidden bg-white border border-gray-200 rounded-[10px] flex flex-col mb-4">
           <div class="py-3 px-4 border-b border-gray-100 flex-shrink-0">
-            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em] m-0">Settings</p>
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em] m-0">{{ __('Settings', 'woocommerce-exporter') }}</p>
           </div>
           <nav class="py-2 overflow-y-auto flex-1">
             <button
@@ -194,51 +240,51 @@ const delimiterDisplay = computed(() => {
           <div class="bg-white border border-gray-200 rounded-[10px] p-4 flex-shrink-0">
             <div class="flex items-center gap-2 mb-3">
               <SlidersHorizontal :size="15" color="#7986FF" :stroke-width="1.75" />
-              <h3 class="text-[13px] font-semibold text-gray-900 m-0">Configuration Summary</h3>
+              <h3 class="text-[13px] font-semibold text-gray-900 m-0">{{ __('Configuration Summary', 'woocommerce-exporter') }}</h3>
             </div>
             <div class="flex flex-col gap-2.5">
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-gray-500">Archives</span>
+                <span class="text-gray-500">{{ __('Archives', 'woocommerce-exporter') }}</span>
                 <span
                   class="inline-flex items-center py-[2px] px-2 rounded-full text-[11px] font-semibold border"
                   :class="settings.enable_archive
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : 'bg-gray-50 text-gray-500 border-gray-200'"
-                >{{ settings.enable_archive ? 'Enabled' : 'Disabled' }}</span>
+                >{{ settings.enable_archive ? __('Enabled', 'woocommerce-exporter') : __('Disabled', 'woocommerce-exporter') }}</span>
               </div>
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-gray-500">Date Format</span>
+                <span class="text-gray-500">{{ __('Date Format', 'woocommerce-exporter') }}</span>
                 <span class="font-semibold text-gray-900 font-mono text-[11px]">{{ settings.date_format }}</span>
               </div>
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-gray-500">CSV Delimiter</span>
-                <span class="font-semibold text-gray-900">{{ delimiterDisplay }}</span>
+                <span class="text-gray-500">{{ __('CSV Delimiter', 'woocommerce-exporter') }}</span>
+                <span class="font-semibold text-gray-900" data-testid="settings-summary-csv-delimiter">{{ delimiterDisplay }}</span>
               </div>
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-gray-500">Character Encoding</span>
+                <span class="text-gray-500">{{ __('Character Encoding', 'woocommerce-exporter') }}</span>
                 <span class="font-semibold text-gray-900">{{ settings.encoding }}</span>
               </div>
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-gray-500">Object Cache</span>
-                <span class="font-semibold text-gray-900">{{ settings.flush_cache === 'flush' ? 'Flush Enabled' : 'Disabled' }}</span>
+                <span class="text-gray-500">{{ __('Object Cache', 'woocommerce-exporter') }}</span>
+                <span class="font-semibold text-gray-900">{{ settings.flush_cache === 'flush' ? __('Flush Enabled', 'woocommerce-exporter') : __('Disabled', 'woocommerce-exporter') }}</span>
               </div>
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-gray-500">Scheduled Exports</span>
+                <span class="text-gray-500">{{ __('Scheduled Exports', 'woocommerce-exporter') }}</span>
                 <span
                   class="inline-flex items-center py-[2px] px-2 rounded-full text-[11px] font-semibold border"
                   :class="settings.enable_auto
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : 'bg-gray-50 text-gray-500 border-gray-200'"
-                >{{ settings.enable_auto ? 'Enabled' : 'Disabled' }}</span>
+                >{{ settings.enable_auto ? __('Enabled', 'woocommerce-exporter') : __('Disabled', 'woocommerce-exporter') }}</span>
               </div>
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-gray-500">CRON</span>
+                <span class="text-gray-500">{{ __('CRON', 'woocommerce-exporter') }}</span>
                 <span
                   class="inline-flex items-center py-[2px] px-2 rounded-full text-[11px] font-semibold border"
                   :class="settings.enable_cron
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : 'bg-gray-50 text-gray-500 border-gray-200'"
-                >{{ settings.enable_cron ? 'Enabled' : 'Disabled' }}</span>
+                >{{ settings.enable_cron ? __('Enabled', 'woocommerce-exporter') : __('Disabled', 'woocommerce-exporter') }}</span>
               </div>
             </div>
           </div>
@@ -247,15 +293,11 @@ const delimiterDisplay = computed(() => {
           <div class="bg-white border border-gray-200 rounded-[10px] p-4 flex-shrink-0">
             <div class="flex items-center gap-2 mb-3">
               <Lightbulb :size="14" color="#7986FF" :stroke-width="1.75" />
-              <h3 class="text-[13px] font-semibold text-gray-900 m-0">Tips</h3>
+              <h3 class="text-[13px] font-semibold text-gray-900 m-0">{{ __('Tips', 'woocommerce-exporter') }}</h3>
             </div>
             <ul class="m-0 p-0 list-none flex flex-col gap-2 mb-3">
               <li
-                v-for="tip in [
-                  'Use export tags to make filenames dynamic.',
-                  'Enable archives to keep a history of exported files.',
-                  'UTF-8 is recommended for international data.'
-                ]"
+                v-for="tip in tips"
                 :key="tip"
                 class="flex items-start gap-1.5 text-[12px] text-gray-500"
               >
@@ -269,7 +311,7 @@ const delimiterDisplay = computed(() => {
               rel="noopener noreferrer"
               class="text-[12px] text-indigo-600 no-underline hover:underline inline-flex items-center gap-1"
             >
-              See all tips
+              {{ __('See all tips', 'woocommerce-exporter') }}
               <ArrowRight :size="11" :stroke-width="2" />
             </a>
           </div>
@@ -287,7 +329,9 @@ const delimiterDisplay = computed(() => {
             <Info :size="14" color="#6C7BFF" :stroke-width="2" />
           </span>
           <span class="text-[13px] text-indigo-700">
-            You have <strong>{{ unsavedCount }} unsaved change{{ unsavedCount !== 1 ? 's' : '' }}</strong>
+            <I18nText :text="unsavedMessage">
+              <template #1><strong>{{ formatCount(unsavedCount) }}</strong></template>
+            </I18nText>
           </span>
         </div>
         <div class="flex items-center gap-2.5">
@@ -297,11 +341,19 @@ const delimiterDisplay = computed(() => {
             @click="store.resetToSaved()"
           >
             <RotateCcw :size="13" :stroke-width="2" />
-            Reset Changes
+            {{ __('Reset Changes', 'woocommerce-exporter') }}
           </button>
-          <BaseButton class="wse-settings-save" :loading="isSaving" @click="handleSave">
+          <span
+            v-if="saveDisabledReason"
+            role="status"
+            class="max-w-[260px] text-[12px] text-red-600 leading-tight"
+            data-testid="settings-footer-save-disabled-reason"
+          >{{ saveDisabledReason }}</span>
+          <!-- Same guard as the header Save above. Without it this button posts
+               the unusable delimiter and the endpoint refuses the WHOLE payload. -->
+          <BaseButton class="wse-settings-save" :loading="isSaving" :disabled="!delimiterIsUsable" :title="saveDisabledReason" data-testid="settings-footer-save" @click="handleSave">
             <template #icon><Save :size="14" :stroke-width="2" /></template>
-            {{ isSaving ? 'Saving…' : 'Save Changes' }}
+            {{ isSaving ? __('Saving…', 'woocommerce-exporter') : __('Save Changes', 'woocommerce-exporter') }}
           </BaseButton>
         </div>
       </div>

@@ -11,6 +11,7 @@
  *                    CSS background-image chevron, full-width by default)
  */
 import { computed, useAttrs } from 'vue'
+import { __ } from '@wordpress/i18n'
 
 defineOptions({ inheritAttrs: false })
 
@@ -84,7 +85,7 @@ function onChange (e) {
           type="button"
           class="pointer-events-auto text-[12px] text-gray-400 hover:text-gray-700 transition-colors cursor-pointer bg-transparent border-none p-0 leading-none"
           @click="clear"
-        >Clear</button>
+        >{{ __('Clear', 'woocommerce-exporter') }}</button>
         <span class="w-px h-3 bg-gray-200" />
       </div>
     </div>

@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import { __, _n, sprintf } from '@wordpress/i18n'
 import { RefreshCw, Check, Lock } from 'lucide-vue-next'
 import { useQuickExportStore } from '../../../stores/quickExport'
 import { useToastsStore } from '../../../stores/toasts'
 import { useUpsellStore } from '../../../stores/upsell'
 import { TYPE_VISUALS, DEFAULT_VISUAL } from '../../../exportTypeVisuals'
+import { formatCount } from '../../../lib/formatWpDate'
 
 const store = useQuickExportStore()
 const toasts = useToastsStore()
@@ -16,6 +18,11 @@ const { config, selectedType } = storeToRefs(store)
 const visibleTypes = computed(() =>
   [...(config.value?.types ?? [])].sort((a, b) => (a.premium === b.premium ? 0 : a.premium ? 1 : -1))
 )
+
+function recordsLabel (count) {
+  /* translators: %s: formatted number of records */
+  return sprintf(_n('%s Record', '%s Records', count, 'woocommerce-exporter'), formatCount(count))
+}
 
 function onTileClick (type) {
   if (type.premium) {
@@ -30,9 +37,9 @@ async function refreshCounts () {
   refreshing.value = true
   try {
     await store.refreshConfig()
-    toasts.push('Record counts refreshed', 'info')
+    toasts.push(__('Record counts refreshed', 'woocommerce-exporter'), 'info')
   } catch {
-    toasts.push('Failed to refresh counts', 'error')
+    toasts.push(__('Failed to refresh counts', 'woocommerce-exporter'), 'error')
   } finally {
     refreshing.value = false
   }
@@ -42,14 +49,14 @@ async function refreshCounts () {
 <template>
   <div class="pt-1 px-[18px] pb-4 border-t border-gray-50">
     <div class="flex items-center justify-between gap-3 pt-2.5 pb-1">
-      <span class="text-[11.5px] text-gray-500">Choose what to export. Records reflect current store data.</span>
+      <span class="text-[11.5px] text-gray-500">{{ __('Choose what to export. Records reflect current store data.', 'woocommerce-exporter') }}</span>
       <button
         class="wse-qe-refresh-counts inline-flex items-center gap-[5px] rounded-lg text-[11.5px] font-semibold py-[5px] px-2.5 cursor-pointer bg-transparent border-[1.5px] border-gray-200 text-gray-700 hover:bg-gray-100"
         :disabled="refreshing"
         @click="refreshCounts"
       >
         <RefreshCw :size="12" :stroke-width="2" :class="refreshing && 'animate-spin'" />
-        {{ refreshing ? 'Refreshing…' : 'Refresh' }}
+        {{ refreshing ? __('Refreshing…', 'woocommerce-exporter') : __('Refresh', 'woocommerce-exporter') }}
       </button>
     </div>
     <div class="grid gap-2 pt-3 pb-1" style="grid-template-columns: repeat(auto-fill, minmax(108px, 1fr))">
@@ -66,7 +73,7 @@ async function refreshCounts () {
           !type.premium && selectedType === type.slug ? 'border-indigo-600 border-2 bg-[#FAFAFE]' : 'border-gray-200'
         ]"
         :disabled="!type.premium && type.records === 0"
-        :title="type.premium ? 'Available in Store Exporter Deluxe' : (type.records === 0 ? 'No records available' : '')"
+        :title="type.premium ? __('Available in Store Exporter Deluxe', 'woocommerce-exporter') : (type.records === 0 ? __('No records available', 'woocommerce-exporter') : '')"
         @click="onTileClick(type)"
       >
         <span v-if="type.premium" class="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-amber-100 flex items-center justify-center">
@@ -92,9 +99,9 @@ async function refreshCounts () {
           :class="type.premium ? 'text-gray-600' : (selectedType === type.slug ? 'text-gray-900' : (type.records === 0 ? 'text-gray-400' : 'text-gray-700'))"
         >{{ type.label }}</span>
         <span v-if="type.premium" class="inline-flex items-center gap-[3px] text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-[5px] py-[1px] px-1.5 -mt-0.5">
-          Deluxe
+          {{ __('Deluxe', 'woocommerce-exporter') }}
         </span>
-        <span v-else class="text-[10.5px] text-gray-400 -mt-0.5">{{ type.records.toLocaleString() }} Records</span>
+        <span v-else class="text-[10.5px] text-gray-400 -mt-0.5">{{ recordsLabel(type.records) }}</span>
       </button>
     </div>
   </div>

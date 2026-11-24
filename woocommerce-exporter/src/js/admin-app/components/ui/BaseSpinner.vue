@@ -1,4 +1,6 @@
 <script setup>
+import { __ } from '@wordpress/i18n'
+
 defineProps({
   size: { type: String, default: 'md' } // sm | md | lg
 })
@@ -15,6 +17,6 @@ const SIZE_CLASSES = {
     class="inline-block rounded-full border-gray-200 border-t-indigo-600 animate-spin"
     :class="SIZE_CLASSES[size] ?? SIZE_CLASSES.md"
     role="status"
-    aria-label="Loading"
+    :aria-label="__('Loading', 'woocommerce-exporter')"
   />
 </template>
